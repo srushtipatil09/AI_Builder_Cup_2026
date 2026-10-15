@@ -1,0 +1,34 @@
+.claude/
+.cursor/
+.sources/
+
+# Secrets and local env
+.env
+.env.*
+!.env.example
+*.pem
+*service-account*.json
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+web/dist/
+*.tsbuildinfo
+
+# OS and editors
+.DS_Store
+Thumbs.db
+
+firebase-config.json
+firebase.json
