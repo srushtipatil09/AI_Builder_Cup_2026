@@ -40,23 +40,37 @@ A desktop page with a header and a footer.
 
 ### Log in and create account
 
-Separate pages. Each asks for email and password, and offers Google sign-in. Signup also asks for the caretaker's name, the parent's preferred name, and the language.
+Separate pages. Each asks for email and password, and offers Google sign-in.
 
-A phone browser, and the installed app, skip the landing page. With no session they open Log in. With a session they open the companion chat. A wide window still shows the care desk once the app is open.
+Create account first asks who the account is for: **I'm caring for someone** (caretaker) or **It's for me** (the older adult). The caretaker path asks for their name, the parent's preferred name, and the language. The parent path asks what Saathi should call them and the language. The role is stored with the account, so Log in asks only for email and password.
+
+### Family code
+
+The care desk's Profile tab makes a family code, such as `KMR-4F7`, and a join link, `/join/KMR-4F7`. The code avoids 0, O, 1, I, and L so it can be read aloud. The link carries only the code, never names.
+
+Joining is a step after a parent signs in, not part of Log in:
+
+- After a parent signs up, or logs in without a family, **Join your family** appears once with the code field and **Skip for now**.
+- Someone who opens a join link without an account signs up first (the parent option is preselected), then lands on the join step with the code filled in.
+- The parent's chat always shows a **Family** button. Before joining it opens the join form. After joining it shows the family code, who looks after them, and when they joined, with **Change code** to enter a new code from their family. The chat's subtitle shows whose family they joined. The Kamla demo has the same button, labelled Demo, and saves nothing.
+
+The desk shows "Waiting for … to join" until then, and "Joined" after. Connecting the phone is the first step of Finish setting up. A new code replaces the old one for that household. In this build codes and accounts live in the browser; a code made on another device is confirmed once cloud sync exists.
+
+A phone browser, and the installed app, skip the landing page. With no session they open Log in. With a session, a parent opens the companion chat and a caretaker opens the care desk at `/care`. A parent account never sees the desk, and a caretaker account never lands on the parent's chat.
 
 ### Care desk
 
-Shown at 1024px and wider. A phone has a text button, **Care desk**, that stacks the same sections. The default phone screen stays the chat.
+The caretaker app lives at `/care` and works on a phone and on a computer: a sidebar on a wide window, a top bar and a bottom tab bar on a phone. The parent's phone at `/app` shows the chat and nothing else, so an older adult never lands on a settings screen. A signed-in caretaker who opens `/app` on a wide window is taken to `/care`. The landing page offers two demos with no account form: Kamla's phone (`/app?demo=1`, shown in a phone frame on a computer) and the caretaker app (`/care?demo=1`).
 
-| Card | What the caretaker does |
+The desk is five tabs, one section at a time, in this order. On a phone they sit in a curved bottom bar; the active tab's icon rises into a floating circle.
+
+| Tab | What the caretaker does |
 | --- | --- |
-| This person | Preferred name, language, city, persona, check-in time, quiet hours |
-| People who matter | Name, relation, city. Demo row: Rahul, son, Bengaluru |
-| Memories you have added | Short facts. Each row shows who wrote it |
-| Memories from conversations | Latest verified facts and the last three summaries |
-| Major updates | Latest insight, family quotes, call, trusted contact |
-| The last 14 days | Meals, response gap, social contact, reported mood |
-| Reminders | Next due time and reported status |
+| Profile | Preferred name, language, city, persona, check-in time, quiet hours. People who matter (demo row: Rahul, son, Bengaluru). Memories you have added, each row showing who wrote it and when |
+| Routine | At the very top, any urgent reminder: due within the next hour, or due in the last three hours and not yet confirmed. It says "Not yet confirmed", never "missed dose", and links to Reminders. Then meals mentioned, minutes talking, mood only when stated, family contact. Highlights, the family-episode card, and memories from conversations. A table view of the same days |
+| Ask Saathi | Type or speak a change in plain words. Saathi reads it back and saves it only after the caretaker confirms. It never suggests a dose |
+| Reminders | Medicine name and dose exactly as written, once or daily, a time, and the reported status |
+| Trusted Contacts | Local emergency services first (112 in India), trusted contacts and who lives nearby, Elderline 14567 |
 
 There is no single health score and the screen does not say the parent is safe.
 

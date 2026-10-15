@@ -9,6 +9,8 @@ type Props = {
   lede: string;
   children: React.ReactNode;
   aside: React.ReactNode;
+  // The demo links suit a visitor, not someone already signed in.
+  demoLinks?: boolean;
 };
 
 const TEAL = "#0c4f49";
@@ -27,7 +29,7 @@ function useStatusBarColor(color: string, active: boolean) {
   }, [color, active]);
 }
 
-export function AuthLayout({ eyebrow, title, lede, children, aside }: Props) {
+export function AuthLayout({ eyebrow, title, lede, children, aside, demoLinks = true }: Props) {
   const phone = usePhoneEntry();
   useStatusBarColor(TEAL, phone);
 
@@ -45,10 +47,15 @@ export function AuthLayout({ eyebrow, title, lede, children, aside }: Props) {
           <h1 id="auth-title">{title}</h1>
           <p className="auth-lede">{lede}</p>
           {children}
-          <p className="m-auth-demo">
-            <Link to="/app?demo=1">Try the Kamla Sharma demo</Link>
-            <span>No account form. The household is synthetic.</span>
-          </p>
+          {demoLinks ? (
+            <div className="m-auth-demo">
+              <p>Try a demo. No account form; the household is synthetic.</p>
+              <div className="m-auth-demo-links">
+                <Link to="/app?demo=1">Kamla&rsquo;s phone</Link>
+                <Link to="/care?demo=1">Caretaker app</Link>
+              </div>
+            </div>
+          ) : null}
         </main>
       </div>
     );
@@ -65,14 +72,21 @@ export function AuthLayout({ eyebrow, title, lede, children, aside }: Props) {
         </section>
         <aside className="auth-aside">
           {aside}
-          <div className="auth-demo">
-            <p>
-              <strong>Just looking?</strong> The Kamla Sharma demo needs no account form. The household is synthetic.
-            </p>
-            <Link className="button button-light" to="/app?demo=1">
-              Try the demo
-            </Link>
-          </div>
+          {demoLinks ? (
+            <div className="auth-demo">
+              <p>
+                <strong>Just looking?</strong> Neither demo needs an account form. The household is synthetic.
+              </p>
+              <div className="auth-demo-links">
+                <Link className="button button-light" to="/app?demo=1">
+                  Kamla&rsquo;s phone
+                </Link>
+                <Link className="button button-light" to="/care?demo=1">
+                  Caretaker app
+                </Link>
+              </div>
+            </div>
+          ) : null}
         </aside>
       </div>
     </SiteFrame>

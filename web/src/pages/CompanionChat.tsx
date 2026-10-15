@@ -12,7 +12,7 @@ const demoControls = [
 
 export function CompanionChat({ demo, name }: Props) {
   return (
-    <section className="phone-only chat-screen" aria-labelledby="chat-title">
+    <section className="chat-screen" aria-labelledby="chat-title">
       <div className="companion">
         <div className="orb" aria-hidden="true">
           <span lang="hi">सा</span>

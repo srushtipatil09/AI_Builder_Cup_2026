@@ -37,9 +37,12 @@ export function SiteFrame({ children, home = false }: Props) {
             <Link className="nav-demo" to="/app?demo=1">
               Kamla Sharma demo
             </Link>
+            <Link className="nav-demo" to="/care?demo=1">
+              Caretaker demo
+            </Link>
             {session ? (
               <>
-                <Link to="/app">Open chat</Link>
+                <Link to="/care">Care desk</Link>
                 <button className="nav-button" type="button" onClick={logOut}>
                   Log out
                 </button>
@@ -77,6 +80,7 @@ export function SiteFrame({ children, home = false }: Props) {
             <Link to="/login">Log in</Link>
             <Link to="/signup">Create account</Link>
             <Link to="/app?demo=1">Kamla Sharma demo</Link>
+            <Link to="/care?demo=1">Caretaker demo</Link>
           </nav>
           <div>
             <p className="foot-head">Good to know</p>

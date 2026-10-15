@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { emailError, passwordError, writeSession } from "../session";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { emailError, findAccount, nextPath, passwordError, writeSession, type HouseholdSession } from "../session";
 import { Field } from "./Field";
 import { AuthLayout } from "./AuthLayout";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const summaryRef = useRef<HTMLDivElement>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [googleNote, setGoogleNote] = useState("");
@@ -30,15 +31,24 @@ export function LoginPage() {
       requestAnimationFrame(() => summaryRef.current?.focus());
       return;
     }
-    writeSession({ email, caretakerName: "", parentName: "", language: "Hindi" });
-    navigate("/app");
+    // The role and names belong to the account. An email this browser has not seen signs in as a caretaker
+    // until Firebase Auth can look the account up.
+    const session: HouseholdSession = findAccount(email) ?? {
+      email,
+      role: "caretaker",
+      caretakerName: "",
+      parentName: "",
+      language: "Hindi",
+    };
+    writeSession(session);
+    navigate(nextPath(params, session));
   }
 
   return (
     <AuthLayout
       eyebrow="Welcome back"
       title="Log in"
-      lede="The caretaker signs in. The parent should not have to fill a form to start the day."
+      lede="Welcome back. Your account already knows whether you are a caretaker or using Saathi for yourself."
       aside={
         <>
           <img src="/photos/child.jpg" width="1152" height="864" alt="" />
@@ -100,7 +110,7 @@ export function LoginPage() {
       </form>
       <p className="note">This build keeps the session in this browser. Cloud sign-in is not connected yet.</p>
       <p className="auth-switch">
-        No account yet? <Link to="/signup">Create account</Link>
+        No account yet? <Link to={params.get("next")?.startsWith("/join/") ? `/signup?code=${params.get("next")!.slice(6)}` : "/signup"}>Create account</Link>
       </p>
     </AuthLayout>
   );
