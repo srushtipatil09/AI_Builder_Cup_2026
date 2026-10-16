@@ -47,7 +47,7 @@ export async function fetchDesk(householdId: string, isDemo = false): Promise<De
     headers: await getAuthHeaders(householdId),
   });
   if (!res.ok) {
-    throw new Error(`Failed to fetch desk: ${res.statusText}`);
+    throw Object.assign(new Error(`Failed to fetch desk: ${res.statusText}`), { status: res.status });
   }
   return res.json();
 }
@@ -260,6 +260,8 @@ export const invitationEvent = (id: string, invitationId: string, event: "played
 export const seedDemoHistory = (scenario: "stable" | "changing" | "fasting" | "family") =>
   postJson(`/demo/seed`, "demo-kamla-sharma", { household: "demo-kamla-sharma", scenario });
 export const runSeededSession = () => postJson<{ sessionId: string }>(`/demo/run-seeded-session`, "demo-kamla-sharma", { household: "demo-kamla-sharma" });
+export const simulateInactivity = () =>
+  postJson<{ label: string; invitation: string }>(`/demo/simulate-inactivity`, "demo-kamla-sharma", { household: "demo-kamla-sharma" });
 export const simulateCheckin = (outcome: "unanswered" | "device_unavailable") =>
   postJson<{ label: string; events: { type: string }[] }>(`/demo/simulate-checkin`, "demo-kamla-sharma", { household: "demo-kamla-sharma", outcome });
 
@@ -274,6 +276,7 @@ export type AccountProfile = {
   language: string;
   familyCode?: string | null;
   joinSkipped?: boolean;
+  consentAt?: string | null;
 };
 
 export async function fetchMe(): Promise<AccountProfile | null> {

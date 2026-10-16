@@ -24,7 +24,14 @@ from saathi.live.bridge import LiveBridgeSession
 from saathi.live.context import build_live_context
 from saathi.live.prompts import build_system_instruction
 from saathi.taskqueue import enqueue_post_call
-from saathi.usage import extraction_allowed, live_allowed, record_extraction
+from saathi.usage import (
+    demo_session_allowed,
+    extraction_allowed,
+    live_allowed,
+    record_demo_session,
+    record_extraction,
+    visitor_key,
+)
 from saathi.providers.firestore import get_repository
 from saathi.providers.gemini import get_genai_client
 
@@ -93,8 +100,22 @@ async def live_voice_bridge(websocket: WebSocket, session_id: str):
         household_id=household_id,
         desk=desk,
         context=extra,
+        start_gate=_demo_gate(household_id, websocket.client.host if websocket.client else "") if is_demo_household(household_id) else None,
     )
     await bridge.run()
+
+
+def _demo_gate(household_id: str, client_ip: str):
+    """Count a demo voice session when Talk is tapped, not when the page opens the line."""
+    key = visitor_key(client_ip or "unknown")
+
+    def gate() -> Optional[str]:
+        if not demo_session_allowed(key):
+            return "This demo allows three voice sessions a day for each visitor. Run seeded session still works."
+        record_demo_session(key)
+        return None
+
+    return gate
 
 
 @router.post("/{session_id}/complete")

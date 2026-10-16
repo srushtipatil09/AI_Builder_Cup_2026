@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LiveAudio, toBase64 } from "../lib/liveAudio";
 import { currentIdToken } from "../lib/firebase";
-import { completeSession, contactFamily, invitationEvent, nextInvitation, sendHeartbeat, textTurn } from "../lib/api";
+import { completeSession, contactFamily, invitationEvent, nextInvitation, sendHeartbeat, simulateInactivity, textTurn } from "../lib/api";
 import { enableParentPush, pushMessage } from "../lib/push";
 import { readSession } from "../session";
 import { InstallSheet } from "./InstallSheet";
@@ -331,6 +331,14 @@ export function CompanionChat({ demo, name, householdId }: Props) {
     sendDemoClip("door", "Labeled recording: an ordinary door. No alert should be raised.");
   }
 
+  // Labeled simulation: the same invitation the scheduler sends, picked up by this open chat.
+  function simulateMorningInactivity() {
+    setAlertNote("Simulated. This build does not read a Nest sensor.");
+    simulateInactivity()
+      .then(() => void startFromInvite())
+      .catch(() => setAlertNote("Could not reach Saathi to simulate inactivity. Try again."));
+  }
+
   // The open chat tells the server it is ready, and picks up a check-in Saathi has started.
   async function startFromInvite() {
     if (statusRef.current !== "idle" || inviteRef.current || !hhRef.current) return;
@@ -429,6 +437,12 @@ export function CompanionChat({ demo, name, householdId }: Props) {
             <span>Demo controls</span>
           </summary>
           <ul>
+            <li>
+              <button className="ghost" type="button" onClick={simulateMorningInactivity}>
+                Simulate morning inactivity
+              </button>
+              <span>Simulated. This build does not read a Nest sensor. Saathi starts a check-in the way the scheduler does.</span>
+            </li>
             <li>
               <button className="ghost" type="button" onClick={playDistressClip}>
                 Play labeled distress clip

@@ -16,6 +16,8 @@ export type HouseholdSession = {
   familyCode?: string;
   // The parent chose "Skip for now" on the join step; the chat still offers Join family.
   joinSkipped?: boolean;
+  // When the account holder agreed to what Saathi stores, at signup.
+  consentAt?: string;
 };
 
 const ACCOUNTS = "saathi.accounts";
@@ -67,6 +69,7 @@ export function writeSession(session: HouseholdSession) {
     language: session.language,
     familyCode: session.familyCode ?? null,
     joinSkipped: session.joinSkipped ?? false,
+    consentAt: session.consentAt ?? null,
   }).catch(() => {
     // Not signed in with Firebase, or offline: the browser copy still works.
   });
@@ -133,5 +136,6 @@ export function fromProfile(p: AccountProfile): HouseholdSession {
     language: p.language || "Hindi",
     familyCode: p.familyCode ?? undefined,
     joinSkipped: p.joinSkipped || undefined,
+    consentAt: p.consentAt ?? undefined,
   };
 }

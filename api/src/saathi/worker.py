@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from saathi import __version__
 from saathi.config import load_settings
 from saathi.pipeline import run_post_call
+from saathi.retention import run_retention
 from saathi.scheduling.service import run_scheduler_tick
 
 logger = logging.getLogger(__name__)
@@ -74,3 +75,9 @@ def scheduler_tick(body: TickRequest):
     """Minute tick invoked by Cloud Scheduler."""
     events = run_scheduler_tick(body.current_time_hhmm)
     return {"status": "tick_processed", "currentTime": body.current_time_hhmm, "dueEvents": events}
+
+
+@app.post("/internal/retention", dependencies=[Depends(require_invoker)])
+def retention():
+    """Daily job from Cloud Scheduler: transcripts after 7 days, summaries and daily numbers after 30."""
+    return {"status": "retention_processed", **run_retention()}

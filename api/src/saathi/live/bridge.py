@@ -5,7 +5,7 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Callable, Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
 from google import genai
@@ -102,12 +102,15 @@ class LiveBridgeSession:
         household_id: str,
         desk: Desk,
         context: Optional[LiveContext] = None,
+        start_gate: Optional[Callable[[], Optional[str]]] = None,
     ):
         self.ws = websocket
         self.session_id = session_id
         self.household_id = household_id
         self.desk = desk
         self.context = context or LiveContext()
+        # Runs when the parent taps Talk. A returned message refuses the session (the demo visitor limit).
+        self.start_gate = start_gate
         self.settings = load_settings()
         self._last_parent_at = 0.0
         self._watch: Optional[asyncio.Task] = None
@@ -195,6 +198,11 @@ class LiveBridgeSession:
             await self.ws.send_json({"type": "live_ready"})
             if not await self._wait_for_start():
                 return
+            if self.start_gate:
+                refusal = await asyncio.get_running_loop().run_in_executor(None, self.start_gate)
+                if refusal:
+                    await self.ws.send_json({"type": "error", "message": refusal})
+                    return
             self.start_time = time.monotonic()
             name = self.desk.profile.preferredName or "ji"
             memory = self.desk.memories[0].text if self.desk.memories else ""

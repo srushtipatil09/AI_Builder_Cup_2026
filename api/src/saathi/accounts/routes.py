@@ -20,6 +20,8 @@ class AccountProfile(BaseModel):
     language: str = "Hindi"
     familyCode: Optional[str] = None
     joinSkipped: bool = False
+    # When the account holder agreed, at signup, to what Saathi stores (docs/PRIVACY.md). ISO time.
+    consentAt: Optional[str] = None
 
 
 def _require_verified(actor: ActorContext) -> None:
@@ -40,6 +42,9 @@ def get_account(actor: ActorContext = Depends(get_current_actor)) -> AccountProf
 def put_account(body: AccountProfile, actor: ActorContext = Depends(get_current_actor)) -> AccountProfile:
     _require_verified(actor)
     role = "parent" if body.role == "parent" else "caretaker"
-    record = body.model_copy(update={"email": actor.email or body.email, "role": role})
-    get_repository().doc_set(f"users/{actor.uid}", record.model_dump())
+    repo = get_repository()
+    # Consent is given once. A later save from a device that never saw it does not erase it.
+    consent = body.consentAt or (repo.doc_get(f"users/{actor.uid}") or {}).get("consentAt")
+    record = body.model_copy(update={"email": actor.email or body.email, "role": role, "consentAt": consent})
+    repo.doc_set(f"users/{actor.uid}", record.model_dump())
     return record

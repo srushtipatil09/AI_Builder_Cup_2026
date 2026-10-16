@@ -139,6 +139,7 @@ function read(key: string, seed: Desk): Desk {
 }
 
 import { fetchDesk, saveDesk } from "./lib/api";
+import { clearSession } from "./session";
 
 export type SyncState = "loading" | "synced" | "saving" | "offline";
 
@@ -203,6 +204,12 @@ export function useDesk(key: string, seed: () => Desk) {
       setSync("synced");
       setSyncedAt(Date.now());
     } catch (err) {
+      if (!isDemo && (err as { status?: number }).status === 401) {
+        // The sign-in on this device has expired. Retrying will not help; log in again.
+        clearSession();
+        window.location.assign("/login?next=/care");
+        return;
+      }
       setSync("offline");
       setSyncError(err instanceof Error ? err.message : "Could not reach the server.");
     }

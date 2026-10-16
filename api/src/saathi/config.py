@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from saathi.cost import (
     BIGQUERY_MAX_BYTES_BILLED,
+    DEMO_SESSIONS_PER_VISITOR,
     MAX_DAILY_EXTRACT_CALLS,
     MAX_DAILY_LIVE_MINUTES,
 )
@@ -37,6 +38,8 @@ class Settings(BaseSettings):
     google_genai_use_vertexai: bool = True
     max_daily_live_minutes: int = MAX_DAILY_LIVE_MINUTES
     max_daily_extract_calls: int = MAX_DAILY_EXTRACT_CALLS
+    # Demo voice sessions per visitor per day. 0 turns the limit off (for recording the video).
+    demo_sessions_per_visitor: int = DEMO_SESSIONS_PER_VISITOR
     bigquery_max_bytes_billed: int = BIGQUERY_MAX_BYTES_BILLED
     bigquery_dataset: str = "saathi"
     # Bucket for photos and documents (caretaker|person/public|private/<user-id>/...). Empty means "<project>-media".
