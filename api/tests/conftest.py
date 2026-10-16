@@ -9,6 +9,7 @@ import pytest
 def isolated_services(monkeypatch):
     # The dev .env turns strict household access on; most tests exercise the open path.
     monkeypatch.setenv("REQUIRE_HOUSEHOLD_AUTH", "false")
+    monkeypatch.setenv("TASK_INVOKER_EMAIL", "")
     if os.environ.get("SAATHI_LIVE_TESTS") == "1":
         yield
         return
