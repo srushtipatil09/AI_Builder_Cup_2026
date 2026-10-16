@@ -1,3 +1,6 @@
+import { firebaseSignOut } from "./lib/firebase";
+import { putMe, type AccountProfile } from "./lib/api";
+
 const KEY = "saathi.session";
 
 // Who the account belongs to. The caretaker sets things up; the parent only talks.
@@ -53,8 +56,20 @@ export function readSession(): HouseholdSession | null {
   }
 }
 
+// The browser copy is a cache. The account profile in Firestore is the record that follows the person.
 export function writeSession(session: HouseholdSession) {
   localStorage.setItem(KEY, JSON.stringify(session));
+  putMe({
+    email: session.email,
+    role: session.role,
+    caretakerName: session.caretakerName,
+    parentName: session.parentName,
+    language: session.language,
+    familyCode: session.familyCode ?? null,
+    joinSkipped: session.joinSkipped ?? false,
+  }).catch(() => {
+    // Not signed in with Firebase, or offline: the browser copy still works.
+  });
   if (session.email) {
     const accounts = loadAccounts();
     accounts[session.email.toLowerCase()] = session;
@@ -64,6 +79,7 @@ export function writeSession(session: HouseholdSession) {
 
 export function clearSession() {
   localStorage.removeItem(KEY);
+  firebaseSignOut().catch(() => {});
 }
 
 // Each role has its own app: the caretaker's desk, or the parent's chat.
@@ -105,4 +121,17 @@ export function nextPath(params: URLSearchParams, session: HouseholdSession | nu
   if (next === "/care" && session?.role !== "parent") return "/care";
   if (session?.role === "parent" && /^\/join(\/[A-Z0-9]{3}-[A-Z0-9]{3})?$/.test(next)) return next;
   return session ? afterSignIn(session) : "/login";
+}
+
+// A session rebuilt from the account profile stored in Firestore.
+export function fromProfile(p: AccountProfile): HouseholdSession {
+  return {
+    email: p.email,
+    role: p.role === "parent" ? "parent" : "caretaker",
+    caretakerName: p.caretakerName,
+    parentName: p.parentName,
+    language: p.language || "Hindi",
+    familyCode: p.familyCode ?? undefined,
+    joinSkipped: p.joinSkipped || undefined,
+  };
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { newId, type Desk } from "../../desk";
+import { askSaathi, cancelAsk, confirmAsk, type Proposal } from "../../lib/api";
 
 type Props = {
   desk: Desk;
@@ -8,9 +9,19 @@ type Props = {
   author: string;
   name: string;
   guideSlot: HTMLElement | null;
+  householdId: string;
 };
 
-type Message = { id: string; from: "you" | "saathi"; text: string; keep?: string; kept?: boolean };
+type Message = {
+  id: string;
+  from: "you" | "saathi";
+  text: string;
+  keep?: string;
+  kept?: boolean;
+  // A change read back and waiting for a yes. "done" and "cancelled" close it.
+  proposal?: Proposal;
+  outcome?: "done" | "cancelled" | "working";
+};
 
 // Shown as one row on a phone, and grouped by what they change on a wide window.
 const groups = [
@@ -26,7 +37,7 @@ function formatWhen(iso: string) {
   return new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 }
 
-export function TellSaathiTab({ desk, setDesk, author, name, guideSlot }: Props) {
+export function TellSaathiTab({ desk, setDesk, author, name, guideSlot, householdId }: Props) {
   const who = name || "the parent";
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<Message[]>([
@@ -38,6 +49,8 @@ export function TellSaathiTab({ desk, setDesk, author, name, guideSlot }: Props)
   ]);
   const threadRef = useRef<HTMLOListElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [listening, setListening] = useState(false);
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     // Scroll the thread itself, never the page.
@@ -50,21 +63,74 @@ export function TellSaathiTab({ desk, setDesk, author, name, guideSlot }: Props)
     inputRef.current?.focus();
   }
 
-  function send(event: FormEvent<HTMLFormElement>) {
+  async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = draft.trim();
-    if (!text) return;
-    setMessages((list) => [
-      ...list,
-      { id: newId(), from: "you", text },
-      {
-        id: newId(),
-        from: "saathi",
-        text: "The assistant is not connected yet, so nothing changed. You can keep this as a memory now, or edit the Profile or Reminders tab.",
-        keep: text,
-      },
-    ]);
+    if (!text || sending) return;
+    setMessages((list) => [...list, { id: newId(), from: "you", text }]);
     setDraft("");
+    setSending(true);
+    try {
+      const proposal = await askSaathi(householdId, text);
+      if (proposal.status === "awaiting_confirmation") {
+        setMessages((list) => [
+          ...list,
+          { id: newId(), from: "saathi", text: `${proposal.readback} Should I save this?`, proposal },
+        ]);
+      } else {
+        setMessages((list) => [...list, { id: newId(), from: "saathi", text: proposal.question || "I could not turn that into one change." }]);
+      }
+    } catch {
+      setMessages((list) => [
+        ...list,
+        {
+          id: newId(),
+          from: "saathi",
+          text: "I could not reach the assistant, so nothing changed. You can keep this as a memory now, or edit the Profile or Reminders tab.",
+          keep: text,
+        },
+      ]);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function decide(message: Message, yes: boolean) {
+    const proposal = message.proposal;
+    if (!proposal) return;
+    setMessages((list) => list.map((m) => (m.id === message.id ? { ...m, outcome: "working" } : m)));
+    try {
+      if (yes) {
+        const result = await confirmAsk(householdId, proposal);
+        setDesk((d) => ({ ...d, ...result.desk }));
+        setMessages((list) => [
+          ...list.map((m) => (m.id === message.id ? { ...m, outcome: "done" as const } : m)),
+          { id: newId(), from: "saathi", text: "Saved. Saathi will use it from the next conversation." },
+        ]);
+      } else {
+        await cancelAsk(householdId, proposal.id);
+        setMessages((list) => list.map((m) => (m.id === message.id ? { ...m, outcome: "cancelled" as const } : m)));
+      }
+    } catch (err) {
+      setMessages((list) => [
+        ...list.map((m) => (m.id === message.id ? { ...m, outcome: undefined } : m)),
+        { id: newId(), from: "saathi", text: err instanceof Error ? `That was not saved. ${err.message}` : "That was not saved." },
+      ]);
+    }
+  }
+
+  // Dictation uses the browser's speech recognition. The text lands in the box, so it is still read back before saving.
+  function dictate() {
+    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!Recognition) return;
+    const recognition = new Recognition();
+    recognition.lang = navigator.language || "en-IN";
+    recognition.interimResults = false;
+    recognition.onresult = (e: any) => setDraft((d) => `${d} ${e.results[0][0].transcript}`.trim());
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    setListening(true);
+    recognition.start();
   }
 
   function keep(message: Message) {
@@ -137,7 +203,7 @@ export function TellSaathiTab({ desk, setDesk, author, name, guideSlot }: Props)
           </span>
           <div>
             <p className="tell-title">Saathi</p>
-            <p className="tell-status">Not connected yet · typing only</p>
+            <p className="tell-status">Reads each change back · saves after you confirm</p>
           </div>
         </header>
 
@@ -146,6 +212,22 @@ export function TellSaathiTab({ desk, setDesk, author, name, guideSlot }: Props)
             <li key={m.id} className={m.from === "you" ? "bubble-you" : "bubble-bot"}>
               <span className="bubble-from">{m.from === "you" ? "You" : "Saathi"}</span>
               <p>{m.text}</p>
+              {m.proposal ? (
+                m.outcome === "done" ? (
+                  <span className="kept">Saved</span>
+                ) : m.outcome === "cancelled" ? (
+                  <span className="kept">Not saved</span>
+                ) : (
+                  <span className="bubble-actions">
+                    <button className="primary bubble-action" type="button" disabled={m.outcome === "working"} onClick={() => void decide(m, true)}>
+                      Yes, save it
+                    </button>{" "}
+                    <button className="ghost bubble-action" type="button" disabled={m.outcome === "working"} onClick={() => void decide(m, false)}>
+                      No
+                    </button>
+                  </span>
+                )
+              ) : null}
               {m.keep ? (
                 m.kept ? (
                   <span className="kept">Kept as a memory</span>
@@ -171,9 +253,10 @@ export function TellSaathiTab({ desk, setDesk, author, name, guideSlot }: Props)
           <button
             className="mic"
             type="button"
-            disabled
-            aria-label="Speak. Arrives with the voice connection."
-            title="Speaking arrives with the voice connection."
+            onClick={dictate}
+            disabled={listening || !((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)}
+            aria-label={listening ? "Listening" : "Speak the change"}
+            title="Speak the change. It is typed into the box and read back before saving."
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <rect x="9" y="3" width="6" height="12" rx="3" />
@@ -187,8 +270,8 @@ export function TellSaathiTab({ desk, setDesk, author, name, guideSlot }: Props)
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
           />
-          <button className="primary" type="submit" disabled={!draft.trim()}>
-            Send
+          <button className="primary" type="submit" disabled={!draft.trim() || sending}>
+            {sending ? "Reading..." : "Send"}
           </button>
         </form>
       </section>

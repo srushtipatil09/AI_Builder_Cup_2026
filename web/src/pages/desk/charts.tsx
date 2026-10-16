@@ -32,9 +32,11 @@ type ColumnProps = {
   max: number;
   ticks: number[];
   unit: (value: number) => string;
+  // How the tooltip names a day. The demo says "Day 3"; real data says the date.
+  tipLabel?: (day: number) => string;
 };
 
-export function ColumnChart({ title, values, max, ticks, unit }: ColumnProps) {
+export function ColumnChart({ title, values, max, ticks, unit, tipLabel = (d) => `Day ${d}` }: ColumnProps) {
   const [hover, setHover] = useState<number | null>(null);
   const H = 170;
   const plotW = W - PAD.left - PAD.right;
@@ -49,7 +51,7 @@ export function ColumnChart({ title, values, max, ticks, unit }: ColumnProps) {
       : {
           x: PAD.left + band * hover + band / 2,
           y: y(values[hover].value) - 8,
-          text: `Day ${values[hover].day}: ${unit(values[hover].value)}`,
+          text: `${tipLabel(values[hover].day)}: ${unit(values[hover].value)}`,
         };
 
   return (
@@ -115,10 +117,11 @@ type DotProps = {
   levels: Level[];
   values: { day: number; level: Level | null }[];
   emptyLabel: string;
+  tipLabel?: (day: number) => string;
 };
 
 // Ordinal dots: one row per level, a hollow tick on the baseline when nothing was said.
-export function DotChart({ title, levels, values, emptyLabel }: DotProps) {
+export function DotChart({ title, levels, values, emptyLabel, tipLabel = (d) => `Day ${d}` }: DotProps) {
   const [hover, setHover] = useState<number | null>(null);
   const rows = [...levels, emptyLabel];
   const H = 26 * rows.length + PAD.top + PAD.bottom;
@@ -132,7 +135,7 @@ export function DotChart({ title, levels, values, emptyLabel }: DotProps) {
       : {
           x: left + band * hover + band / 2,
           y: rowY(values[hover].level ? levels.indexOf(values[hover].level!) : rows.length - 1) - 12,
-          text: `Day ${values[hover].day}: ${values[hover].level ?? emptyLabel}`,
+          text: `${tipLabel(values[hover].day)}: ${values[hover].level ?? emptyLabel}`,
         };
 
   return (

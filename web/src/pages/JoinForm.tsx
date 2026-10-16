@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { findByCode, isCode, markJoined, normalizeCode } from "../family";
+import { cacheLink, findByCode, isCode, markJoined, normalizeCode } from "../family";
+import { lookupFamilyCode } from "../lib/api";
 import { writeSession, type HouseholdSession } from "../session";
 
 type Props = {
@@ -31,14 +32,30 @@ export function JoinForm({
   const [error, setError] = useState("");
   const link = isCode(code) ? findByCode(code) : null;
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!isCode(code)) {
       setError("Enter the family code, like KMR-4F7. Your family can read it to you.");
       return;
     }
-    const found = findByCode(code);
-    if (persist) markJoined(code, session.parentName);
+    let found = findByCode(code);
+    if (!found) {
+      try {
+        found = await lookupFamilyCode(normalizeCode(code));
+        cacheLink(found);
+      } catch {
+        setError("We could not find that code. Check it with your family and try again.");
+        return;
+      }
+    }
+    if (persist) {
+      try {
+        await markJoined(code, session.parentName);
+      } catch {
+        setError("We could not reach Saathi to finish joining. Check the connection and try again.");
+        return;
+      }
+    }
     const next: HouseholdSession = {
       ...session,
       familyCode: code,

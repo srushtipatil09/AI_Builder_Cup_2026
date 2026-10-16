@@ -34,7 +34,8 @@ self.addEventListener("fetch", (event) => {
   }
   if (request.method !== "GET") return;
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin || url.pathname.startsWith("/health")) return;
+  // The API is never cached: updates, invitations, and alerts must be fresh.
+  if (url.origin !== self.location.origin || url.pathname.startsWith("/health") || url.pathname.startsWith("/api/")) return;
 
   // Pages: network first, so a deploy shows up; the cached shell opens the app offline.
   if (request.mode === "navigate") {
@@ -55,5 +56,46 @@ self.addEventListener("fetch", (event) => {
           return response;
         }),
     ),
+  );
+});
+
+// Push from Firebase Cloud Messaging. The text is generic by design: no name, quote, or medicine.
+self.addEventListener("push", (event) => {
+  let title = "Saathi";
+  let body = "New Saathi update";
+  let target = "/app";
+  try {
+    const data = event.data ? event.data.json() : {};
+    const note = data.notification || {};
+    title = note.title || title;
+    body = note.body || body;
+    target = (data.fcmOptions && data.fcmOptions.link) || (data.data && data.data.link) || target;
+  } catch (err) {
+    // keep the generic text
+  }
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/favicon-32.png",
+      data: { link: target },
+    }),
+  );
+});
+
+// A tap opens the app. A check-in speaks only after the app is open; the microphone is never held in the background.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const link = (event.notification.data && event.notification.data.link) || "/app";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client) {
+          client.navigate(link).catch(() => {});
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(link);
+    }),
   );
 });

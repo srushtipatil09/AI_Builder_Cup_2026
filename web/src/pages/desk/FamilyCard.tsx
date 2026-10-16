@@ -6,6 +6,8 @@ type Props = {
   name: string;
   demo: boolean;
   onCreate: () => void;
+  error?: string;
+  busy?: boolean;
 };
 
 function formatWhen(iso: string) {
@@ -13,7 +15,7 @@ function formatWhen(iso: string) {
 }
 
 // Pairs the caretaker's desk with the parent's phone: one short code, one join link.
-export function FamilyCard({ link, name, demo, onCreate }: Props) {
+export function FamilyCard({ link, name, demo, onCreate, error, busy }: Props) {
   const who = name || "your parent";
   const [note, setNote] = useState("");
   const [confirmNew, setConfirmNew] = useState(false);
@@ -119,11 +121,16 @@ export function FamilyCard({ link, name, demo, onCreate }: Props) {
           </div>
         </>
       ) : (
-        <button className="primary family-create" type="button" onClick={onCreate}>
-          Create a family code
+        <button className="primary family-create" type="button" onClick={onCreate} disabled={busy}>
+          {busy ? "Making a code…" : "Create a family code"}
         </button>
       )}
       {demo ? <p className="family-demo">Demo: open the join page in a new tab, join, and come back here.</p> : null}
+      {error ? (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      ) : null}
     </section>
   );
 }

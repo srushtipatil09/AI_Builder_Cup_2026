@@ -24,6 +24,7 @@ build/
 # Node
 node_modules/
 web/dist/
+.firebase/
 *.tsbuildinfo
 
 # OS and editors
@@ -31,4 +32,3 @@ web/dist/
 Thumbs.db
 
 firebase-config.json
-firebase.json

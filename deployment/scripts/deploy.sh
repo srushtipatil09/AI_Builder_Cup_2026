@@ -2,6 +2,7 @@
 # Deploy contract for a cost-shaped Cloud Run pair.
 # Prints the commands and stops, unless CONFIRM_DEPLOY=1 and PROJECT are both set.
 # Does not create a GPU, a Vector Search replica, or a minimum instance.
+# The script that builds and deploys is deployment/scripts/deploy.ps1.
 set -euo pipefail
 
 PROJECT="${PROJECT:-}"

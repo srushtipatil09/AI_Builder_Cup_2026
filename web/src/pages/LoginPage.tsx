@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { emailError, findAccount, nextPath, passwordError, writeSession, type HouseholdSession } from "../session";
+import { emailError, findAccount, fromProfile, nextPath, passwordError, writeSession, type HouseholdSession } from "../session";
+import { authMessage, signInWithEmail, signInWithGoogle } from "../lib/firebase";
+import { fetchMe } from "../lib/api";
 import { Field } from "./Field";
 import { AuthLayout } from "./AuthLayout";
 
@@ -10,12 +12,13 @@ export function LoginPage() {
   const summaryRef = useRef<HTMLDivElement>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [googleNote, setGoogleNote] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     document.title = "Log in · Saathi";
   }, []);
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setGoogleNote("");
     const data = new FormData(event.currentTarget);
@@ -31,17 +34,50 @@ export function LoginPage() {
       requestAnimationFrame(() => summaryRef.current?.focus());
       return;
     }
-    // The role and names belong to the account. An email this browser has not seen signs in as a caretaker
-    // until Firebase Auth can look the account up.
-    const session: HouseholdSession = findAccount(email) ?? {
+    setBusy(true);
+    try {
+      const user = await signInWithEmail(email, password);
+      await finish(user.email, user.name);
+    } catch (err) {
+      setErrors({ password: authMessage(err) });
+      requestAnimationFrame(() => summaryRef.current?.focus());
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // The role and names belong to the account, so they come from its stored profile.
+  async function finish(email: string, displayName: string) {
+    let session: HouseholdSession | null = null;
+    try {
+      const profile = await fetchMe();
+      if (profile) session = fromProfile({ ...profile, email });
+    } catch {
+      // Offline: fall through to what this browser remembers.
+    }
+    session ??= findAccount(email) ?? {
       email,
       role: "caretaker",
-      caretakerName: "",
+      caretakerName: displayName.split(" ")[0] || displayName,
       parentName: "",
       language: "Hindi",
     };
     writeSession(session);
     navigate(nextPath(params, session));
+  }
+
+  async function onGoogle() {
+    setGoogleNote("");
+    setBusy(true);
+    try {
+      const user = await signInWithGoogle();
+      await finish(user.email, user.name);
+    } catch (err) {
+      setGoogleNote(authMessage(err));
+      console.warn("Google sign-in failed", err);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -88,7 +124,7 @@ export function LoginPage() {
           error={errors.password}
         />
         <div className="auth-actions">
-          <button className="primary" type="submit">
+          <button className="primary" type="submit" disabled={busy}>
             Log in
           </button>
           <p className="divider" aria-hidden="true">
@@ -97,7 +133,8 @@ export function LoginPage() {
           <button
             className="ghost"
             type="button"
-            onClick={() => setGoogleNote("Google sign-in is not connected in this build.")}
+            onClick={onGoogle}
+            disabled={busy}
           >
             Continue with Google
           </button>
@@ -108,7 +145,7 @@ export function LoginPage() {
           </p>
         ) : null}
       </form>
-      <p className="note">This build keeps the session in this browser. Cloud sign-in is not connected yet.</p>
+      <p className="note">Sign in with Google or an email. Your household is kept in this browser until the desk syncs to the cloud.</p>
       <p className="auth-switch">
         No account yet? <Link to={params.get("next")?.startsWith("/join/") ? `/signup?code=${params.get("next")!.slice(6)}` : "/signup"}>Create account</Link>
       </p>

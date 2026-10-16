@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMedia } from "../health";
 import { isPhoneEntry } from "../phoneEntry";
 import { clearSession, readSession, type HouseholdSession } from "../session";
+import { householdForCode } from "../family";
 import { FamilySheet } from "./FamilySheet";
 import { CompanionChat } from "./CompanionChat";
 
@@ -23,6 +24,19 @@ export function AppShell() {
   const wide = useMedia("(min-width: 1024px)");
   const parent = demo ? demoSession : session?.role === "parent" ? session : null;
   const joined = Boolean(parent?.familyCode);
+  // The desk the Live greeting reads: a caretaker uses their own, a parent uses the household their code names.
+  const [householdId, setHouseholdId] = useState<string>(session?.role === "parent" ? "" : session?.email ?? "");
+  useEffect(() => {
+    if (demo || session?.role !== "parent") return;
+    if (!session.familyCode) return;
+    let live = true;
+    householdForCode(session.familyCode).then((id) => {
+      if (live && id) setHouseholdId(id);
+    });
+    return () => {
+      live = false;
+    };
+  }, [demo, session?.role, session?.familyCode]);
 
   useEffect(() => {
     document.title = demo ? "Kamla Sharma · Saathi" : "Talk · Saathi";
@@ -75,7 +89,7 @@ export function AppShell() {
         </div>
       </header>
       <main className="page">
-        <CompanionChat demo={demo} name={demo ? "Kamla" : session?.parentName} />
+        <CompanionChat demo={demo} name={demo ? "Kamla" : session?.parentName} householdId={householdId} />
       </main>
       {familyOpen && parent ? (
         <FamilySheet
@@ -112,7 +126,7 @@ export function AppShell() {
           This is all Kamla sees. Saathi speaks first, and there are four large buttons. Nothing to set up and no
           menus.
         </p>
-        <p className="stage-note">Synthetic household. Voice is not connected in this build.</p>
+        <p className="stage-note">Synthetic household. Voice runs live with Gemini.</p>
         <div className="stage-links">
           <Link className="button" to="/care?demo=1">
             See Rahul&rsquo;s caretaker app
