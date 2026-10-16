@@ -13,16 +13,20 @@ flowchart LR
 | --- | --- | --- |
 | Thu 15 Oct | Project skeleton, health on a public URL, one Hindi turn, worker rejects an anonymous call | `docs/ENVIRONMENT.md` has the model ids that passed |
 | Fri 16 Oct | Extraction, caretaker and chat memory, family episodes and embeddings, pause measurement, BigQuery drift, SafetyGuard, three ADK tools | One session writes an observation, a nearest episode, a BigQuery row, and an insight that passes the guard |
-| Sat 17 Oct | Proactive greeting, distress check, once or daily reminder with a spoken confirm, both fronts, install path, notification tap | Phone width is the chat. A caretaker memory shows up in the next greeting. "Ouch" asks "Kya hua?" |
+| Sat 17 Oct | Proactive greeting, distress check, once or daily reminder with a spoken confirm, both fronts, install path, notification tap | A parent opens `/app` and a caretaker opens `/care`. A caretaker memory shows up in the next greeting. "Ouch" asks "Kya hua?" |
 | Sun 18 Oct | Feature freeze in the morning. Demo isolation, video, PDF, public repo, second browser | Receipt saved. Leave hours before the portal cutoff |
 
 If Thursday's voice session does not connect, Friday morning is still voice.
+
+## Status as of 16 Oct 2026
+
+Voice, extraction, the care desk, companion chat, accounts, and file uploads are in the tree. What is still open, and must not be marked done from reading the code: a verified public URL, the Cloud Tasks queue, the worker service, and the Cloud Scheduler job (empty `WORKER_URL` runs post-call work in-process), FCM on a real device, and the Sunday feature freeze, video, and submission. See [PROGRESS.md](PROGRESS.md).
 
 ## Milestones
 
 | Id | Result |
 | --- | --- |
-| M01 | Cloud project checked, API and web deployed as a skeleton, `/health` live |
+| M01 | Cloud project checked. API and web run locally and `/health` reports `stage: connected`. A public deploy is a separate check and is not recorded as done |
 | M02 | Household, consent, pairing, judge demo without an account form |
 | M03 | Hindi Live bridge, Talk / Stop / Pause / Contact family |
 | M04 | Extraction, memory, family episodes, vector index |
@@ -49,10 +53,10 @@ Write the command and the real result in [PROGRESS.md](PROGRESS.md). Do not mark
 
 | Check | Proves |
 | --- | --- |
-| `python -m pytest api/tests` | The scaffold health routes |
+| `python -m pytest api/tests` | Health, safety, drift, live, pipeline, scheduling, files, and household access. 75 tests collected on 16 Oct 2026; the last recorded green run is 71 passed |
 | Safety tests | Diagnosis, dose advice, and an order to enter counselling are rejected |
 | Drift fixtures | Stable, changing, fasting, and family-shift histories |
-| A real browser | Hindi audio, the width split, and the health line on the demo page |
+| A real browser | Hindi audio, parent chat versus caretaker desk, and the health line on the demo page |
 
 ## Submission pack
 

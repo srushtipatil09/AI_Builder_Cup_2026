@@ -27,16 +27,16 @@ flowchart LR
 
 | Topic | Choice |
 | --- | --- |
-| Models | Candidates `gemini-3.8-live` and `gemini-3.8-flash`. Pin the ids that a smoke test actually runs |
+| Models | Live `gemini-live-2.5-flash-native-audio` (voice `Aoede`). Extract and insight `gemini-2.5-flash`. Embeddings `text-multilingual-embedding-002`. These are the defaults a Live smoke actually used. Environment variables can override them |
 | Voice path | Browser to Cloud Run WebSocket to Vertex Live. Auth is the first socket message |
 | After the call | One Cloud Task per session, then the private worker. Scheduler once a minute for due work. No second Pub/Sub path |
 | Memory | Firestore, including caretaker facts. Family episodes also get a Vertex embedding and a Firestore vector index |
 | Drift | SQL in BigQuery. Recent 3 local days against the prior 11. At least 7 baseline days |
-| Speech timing | Measured in the browser. Live does not emit the pause |
+| Speech timing | The browser sends the wait from the parent's last loud frame to the first reply audio. Live does not emit that pause. Speaking rate is a stored field the live chat does not fill |
 | Safety | A Python check on every family-facing sentence. Failure falls back to a sentence built from stored facts |
-| Agent | One ADK agent in the worker, three tools. Agent Engine hosting is out |
-| Cost | Request-billed Cloud Run at zero instances. Live capped at 240 seconds. Flash for everything after the call. Implicit cache on. Explicit cache only at 4,096 tokens or more. Firestore vectors, not a Vector Search replica. BigQuery on-demand, 100 MiB byte cap. No GPU |
-| Screens | Landing page. Wide window is the care desk. Narrow window is the chat |
+| Agent | Three tools in the worker. The default path runs them in a fixed order. ADK is optional (`saathi[adk]`) and falls back to that order. Agent Engine hosting is out |
+| Cost | Request-billed Cloud Run at zero instances. Live capped at 240 seconds. Flash for everything after the call. Explicit cache only at 4,096 tokens or more, and the Live path does not create one. Firestore vectors, not a Vector Search replica. BigQuery on-demand, 100 MiB byte cap. No GPU |
+| Screens | Landing page, with both demos. Caretaker app at `/care` (sidebar at 1024px and wider, bottom tabs below that). Parent chat at `/app` |
 | Phone check-in | A notification, then speech in the open app. No background microphone |
 | Nest | Milestone M16, after submission |
 | Alerts | Firebase Cloud Messaging. Check-in text and caretaker text stay generic |
@@ -48,7 +48,7 @@ flowchart LR
 | # | Done when |
 | --- | --- |
 | 1 | A second browser completes a Hindi turn on the deployed URL |
-| 2 | Phone width is the chat. Desktop width is the care desk. The landing page has login, signup, and the demo |
+| 2 | A parent at any width sees the chat at `/app`. A caretaker sees the care desk at `/care`. The landing page has login, signup, and both demos |
 | 3 | An open, permitted chat greets without a new parent tap |
 | 4 | Snooze counts as a response. Two unanswered invitations make one notice. A blocked mic is a different status |
 | 5 | Extraction keeps negation and talk about someone else unknown |

@@ -6,24 +6,25 @@ This file is the product behavior. [ARCHITECTURE.md](ARCHITECTURE.md) is the sys
 
 ## The two fronts
 
-One web app. The width of the window chooses the front. Both fronts share one Firebase user and one household.
+One web app. The account role chooses the front. A caretaker opens the care desk at `/care`. A parent opens the companion chat at `/app`. They are separate Firebase accounts that share one household after the parent joins with a family code. On `/care`, a window at least 1024px wide uses a sidebar. Below that, the desk uses a top bar and bottom tabs. Width does not switch a parent into the desk.
 
 ```mermaid
 flowchart TD
   start[Open Saathi] --> entry{Phone or installed app}
   entry -->|Yes| signed{Session on this device}
   signed -->|No| login[Log in]
-  signed -->|Yes| app[Signed-in app]
+  signed -->|Yes| role{Account role}
   entry -->|No| land[Landing page]
-  land --> demo[Try the Kamla Sharma demo]
+  land --> demoChat[Kamla phone demo]
+  land --> demoDesk[Caretaker demo]
   land --> login
   land --> signup[Create account]
-  demo --> app
-  login --> app
-  signup --> app
-  app --> wide{Width at least 1024px}
-  wide -->|Yes| desk[Care desk]
-  wide -->|No| phone[Companion chat]
+  demoChat --> phone[Companion chat]
+  demoDesk --> desk[Care desk]
+  login --> role
+  signup --> role
+  role -->|Parent| phone
+  role -->|Caretaker| desk
   phone --> install[Install sheet on Chrome]
   desk --> memory[Caretaker memory]
   memory --> greeting[Next greeting may use it]
@@ -34,7 +35,7 @@ flowchart TD
 A desktop page with a header and a footer.
 
 1. The name, one sentence, and three short lines: Saathi speaks first, remembers the family, and tells the child when something changes.
-2. Header links reach Log in, Create account, and the Kamla Sharma demo. The account forms are not on this page.
+2. Header links reach Log in, Create account, the Kamla Sharma demo, and the caretaker demo. The account forms are not on this page.
 3. **Try the Kamla Sharma demo.** No account form. Kamla is 78 and lives in Varanasi. Rahul, her son in Bengaluru, is the caretaker. The household is synthetic and labeled.
 4. The footer says the phone site can be installed, a closed app does not listen, and a speaker in the room is later work.
 
@@ -54,19 +55,19 @@ Joining is a step after a parent signs in, not part of Log in:
 - Someone who opens a join link without an account signs up first (the parent option is preselected), then lands on the join step with the code filled in.
 - The parent's chat always shows a **Family** button. Before joining it opens the join form. After joining it shows the family code, who looks after them, and when they joined, with **Change code** to enter a new code from their family. The chat's subtitle shows whose family they joined. The Kamla demo has the same button, labelled Demo, and saves nothing.
 
-The desk shows "Waiting for … to join" until then, and "Joined" after. Connecting the phone is the first step of Finish setting up. A new code replaces the old one for that household. In this build codes and accounts live in the browser; a code made on another device is confirmed once cloud sync exists.
+The desk shows "Waiting for … to join" until then, and "Joined" after. Connecting the phone is the first step of Finish setting up. A new code replaces the old one for that household. Family codes and account profiles are stored in Firestore through the API (`users/<uid>` and the household pairing routes). Join works across devices that use the same cloud project. The browser keeps a desk cache; it is not the source of truth.
 
 A phone browser, and the installed app, skip the landing page. With no session they open Log in. With a session, a parent opens the companion chat and a caretaker opens the care desk at `/care`. A parent account never sees the desk, and a caretaker account never lands on the parent's chat.
 
 ### Care desk
 
-The caretaker app lives at `/care` and works on a phone and on a computer: a sidebar on a wide window, a top bar and a bottom tab bar on a phone. The parent's phone at `/app` shows the chat and nothing else, so an older adult never lands on a settings screen. A signed-in caretaker who opens `/app` on a wide window is taken to `/care`. The landing page offers two demos with no account form: Kamla's phone (`/app?demo=1`, shown in a phone frame on a computer) and the caretaker app (`/care?demo=1`).
+The caretaker app lives at `/care` and works on a phone and on a computer: a sidebar at 1024px and wider, a top bar and a bottom tab bar below that. The parent's phone at `/app` shows the chat and nothing else, so an older adult never lands on a settings screen. A signed-in caretaker who opens `/app` is taken to `/care` at any width. A signed-in parent who opens `/care` is taken to `/app`. A link with `?demo=1` still opens that demo. The landing page offers two demos with no account form: Kamla's phone (`/app?demo=1`, shown in a phone frame on a computer) and the caretaker app (`/care?demo=1`).
 
 The desk is five tabs, one section at a time, in this order. On a phone they sit in a curved bottom bar; the active tab's icon rises into a floating circle.
 
 | Tab | What the caretaker does |
 | --- | --- |
-| Profile | Preferred name, language, city, persona, check-in time, quiet hours. People who matter (demo row: Rahul, son, Bengaluru). Memories you have added, each row showing who wrote it and when |
+| Profile | Preferred name, language, city, persona, check-in time, quiet hours. People who matter (demo row: Rahul, son, Bengaluru). Memories you have added, each row showing who wrote it and when. Photos and documents, one form per category: profile photo, family photos, prescriptions, medical reports, medical bills, medicine strips, identity proofs, insurance, and other. Prescriptions, reports, bills, medicine strips, identity proofs, and insurance stay private. Profile photo, family photos, and other may be shared only when the caretaker opts in |
 | Routine | At the very top, any urgent reminder: due within the next hour, or due in the last three hours and not yet confirmed. It says "Not yet confirmed", never "missed dose", and links to Reminders. Then meals mentioned, minutes talking, mood only when stated, family contact. Highlights, the family-episode card, and memories from conversations. A table view of the same days |
 | Ask Saathi | Type or speak a change in plain words. Saathi reads it back and saves it only after the caretaker confirms. It never suggests a dose |
 | Reminders | Medicine name and dose exactly as written, once or daily, a time, and the reported status |
@@ -74,11 +75,11 @@ The desk is five tabs, one section at a time, in this order. On a phone they sit
 
 There is no single health score and the screen does not say the parent is safe.
 
-A caretaker fact is stored with source `caregiver`. A conversation fact is stored with source `conversation`. Deleting a caretaker fact removes it from the next prompt. If the two disagree, both remain, and the later correction is the one the prompt prefers.
+A caretaker memory stores the caretaker's name in `author` (or "You" when the name is missing). A correction from a conversation stores `author` `conversation`. Removing a memory takes it out of the next prompt. If the two disagree, both remain. The prompt lists caretaker memories first and conversation corrections after them.
 
 ### Companion chat
 
-Talk, Stop, Pause, and Contact family. Captions are optional. Demo controls sit in a panel marked Demo: simulated inactivity, demo clock, seeded session, distress clip, ordinary door clip.
+Talk, Stop, Pause, and Contact family. Captions are optional. The chat Demo panel has three controls: a labeled distress clip, an ordinary door clip, and a seeded session. The care desk Routine tab seeds labeled histories, runs a seeded session, and simulates an unanswered invitation versus a device that is unavailable. Advancing the logical clock is `POST /api/v1/demo/advance`, not a chat button.
 
 ## A day with Saathi
 
@@ -170,7 +171,7 @@ The alert does not say a fall was confirmed unless the person said so. A door cl
 
 Gemini Flash writes observations with quotes. Unknown stays unknown. Negation stays negation. A statement about someone else does not become a personal fact.
 
-The browser measures the pause from the end of playback to the start of the parent's speech, and an estimate of speaking rate. Gemini Live does not provide that number. Noisy or very short sessions are flagged and are not treated as a confident pause.
+The browser measures the gap from the parent's last loud microphone frame to the first reply audio, and sends the median as `response_gap_ms`. Gemini Live does not provide that number. The live chat does not estimate speaking rate. A session flagged `noisy`, `short`, `no_turns_measured`, or `mic_blocked`, or shorter than 20 seconds, is not treated as a confident pause. A missing duration is still accepted when none of those flags is set.
 
 BigQuery compares this person with their own earlier days. Recent days are D-2 through D. The baseline is D-13 through D-3. At least 7 baseline days are required. A follow-up for response gap needs z at least 2 in the slower direction on two successive dates, and a baseline spread of at least 0.25 seconds. Meals, mood, and social contact are counts and dates, not one blended score. A named fast does not become a nutrition alert. Until the baseline is long enough, the desk says **Learning usual routine.**
 
