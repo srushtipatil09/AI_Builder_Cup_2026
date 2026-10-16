@@ -4,31 +4,32 @@ A Hindi companion for an older adult living apart from family. The family keeps 
 
 The expensive minute is an open voice session. Gemini Live runs only inside a four-minute call. Gemini Flash does the work after the call. Cloud Run bills CPU while a request is active and scales to zero. Family memory uses Firestore vector search, so there is no warm vector index. The limits are in `api/src/saathi/cost.py`.
 
-This repository is the AI Builder Cup 2026 prototype. The scaffold is in place. Voice, Firestore, and BigQuery are the next milestones, not this commit.
+This repository is the AI Builder Cup 2026 prototype. Live voice, Firestore, BigQuery drift, SafetyGuard, and the insight run against a real Google Cloud project. What is checked and what is not is in [docs/PROGRESS.md](docs/PROGRESS.md).
 
 ## What you open
 
 ```mermaid
 flowchart TD
   start[Open Saathi] --> land[Landing page]
-  land --> demo[Try the Kamla Sharma demo]
+  land --> demoChat[Kamla phone demo]
+  land --> demoDesk[Caretaker demo]
   land --> auth[Log in or create account]
-  demo --> app[Signed-in app]
-  auth --> app
-  app --> wide{Width at least 1024px}
-  wide -->|Yes| desk[Care desk]
-  wide -->|No| phone[Companion chat]
+  auth --> role{Account role}
+  role -->|Caretaker| desk[Care desk]
+  role -->|Parent| phone[Companion chat]
+  demoDesk --> desk
+  demoChat --> phone
   desk --> facts[Caretaker saves a memory]
   facts --> nextChat[Next chat may use that memory]
 ```
 
 | Screen | Who | What they do |
 | --- | --- | --- |
-| Landing page, `/` | A new family, or a reviewer | Log in, create an account, or open the demo without an account |
-| Care desk, `/app` on a wide window | The caretaker | Store the person's name, people, memories, check-in time, and reminders |
-| Companion chat, `/app` on a phone | The older adult | Talk, stop, pause, or contact the family |
+| Landing page, `/` | A new family, or a reviewer | Log in, create an account, or open either demo without an account |
+| Care desk, `/care` | The caretaker, on a phone or a computer | Store the person's name, people, memories, check-in time, and reminders; read Routine; make a family code |
+| Companion chat, `/app` | The older adult | Talk, stop, pause, or contact the family |
 
-## How it will run
+## How it runs
 
 ```mermaid
 flowchart LR
@@ -56,7 +57,7 @@ Read the pictures and the rules in the docs:
 | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Which milestone happens on which day? |
 | [docs/PROGRESS.md](docs/PROGRESS.md) | What is done right now? |
 
-## Run the scaffold
+## Run it locally
 
 Requires Python 3.12 and Node 22.
 
@@ -73,7 +74,7 @@ cd api && python -m uvicorn saathi.main:app --reload --host 127.0.0.1 --port 808
 npm run dev --prefix web
 ```
 
-Open `http://localhost:5173`. The landing page links to the demo. The app shell shows the care desk on a wide window and the chat on a narrow one, and it reads `GET /health`.
+Open `http://localhost:5173`. The landing page links to both demos. A caretaker account opens the care desk at `/care`; a parent account opens the chat at `/app`.
 
 Copy `.env.example` to `.env` when a Google Cloud project id exists. Do not commit `.env`.
 
@@ -81,9 +82,10 @@ Copy `.env.example` to `.env` when a Google Cloud project id exists. Do not comm
 
 | Piece | State |
 | --- | --- |
-| Landing page, care desk, and chat shells | In the repo |
-| `/health` on the API and the worker | In the repo |
-| Gemini Live, memory, drift, alerts, install prompt | Not built yet |
+| Landing page, care desk, chat, accounts, family code | Built |
+| Gemini Live voice, post-call extraction, family episodes, drift, SafetyGuard, insight | Built, checked against real Vertex, Firestore, and BigQuery |
+| Cloud Tasks queue, worker service, Cloud Scheduler, public URL | Code ready; not recorded as created or verified |
+| FCM push on a real phone, real installed PWA | Not verified |
 | Nest speaker | Milestone M16, after submission |
 
 Owners: Vibhuti Singh and Srushti Patil. Theme: Sustainability and Social Impact.

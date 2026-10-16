@@ -118,8 +118,7 @@ def has_household_access(actor: ActorContext, household_id: str) -> tuple[bool, 
     - A verified Firebase identity: the verified email equals the household id, the uid owns or belongs to the
       household, or the household is unclaimed (first verified caller claims it).
     - A joined family code that names this household: the parent's device.
-    - Anything else is allowed only while REQUIRE_HOUSEHOLD_AUTH is off, because email and password accounts
-      do not yet carry a Firebase identity.
+    - Anything else is allowed only while REQUIRE_HOUSEHOLD_AUTH is off (local runs without Firebase).
     """
     if is_demo_household(household_id):
         return True, "demo"

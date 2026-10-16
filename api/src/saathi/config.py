@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     worker_url: str = ""
     task_invoker_email: str = ""
     # Require a verified Firebase identity (or a joined family code) for every non-demo household.
-    # Off by default: email and password accounts do not yet have a Firebase identity.
+    # Off by default so local runs without Firebase still work. Deployments set it true (see .env.example).
     require_household_auth: bool = False
 
 

@@ -1,4 +1,4 @@
-"""Public API. Voice, auth, and data routes are later milestones."""
+"""Public API: accounts, households, files, live sessions, updates, and the demo."""
 
 import asyncio
 import logging

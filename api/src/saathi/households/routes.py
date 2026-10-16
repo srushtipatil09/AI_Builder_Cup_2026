@@ -161,9 +161,3 @@ def pair_with_family_code(body: PairRequest, actor: ActorContext = Depends(get_c
     if actor.verified:
         add_member(record.household_id, actor.uid)
     return record
-
-
-@router.get("/demo/desk", response_model=Desk)
-def get_demo_desk() -> Desk:
-    """Returns the synthetic Kamla Sharma desk."""
-    return create_demo_desk()
