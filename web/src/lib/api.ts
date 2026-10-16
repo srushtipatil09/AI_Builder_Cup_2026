@@ -234,10 +234,11 @@ export const registerDevice = (id: string, token: string, role: "caretaker" | "p
 
 export type Proposal = {
   id: string;
-  status: "awaiting_confirmation" | "applied" | "cancelled" | "needs_more";
+  status: "awaiting_confirmation" | "applied" | "cancelled" | "needs_more" | "answered";
   kind: string;
   readback: string;
   question: string;
+  answer?: string;
   hash: string;
 };
 
@@ -277,7 +278,41 @@ export type AccountProfile = {
   familyCode?: string | null;
   joinSkipped?: boolean;
   consentAt?: string | null;
+  // The household the care desk shows. The server keeps it only if it is one of this account's households.
+  activeHousehold?: string | null;
 };
+
+// One family member a caretaker looks after, as the server reports it.
+export type FamilyMember = {
+  id: string;
+  parentName: string;
+  language: string;
+  city: string;
+  primary: boolean;
+  phoneConnected: boolean;
+  openAlerts: number;
+  urgentAlerts: number;
+  photo?: string;
+};
+
+export async function fetchFamilyMembers(): Promise<FamilyMember[]> {
+  const res = await fetch(`${BASE_URL}/me/households`, { headers: await getAuthHeaders() });
+  if (!res.ok) throw new Error(`Could not load family members (${res.status}).`);
+  return res.json();
+}
+
+export async function addFamilyMember(parentName: string, language: string): Promise<FamilyMember> {
+  const res = await fetch(`${BASE_URL}/me/households`, {
+    method: "POST",
+    headers: await getAuthHeaders(),
+    body: JSON.stringify({ parentName, language }),
+  });
+  if (!res.ok) {
+    const detail = await res.json().then((b: { detail?: string }) => b.detail).catch(() => "");
+    throw new Error(detail || "Could not add that family member. Try again.");
+  }
+  return res.json();
+}
 
 export async function fetchMe(): Promise<AccountProfile | null> {
   const res = await fetch(`${BASE_URL}/me`, { headers: await getAuthHeaders() });

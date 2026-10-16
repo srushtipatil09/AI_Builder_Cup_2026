@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { formatClock, today, type Medicine } from "../../desk";
+import { formatClock, kindOf, reminderKinds, today, type Medicine } from "../../desk";
+import { KindIcon } from "./MedicineTab";
 
 // A reminder is urgent when it is due within the next hour, or came due in the last three hours
 // and nobody has confirmed it today. A one-off reminder counts only on its own date.
@@ -69,11 +70,15 @@ export function UrgentReminders({ medicines, name, onOpen, onConfirm }: Props) {
           <li key={medicine.id}>
             <span className="urgent-time">{formatClock(medicine.time)}</span>
             <span className="urgent-main">
-              <strong>{medicine.name}</strong>
+              <strong>
+                <KindIcon kind={kindOf(medicine)} />
+                <span className="visually-hidden">{reminderKinds[kindOf(medicine)].label}: </span>
+                {medicine.name}
+              </strong>
               <span>{[medicine.dose, medicine.note].filter(Boolean).join(" · ") || "As written on the Reminders tab"}</span>
             </span>
             <span className={minutes > 0 ? "urgent-chip urgent-chip-soon" : "urgent-chip"}>{label}</span>
-            <button className="text-link urgent-confirm" type="button" onClick={() => onConfirm(medicine.id)}>
+            <button className="primary urgent-confirm" type="button" onClick={() => onConfirm(medicine.id)}>
               Mark confirmed<span className="visually-hidden"> {medicine.name}</span>
             </button>
           </li>

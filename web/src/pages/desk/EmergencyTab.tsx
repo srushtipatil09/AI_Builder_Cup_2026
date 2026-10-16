@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useUndoable } from "./undo";
 import { newId, phoneProblem, type Contact, type Desk } from "../../desk";
 
 type Props = {
@@ -56,6 +57,7 @@ function ContactFields({ value, who, error }: { value?: Fields; who: string; err
 }
 
 export function EmergencyTab({ desk, setDesk, name }: Props) {
+  const undoable = useUndoable();
   const who = name || "the parent";
   const [addError, setAddError] = useState("");
   const [editError, setEditError] = useState("");
@@ -92,16 +94,16 @@ export function EmergencyTab({ desk, setDesk, name }: Props) {
           <a className="call-big" href="tel:112">
             112
           </a>{" "}
-          is India&rsquo;s emergency number. If {who} asks for help during a conversation, or a loud sound gets no
-          reply, Saathi tells the people below straight away. It reports a fall only if {who} said so.
+          is India&rsquo;s emergency number. If {who} asks for help during a conversation, or a loud sound while the
+          Saathi app is open gets no reply, Saathi tells the people below straight away. It reports a fall only if {who} said so.
         </p>
       </section>
 
       <section className="panel" aria-labelledby="contacts-title">
         <h2 id="contacts-title">Trusted contacts</h2>
-        <p className="panel-lede">Who Saathi tells, and who Contact family calls. Only these people.</p>
+        <p className="panel-lede">Who Saathi tells, and who {who} reaches with the Contact family button. Only these people.</p>
         {desk.contacts.length ? (
-          <ul className="rows">
+          <ul className="rows card-list">
             {desk.contacts.map((c) =>
               editing === c.id ? (
                 <li key={c.id} className="row-editing">
@@ -154,7 +156,10 @@ export function EmergencyTab({ desk, setDesk, name }: Props) {
                     <button
                       className="text-link row-remove"
                       type="button"
-                      onClick={() => setDesk((d) => ({ ...d, contacts: d.contacts.filter((x) => x.id !== c.id) }))}
+                      onClick={() => {
+                        undoable(c.name);
+                        setDesk((d) => ({ ...d, contacts: d.contacts.filter((x) => x.id !== c.id) }));
+                      }}
                     >
                       Remove<span className="visually-hidden"> {c.name}</span>
                     </button>
@@ -187,7 +192,7 @@ export function EmergencyTab({ desk, setDesk, name }: Props) {
         <h2 id="helpline">Someone to talk to</h2>
         <p>
           <a href="tel:14567">Elderline 14567</a> is a published India helpline for older people. Confirm it serves
-          the parent&rsquo;s state.
+          {who}&rsquo;s state.
         </p>
       </section>
     </div>

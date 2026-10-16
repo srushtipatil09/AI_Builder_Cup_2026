@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { blankDesk, demoDesk, formatClock, formatQuiet, today, useDesk, type Desk } from "../desk";
 import { useFamilyLink } from "../family";
 import { useHealth } from "../health";
-import { householdKey, readSession } from "../session";
+import { activeHouseholdId, readSession, writeSession, type HouseholdSession } from "../session";
+import { addFamilyMember, fetchFamilyMembers, type FamilyMember } from "../lib/api";
+import { useAccountPhoto } from "../lib/firebase";
+import { FamilySwitcher, PersonAvatar } from "./desk/FamilySwitcher";
 import { RoutineTab } from "./desk/RoutineTab";
 import { useUpdates } from "../lib/useUpdates";
 import { SyncStatus } from "./SyncStatus";
@@ -13,18 +16,29 @@ import { FamilyCard } from "./desk/FamilyCard";
 import { MedicineTab } from "./desk/MedicineTab";
 import { ProfileTab } from "./desk/ProfileTab";
 import { TellSaathiTab } from "./desk/TellSaathiTab";
+import { UndoContext } from "./desk/undo";
 
 type Props = {
   demo: boolean;
   onLeave: () => void;
 };
 
+type DeskProps = Props & {
+  session: HouseholdSession | null;
+  householdId: string;
+  seedName: string;
+  seedLanguage: string;
+  memberCount: number;
+  accountPhoto: string | null;
+  onOpenMembers: () => void;
+};
+
 const tabs = [
   { id: "profile", label: "Profile", hint: "The person, people, memories" },
   { id: "routine", label: "Routine", hint: "Meals, mood, time talking" },
-  { id: "ask", label: "Ask Saathi", hint: "Type or speak a change" },
-  { id: "reminders", label: "Reminders", hint: "Medicines, as written" },
-  { id: "contacts", label: "Trusted Contacts", hint: "Who to call, and 112" },
+  { id: "ask", label: "Ask Saathi", short: "Ask", hint: "Type or speak a change" },
+  { id: "reminders", label: "Reminders", hint: "Medicine, walks, calls, meals" },
+  { id: "contacts", label: "Trusted Contacts", short: "Contacts", hint: "Who to call, and 112" },
 ] as const;
 
 type TabId = (typeof tabs)[number]["id"];
@@ -55,20 +69,6 @@ function TabIcon({ id }: { id: TabId }) {
   );
 }
 
-function Avatar({ name, photo, src }: { name: string; photo: boolean; src?: string | null }) {
-  return (
-    <span className="avatar" aria-hidden="true">
-      {src ? (
-        <img src={src} alt="" />
-      ) : photo ? (
-        <img src="/photos/hero.jpg" width="864" height="1152" alt="" />
-      ) : (
-        (name || "?").charAt(0)
-      )}
-    </span>
-  );
-}
-
 function greeting() {
   const hour = new Date().getHours();
   return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -83,7 +83,7 @@ function subtitle(id: TabId, who: string) {
     case "ask":
       return "Type or speak a change, the way you would tell a person.";
     case "reminders":
-      return "Medicine reminders, read back exactly as you typed them.";
+      return "Reminders for medicine, a walk, a call or a meal, read back exactly as you typed them.";
     case "contacts":
       return `Who Saathi tells when ${who} needs help.`;
   }
@@ -101,13 +101,95 @@ function setupSteps(desk: Desk, joined: boolean, who: string): Step[] {
   ];
 }
 
+const DEMO_PHOTO = "/photos/hero.jpg";
+
+const DEMO_MEMBERS: FamilyMember[] = [
+  { id: "demo-kamla-sharma", parentName: "Kamla", language: "Hindi", city: "Varanasi", primary: true, phoneConnected: false, openAlerts: 0, urgentAlerts: 0, photo: DEMO_PHOTO },
+];
+
+// The caretaker app. One caretaker may look after several family members; each has its own desk, so the desk
+// below remounts (fresh state, fresh polling) whenever the caretaker switches to another person.
 export function CareApp({ demo, onLeave }: Props) {
-  const session = readSession();
+  const [session, setSession] = useState(readSession);
+  const accountPhoto = useAccountPhoto();
+  const [members, setMembers] = useState<FamilyMember[]>([]);
+  const [membersError, setMembersError] = useState("");
+  const [open, setOpen] = useState(false);
+  const activeId = demo ? "demo-kamla-sharma" : activeHouseholdId(session);
+
+  const loadMembers = useCallback(async () => {
+    if (demo) return;
+    try {
+      setMembers(await fetchFamilyMembers());
+      setMembersError("");
+    } catch {
+      setMembersError("Could not load the full list just now. Check the connection.");
+    }
+  }, [demo]);
+
+  useEffect(() => {
+    void loadMembers();
+  }, [loadMembers]);
+
+  // Until the server answers, the caretaker's first family member stands in for the list.
+  const fallback: FamilyMember[] = session?.email
+    ? [{ id: session.email, parentName: session.parentName, language: session.language, city: "", primary: true, phoneConnected: false, openAlerts: 0, urgentAlerts: 0 }]
+    : [];
+  const list = demo ? DEMO_MEMBERS : members.length ? members : fallback;
+  const current = list.find((m) => m.id === activeId);
+
+  function switchTo(id: string) {
+    if (!session) return;
+    const next = { ...session, activeHousehold: id };
+    writeSession(next);
+    setSession(next);
+    setOpen(false);
+  }
+
+  async function add(name: string, language: string) {
+    const member = await addFamilyMember(name, language);
+    setMembers((prev) => [...(prev.length ? prev : fallback), member]);
+    switchTo(member.id);
+  }
+
+  return (
+    <>
+      <CareDesk
+        key={activeId}
+        demo={demo}
+        onLeave={onLeave}
+        session={session}
+        householdId={activeId}
+        seedName={current?.parentName ?? session?.parentName ?? ""}
+        seedLanguage={current?.language ?? session?.language ?? "Hindi"}
+        memberCount={list.length}
+        accountPhoto={demo ? null : accountPhoto}
+        onOpenMembers={() => {
+          setOpen(true);
+          void loadMembers();
+        }}
+      />
+      {open ? (
+        <FamilySwitcher
+          members={list}
+          activeId={activeId}
+          demo={demo}
+          loadError={membersError}
+          onSwitch={switchTo}
+          onAdd={add}
+          onClose={() => setOpen(false)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage, memberCount, accountPhoto, onOpenMembers }: DeskProps) {
   const health = useHealth();
   const caretaker = demo ? "Rahul" : session?.caretakerName || "";
-  const storageKey = demo ? "saathi.desk.demo.v2" : householdKey(session);
+  const storageKey = demo ? "saathi.desk.demo.v2" : `saathi.desk.${householdId || "local"}`;
   const { desk, setDesk, reset, sync, syncedAt, syncError, retry } = useDesk(storageKey, () =>
-    demo ? demoDesk() : blankDesk(session?.parentName ?? "", session?.language ?? "Hindi"),
+    demo ? demoDesk() : blankDesk(seedName, seedLanguage),
   );
   const [active, setActive] = useState<TabId>(readTab);
   // Forms use default values, so a reset remounts them.
@@ -117,12 +199,11 @@ export function CareApp({ demo, onLeave }: Props) {
   const name = desk.profile.preferredName;
   const who = name || "your parent";
   const author = caretaker || "You";
-  const family = useFamilyLink(demo ? "demo" : session?.email || "", name, caretaker, !demo && Boolean(session?.email));
-  // The household id the API knows this desk by: the demo household, or the caretaker's account email.
-  const householdId = demo ? "demo-kamla-sharma" : session?.email || "";
+  const family = useFamilyLink(demo ? "demo" : householdId, name, caretaker, !demo && Boolean(householdId));
   const state = useUpdates(householdId, Boolean(householdId));
   const [photoVersion, setPhotoVersion] = useState(0);
-  const photoUrl = useProfilePhoto(householdId, !demo, photoVersion);
+  const photoUrl = useProfilePhoto(householdId, !demo, photoVersion) ?? (demo ? DEMO_PHOTO : null);
+  const switchHint = memberCount > 1 ? `Switch · ${memberCount} family members` : "Family members";
   const urgentAlerts = (state.updates?.alerts ?? []).filter((a) => a.tier >= 2);
   const conversationMemories = desk.memories.filter((m) => m.author === "conversation").map((m) => m.text);
 
@@ -168,7 +249,7 @@ export function CareApp({ demo, onLeave }: Props) {
       >
         <TabIcon id={tab.id} />
         {compact ? (
-          <span className="tabbar-label">{tab.label}</span>
+          <span className="tabbar-label">{"short" in tab ? tab.short : tab.label}</span>
         ) : (
           <span>
             <strong>{tab.label}</strong>
@@ -184,7 +265,19 @@ export function CareApp({ demo, onLeave }: Props) {
   const doneCount = steps.filter((s) => s.done).length;
   const healthClass = health.tone === "ok" ? "pill pill-ok" : health.tone === "wait" ? "pill pill-wait" : "pill";
 
+  // A delete keeps the desk as it was for a few seconds, so "Undo" can put it back.
+  const [undo, setUndo] = useState<{ label: string; before: Desk } | null>(null);
+  const undoTimer = useRef(0);
+  const deskRef = useRef(desk);
+  deskRef.current = desk;
+  const undoable = useCallback((label: string) => {
+    window.clearTimeout(undoTimer.current);
+    setUndo({ label, before: deskRef.current });
+    undoTimer.current = window.setTimeout(() => setUndo(null), 7000);
+  }, []);
+
   return (
+    <UndoContext.Provider value={undoable}>
     <div className={`care care-tab-${active}`}>
       <aside className="care-side">
         <div className="care-brand">
@@ -194,15 +287,19 @@ export function CareApp({ demo, onLeave }: Props) {
           <span className="care-badge">Caretaker</span>
         </div>
 
-        <div className="care-parent">
-          <Avatar name={name} photo={demo} src={photoUrl} />
-          <div>
-            <p className="care-parent-name">{name || "Your parent"}</p>
-            <p className="care-parent-meta">
+        <button type="button" className="care-parent" aria-haspopup="dialog" onClick={onOpenMembers}>
+          <PersonAvatar name={name} src={photoUrl} />
+          <span className="care-parent-text">
+            <span className="care-parent-name">{name || "Add their name"}</span>
+            <span className="care-parent-meta">
               {[desk.profile.city, desk.profile.language].filter(Boolean).join(" · ") || "Profile not finished"}
-            </p>
-          </div>
-        </div>
+            </span>
+            <span className="care-parent-switch">{switchHint}</span>
+          </span>
+          <svg className="care-parent-chevron" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m8 10 4 4 4-4" />
+          </svg>
+        </button>
         {demo ? <p className="tag care-tag">Synthetic demo household</p> : null}
 
         <div className="care-side-tabs" role="tablist" aria-orientation="vertical" aria-label="Care desk sections">
@@ -214,6 +311,15 @@ export function CareApp({ demo, onLeave }: Props) {
             <span className="pill-dot" aria-hidden="true" />
             {health.text}
           </p>
+          {!demo && session ? (
+            <div className="care-me">
+              <PersonAvatar name={caretaker || session.email} src={accountPhoto} className="avatar avatar-sm" />
+              <span>
+                <strong>{caretaker || "You"}</strong>
+                <small>{session.email}</small>
+              </span>
+            </div>
+          ) : null}
           <p>{demo ? "Demo data. Nothing here is saved to an account." : "Changes save to your account in the cloud and show on every device you log in on."}</p>
           <div className="care-side-actions">
             {demo ? (
@@ -236,11 +342,21 @@ export function CareApp({ demo, onLeave }: Props) {
       </aside>
 
       <header className="care-mbar">
-        <Avatar name={name} photo={demo} src={photoUrl} />
-        <div className="care-mbar-text">
-          <p className="care-mbar-title">Caring for {name || "your parent"}</p>
-          <p className="care-mbar-sub">{demo ? "Caretaker demo · synthetic household" : caretaker || "Caretaker"}</p>
-        </div>
+        <button type="button" className="care-mbar-who" aria-haspopup="dialog" onClick={onOpenMembers}>
+          <PersonAvatar name={name} src={photoUrl} />
+          <span className="care-mbar-text">
+            <span className="care-mbar-title">
+              Caring for {name || "your parent"}
+              <svg className="care-parent-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m8 10 4 4 4-4" />
+              </svg>
+            </span>
+            <span className="care-mbar-sub">
+              {demo ? "Caretaker demo · synthetic household" : memberCount > 1 ? `${memberCount} family members` : caretaker || "Caretaker"}
+            </span>
+          </span>
+        </button>
+        {!demo && session ? <PersonAvatar name={caretaker || session.email} src={accountPhoto} className="avatar avatar-sm care-mbar-me" /> : null}
         <button className="text-link" type="button" onClick={onLeave}>
           {demo ? "Leave" : "Log out"}
         </button>
@@ -249,6 +365,7 @@ export function CareApp({ demo, onLeave }: Props) {
       <main id="care-panel" className="care-main" role="tabpanel" aria-labelledby={`tab-${active}`}>
         <header className="care-head">
           <p className="care-greet">
+            {!demo && session ? <PersonAvatar name={caretaker || session.email} src={accountPhoto} className="avatar avatar-xs" /> : null}
             {greeting()}
             {caretaker ? `, ${caretaker}` : ""}
             <span className="care-date">
@@ -262,10 +379,17 @@ export function CareApp({ demo, onLeave }: Props) {
 
         {active !== "routine" && urgentAlerts.length ? (
           <section className={`alert-banner alert-tier-${Math.max(...urgentAlerts.map((a) => a.tier))}`} role="alert">
-            <p>
-              <strong>{urgentAlerts.some((a) => a.tier >= 3) ? "Needs your attention now. " : "New Saathi update. "}</strong>
-              {urgentAlerts[0].message}
-            </p>
+            {/* An urgent alert is shown in full everywhere; an ordinary update is one line, with the detail on Routine. */}
+            {urgentAlerts.some((a) => a.tier >= 3) ? (
+              <p>
+                <strong>Needs your attention now. </strong>
+                {urgentAlerts.find((a) => a.tier >= 3)?.message}
+              </p>
+            ) : (
+              <p>
+                <strong>New Saathi update</strong> about {who}. Read it on Routine.
+              </p>
+            )}
             <button className="ghost" type="button" onClick={() => choose("routine")}>
               Open Routine
             </button>
@@ -284,7 +408,7 @@ export function CareApp({ demo, onLeave }: Props) {
               <span style={{ width: `${(doneCount / steps.length) * 100}%` }} />
             </div>
             <ul>
-              {steps.map((step) => (
+              {[...steps].sort((a, b) => Number(a.done) - Number(b.done)).map((step) => (
                 <li key={step.text} className={step.done ? "setup-done" : undefined}>
                   {step.done ? (
                     <span>
@@ -312,7 +436,7 @@ export function CareApp({ demo, onLeave }: Props) {
         {active === "profile" ? (
           <>
             <FamilyCard link={family.link} name={name} demo={demo} onCreate={() => void family.create()} error={family.error} busy={family.busy} />
-            <ProfileTab key={version} desk={desk} setDesk={setDesk} author={author} />
+            <ProfileTab key={version} desk={desk} setDesk={setDesk} author={author} photo={photoUrl} />
             <DocumentsCard
               householdId={householdId}
               name={name}
@@ -353,7 +477,7 @@ export function CareApp({ demo, onLeave }: Props) {
               <dd>{family.link?.joinedAt ? "Yes" : "Not yet"}</dd>
             </div>
             <div>
-              <dt>Persona</dt>
+              <dt>Voice style</dt>
                 <dd>{desk.profile.persona}</dd>
               </div>
               <div>
@@ -367,7 +491,7 @@ export function CareApp({ demo, onLeave }: Props) {
               <div>
                 <dt>People who matter</dt>
                 <dd>
-                  <button type="button" className="glance-link" onClick={() => choose("profile")}>
+                  <button type="button" className="glance-link" onClick={() => choose("profile")} aria-label={`${desk.people.length} people who matter, open Profile`}>
                     {desk.people.length}
                   </button>
                 </dd>
@@ -375,7 +499,7 @@ export function CareApp({ demo, onLeave }: Props) {
               <div>
                 <dt>Reminders</dt>
                 <dd>
-                  <button type="button" className="glance-link" onClick={() => choose("reminders")}>
+                  <button type="button" className="glance-link" onClick={() => choose("reminders")} aria-label={`${desk.medicines.length} reminders, open Reminders`}>
                     {desk.medicines.length}
                   </button>
                 </dd>
@@ -383,7 +507,7 @@ export function CareApp({ demo, onLeave }: Props) {
               <div>
                 <dt>Trusted contacts</dt>
                 <dd>
-                  <button type="button" className="glance-link" onClick={() => choose("contacts")}>
+                  <button type="button" className="glance-link" onClick={() => choose("contacts")} aria-label={`${desk.contacts.length} trusted contacts, open Trusted Contacts`}>
                     {desk.contacts.length}
                   </button>
                 </dd>
@@ -391,7 +515,7 @@ export function CareApp({ demo, onLeave }: Props) {
             </dl>
           </section>
 
-          {demo ? (
+          {demo && urgentAlerts.length ? (
             <section className="rail-card rail-alert" aria-labelledby="rail-family">
               <h2 id="rail-family">Mentions of Rahul changed</h2>
               <p>Day 2 and Day 12 tell different stories. A call is a reasonable next step.</p>
@@ -430,6 +554,25 @@ export function CareApp({ demo, onLeave }: Props) {
           {renderTabs("btab", "care-tabbar-item", true)}
         </div>
       </nav>
+
+      <div className="undo-toast-slot" role="status" aria-live="polite">
+        {undo ? (
+          <div className="undo-toast">
+            <span>Deleted {undo.label}.</span>
+            <button
+              className="text-link"
+              type="button"
+              onClick={() => {
+                setDesk(undo.before);
+                setUndo(null);
+              }}
+            >
+              Undo
+            </button>
+          </div>
+        ) : null}
+      </div>
     </div>
+    </UndoContext.Provider>
   );
 }

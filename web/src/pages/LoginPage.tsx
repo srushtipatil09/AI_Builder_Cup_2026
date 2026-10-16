@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { GoogleMark } from "./GoogleMark";
 import { emailError, findAccount, fromProfile, nextPath, passwordError, writeSession, type HouseholdSession } from "../session";
 import { authMessage, signInWithEmail, signInWithGoogle } from "../lib/firebase";
 import { fetchMe } from "../lib/api";
@@ -84,7 +85,7 @@ export function LoginPage() {
     <AuthLayout
       eyebrow="Welcome back"
       title="Log in"
-      lede="Welcome back. Your account already knows whether you are a caretaker or using Saathi for yourself."
+      lede="Your account already knows whether you are a caretaker or using Saathi for yourself."
       aside={
         <>
           <img src="/photos/child.jpg" width="1152" height="864" alt="" />
@@ -131,11 +132,12 @@ export function LoginPage() {
             <span>or</span>
           </p>
           <button
-            className="ghost"
+            className="ghost google-button"
             type="button"
             onClick={onGoogle}
             disabled={busy}
           >
+            <GoogleMark />
             Continue with Google
           </button>
         </div>
@@ -145,7 +147,6 @@ export function LoginPage() {
           </p>
         ) : null}
       </form>
-      <p className="note">Sign in with Google or an email. Your household is kept in this browser until the desk syncs to the cloud.</p>
       <p className="auth-switch">
         No account yet? <Link to={params.get("next")?.startsWith("/join/") ? `/signup?code=${params.get("next")!.slice(6)}` : "/signup"}>Create account</Link>
       </p>

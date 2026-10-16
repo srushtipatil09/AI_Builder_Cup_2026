@@ -1,10 +1,13 @@
 import { useState, type FormEvent } from "react";
+import { useUndoable } from "./undo";
+import { TimePicker } from "./Pickers";
 import { newId, parseQuiet, type Desk, type Profile } from "../../desk";
 
 type Props = {
   desk: Desk;
   setDesk: React.Dispatch<React.SetStateAction<Desk>>;
   author: string;
+  photo?: string | null;
 };
 
 function formatWhen(iso: string) {
@@ -15,7 +18,8 @@ function text(data: FormData, key: string) {
   return String(data.get(key) ?? "").trim();
 }
 
-export function ProfileTab({ desk, setDesk, author }: Props) {
+export function ProfileTab({ desk, setDesk, author, photo }: Props) {
+  const undoable = useUndoable();
   const [saved, setSaved] = useState("");
   const [profileError, setProfileError] = useState("");
   const [editingPerson, setEditingPerson] = useState<string | null>(null);
@@ -96,6 +100,7 @@ export function ProfileTab({ desk, setDesk, author }: Props) {
       <section className="panel" aria-labelledby="person-title">
         <h2 id="person-title">This person</h2>
         <p className="panel-lede">How Saathi greets them, and when it checks in.</p>
+        {photo ? <img className="person-portrait" src={photo} alt={p.preferredName || "Profile photo"} width={864} height={1152} /> : null}
         <form className="form-grid" onSubmit={saveProfile} onChange={() => setSaved("")}>
           <label className="field">
             Preferred name
@@ -121,14 +126,14 @@ export function ProfileTab({ desk, setDesk, author }: Props) {
           </label>
           <label className="field">
             Daily check-in
-            <input name="checkIn" type="time" defaultValue={p.checkIn} />
+            <TimePicker name="checkIn" defaultValue={p.checkIn} label="Daily check-in" placeholder="Not set" />
           </label>
           <fieldset className="field quiet">
             <legend>Quiet hours</legend>
             <div className="quiet-row">
-              <input name="quietFrom" type="time" aria-label="Quiet hours start" defaultValue={quiet?.[0] ?? ""} />
+              <TimePicker name="quietFrom" label="Quiet hours start" defaultValue={quiet?.[0] ?? ""} placeholder="From" />
               <span aria-hidden="true">to</span>
-              <input name="quietTo" type="time" aria-label="Quiet hours end" defaultValue={quiet?.[1] ?? ""} />
+              <TimePicker name="quietTo" label="Quiet hours end" defaultValue={quiet?.[1] ?? ""} placeholder="To" />
             </div>
             {!quiet && p.quietHours ? <span className="hint">Currently: {p.quietHours}</span> : null}
           </fieldset>
@@ -152,7 +157,7 @@ export function ProfileTab({ desk, setDesk, author }: Props) {
         <h2 id="people-title">People who matter</h2>
         <p className="panel-lede">Saathi may ask about one of them, like a friend would.</p>
         {desk.people.length ? (
-          <ul className="rows">
+          <ul className="rows card-list">
             {desk.people.map((person) =>
               editingPerson === person.id ? (
                 <li key={person.id} className="row-editing">
@@ -186,7 +191,10 @@ export function ProfileTab({ desk, setDesk, author }: Props) {
                     <button
                       className="text-link row-remove"
                       type="button"
-                      onClick={() => setDesk((d) => ({ ...d, people: d.people.filter((x) => x.id !== person.id) }))}
+                      onClick={() => {
+                        undoable(person.name);
+                        setDesk((d) => ({ ...d, people: d.people.filter((x) => x.id !== person.id) }));
+                      }}
                     >
                       Remove<span className="visually-hidden"> {person.name}</span>
                     </button>
@@ -221,7 +229,7 @@ export function ProfileTab({ desk, setDesk, author }: Props) {
           </button>
         </form>
         {desk.memories.length ? (
-          <ul className="rows">
+          <ul className="rows card-list">
             {desk.memories.map((memory) =>
               editingMemory === memory.id ? (
                 <li key={memory.id} className="row-editing">
@@ -253,7 +261,10 @@ export function ProfileTab({ desk, setDesk, author }: Props) {
                     <button
                       className="text-link row-remove"
                       type="button"
-                      onClick={() => setDesk((d) => ({ ...d, memories: d.memories.filter((x) => x.id !== memory.id) }))}
+                      onClick={() => {
+                        undoable("the memory");
+                        setDesk((d) => ({ ...d, memories: d.memories.filter((x) => x.id !== memory.id) }));
+                      }}
                     >
                       Delete<span className="visually-hidden"> memory</span>
                     </button>

@@ -83,8 +83,14 @@ class DeviceRequest(BaseModel):
 
 @router.post("/devices")
 def add_device(household_id: str, body: DeviceRequest, actor: ActorContext = Depends(get_current_actor)) -> dict:
-    """Store an FCM token. The push text is fixed and carries no name, quote, or medicine."""
-    _access(actor, household_id)
+    """Store an FCM token. The push text is fixed and carries no name, quote, or medicine.
+
+    The parent's phone registers its own token with its joined family code; a caretaker device needs membership.
+    """
+    if body.role == "parent":
+        _phone_access(actor, household_id)
+    else:
+        _access(actor, household_id)
     if not body.token or len(body.token) > 4096:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "A device token is required.")
     return {"status": "registered", "deviceId": register_device(household_id, body.token, body.role)}

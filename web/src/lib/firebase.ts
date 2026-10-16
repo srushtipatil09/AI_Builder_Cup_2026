@@ -1,8 +1,10 @@
+import { useEffect, useState } from "react";
 import { initializeApp } from "firebase/app";
 import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
   getAuth,
+  onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -19,6 +21,13 @@ export const firebaseApp = initializeApp({
 const auth = getAuth(firebaseApp);
 
 export type GoogleUser = { email: string; name: string; uid: string };
+
+// The signed-in person's picture: the Google account photo when they used Google sign-in, otherwise null.
+export function useAccountPhoto(): string | null {
+  const [photo, setPhoto] = useState<string | null>(() => auth.currentUser?.photoURL ?? null);
+  useEffect(() => onAuthStateChanged(auth, (user) => setPhoto(user?.photoURL ?? null)), []);
+  return photo;
+}
 
 export async function signInWithGoogle(): Promise<GoogleUser> {
   const result = await signInWithPopup(auth, new GoogleAuthProvider());

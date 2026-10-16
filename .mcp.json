@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "code-graph": {
+      "command": "code-graph-mcp",
+      "args": ["serve", "--path", "E:/hackathons/AI Builder Cup 2026/AI_Builder_Cup_2026"]
+    }
+  }
+}

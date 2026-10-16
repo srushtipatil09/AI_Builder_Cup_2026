@@ -17,10 +17,67 @@ export type Person = { id: string; name: string; relation: string; city: string 
 // A caretaker fact. Source is always caregiver; the author and time are shown on the row.
 export type Memory = { id: string; text: string; author: string; addedAt: string; editedAt?: string };
 
-// The dose is stored exactly as the family typed it. Saathi reads it back and never suggests one.
+export type ReminderKind = "medicine" | "exercise" | "call" | "meal" | "other";
+
+// Labels for each kind of reminder. For a medicine, the detail is the dose, copied exactly as written.
+export const reminderKinds: Record<
+  ReminderKind,
+  { label: string; name: string; namePlaceholder: string; detail: string; detailPlaceholder: string; notePlaceholder: string }
+> = {
+  medicine: {
+    label: "Medicine",
+    name: "Medicine name",
+    namePlaceholder: "As written on the strip",
+    detail: "Dose, as the doctor wrote it",
+    detailPlaceholder: "Copied from the prescription",
+    notePlaceholder: "e.g. after breakfast",
+  },
+  exercise: {
+    label: "Exercise",
+    name: "Activity",
+    namePlaceholder: "e.g. Morning walk",
+    detail: "How long",
+    detailPlaceholder: "e.g. 20 minutes",
+    notePlaceholder: "e.g. in the park, with a friend",
+  },
+  call: {
+    label: "Call",
+    name: "Who to call",
+    namePlaceholder: "e.g. Rahul",
+    detail: "Why",
+    detailPlaceholder: "e.g. his birthday",
+    notePlaceholder: "e.g. he is free after 7",
+  },
+  meal: {
+    label: "Food",
+    name: "Meal or drink",
+    namePlaceholder: "e.g. Lunch",
+    detail: "What",
+    detailPlaceholder: "e.g. dal chawal from the fridge",
+    notePlaceholder: "e.g. warm it first",
+  },
+  other: {
+    label: "Other",
+    name: "Reminder",
+    namePlaceholder: "e.g. Water the tulsi",
+    detail: "Detail",
+    detailPlaceholder: "Optional",
+    notePlaceholder: "Anything Saathi should add",
+  },
+};
+
+// Older reminders were all medicines and have no kind.
+export function kindOf(m: { kind?: ReminderKind }): ReminderKind {
+  return m.kind && m.kind in reminderKinds ? m.kind : "medicine";
+}
+
+// Any reminder: a medicine, a walk, a call, a meal. The name keeps its history.
+// A dose is stored exactly as the family typed it. Saathi reads it back and never suggests one.
 export type Medicine = {
   id: string;
+  kind?: ReminderKind;
   name: string;
+  // The dose for a medicine; a short detail for any other kind.
   dose: string;
   schedule: "Once" | "Daily";
   // Only for "Once": the local date, YYYY-MM-DD.
@@ -74,9 +131,11 @@ export function formatDate(value: string): string {
 }
 
 // The words Saathi will say for a reminder, built only from what the family typed.
-export function readBack(m: Pick<Medicine, "name" | "dose" | "schedule" | "date" | "time" | "note">): string {
+export function readBack(m: Pick<Medicine, "kind" | "name" | "dose" | "schedule" | "date" | "time" | "note">): string {
+  // "Who to call" holds a name, so a call reads back as "Call Rahul".
+  const name = m.kind === "call" && m.name && !/^call/i.test(m.name) ? `Call ${m.name}` : m.name;
   const when = m.schedule === "Once" && m.date ? `on ${formatDate(m.date)} at ${formatClock(m.time)}` : `every day at ${formatClock(m.time)}`;
-  return [m.name, m.dose, when, m.note].filter(Boolean).join(", ") + ".";
+  return [name, m.dose, when, m.note].filter(Boolean).join(", ") + ".";
 }
 
 // Loose check for an Indian or international phone number: digits with optional +, spaces, or dashes.
@@ -112,7 +171,8 @@ export function demoDesk(): Desk {
     memories: [],
     // Synthetic. Set 20 minutes after the demo opens so the Routine tab shows an urgent reminder.
     medicines: [
-      { id: "bp", name: "BP tablet", dose: "", schedule: "Daily", time: soon(20), note: "" },
+      { id: "bp", kind: "medicine", name: "BP tablet", dose: "", schedule: "Daily", time: soon(20), note: "" },
+      { id: "walk", kind: "exercise", name: "Evening walk", dose: "20 minutes", schedule: "Daily", time: "18:00", note: "" },
     ],
     contacts: [{ id: "rahul", name: "Rahul", relation: "Son, caretaker", phone: "", local: false }],
   };
@@ -197,7 +257,10 @@ export function useDesk(key: string, seed: () => Desk) {
       for (const [k, v] of Object.entries(server.profile ?? {})) {
         if (v !== "" && v !== undefined && v !== null) (profile as Record<string, unknown>)[k] = v;
       }
-      const next = { ...base, ...server, profile };
+      // An API older than reminder kinds drops the field. Keep the kind this browser already knows for that reminder.
+      const known = new Map([...base.medicines, ...latest.current.medicines].map((m) => [m.id, m.kind]));
+      const medicines = (server.medicines ?? base.medicines).map((m) => (m.kind ? m : { ...m, kind: known.get(m.id) }));
+      const next = { ...base, ...server, profile, medicines };
       remember(next);
       setDeskState(next);
       if (!server.profile?.preferredName && profile.preferredName) dirty.current = true;

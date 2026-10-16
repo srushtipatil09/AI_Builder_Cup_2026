@@ -50,8 +50,8 @@ export function JoinPage() {
         skipLabel="Skip for now"
       />
       <p className="note">
-        This build keeps family codes in this browser. A code made on another device is confirmed once cloud sync is
-        connected.
+        Your family can read the code from their care desk. If it is not found, skip for now and join later from the
+        chat.
       </p>
     </AuthLayout>
   );

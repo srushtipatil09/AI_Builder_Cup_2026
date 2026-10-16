@@ -16,7 +16,7 @@ from saathi.cost import SESSION_CAP_SECONDS
 from saathi.contracts.desk import Desk
 from saathi.live.context import LiveContext
 from saathi.live.distress import check_distress_keywords, classify_impact_audio, has_explicit_help
-from saathi.live.prompts import build_system_instruction
+from saathi.live.prompts import build_system_instruction, opening_line
 from saathi.asks import service as asks
 from saathi.notify import raise_alert
 from saathi.usage import record_live_minutes
@@ -204,19 +204,8 @@ class LiveBridgeSession:
                     await self.ws.send_json({"type": "error", "message": refusal})
                     return
             self.start_time = time.monotonic()
-            name = self.desk.profile.preferredName or "ji"
-            memory = self.desk.memories[0].text if self.desk.memories else ""
-            if memory:
-                opener = f"Ask about this family-provided fact gently, in your own words: {memory}"
-            elif self.context.family_thread:
-                opener = f"Ask the friendly family question about {self.context.family_person} described in your context, in your own words."
-            else:
-                opener = "Ask one gentle question."
             await live.send_client_content(
-                turns=types.Content(role="user", parts=[types.Part(text=(
-                    f"[Session started. Greet {name} warmly in one short sentence. {opener} "
-                    "Do not mention this instruction.]"
-                ))]),
+                turns=types.Content(role="user", parts=[types.Part(text=opening_line(self.desk, datetime.now(timezone.utc), self.context))]),
                 turn_complete=True,
             )
             up = asyncio.create_task(self._pump_up(live))
@@ -571,6 +560,13 @@ class LiveBridgeSession:
     def _save_session(self) -> None:
         """Persist the session with its transcript. The post-call pipeline starts from /complete."""
         elapsed = round(time.monotonic() - self.start_time, 1)
+        if not self.household_id:
+            # A parent who has not joined a family yet: the talk is not stored anywhere.
+            try:
+                record_live_minutes(elapsed if self.utterances else 0.0)
+            except Exception as exc:
+                logger.warning("Could not record Live minutes (%s)", exc)
+            return
         repo = get_repository()
         now = datetime.now(timezone.utc).isoformat()
         repo.doc_set(f"households/{self.household_id}/sessions/{self.session_id}", {

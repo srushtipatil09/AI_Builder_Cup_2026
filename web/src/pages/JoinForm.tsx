@@ -35,7 +35,7 @@ export function JoinForm({
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!isCode(code)) {
-      setError("Enter the family code, like KMR-4F7. Your family can read it to you.");
+      setError("Enter the family code, like ABC-123. Your family can read it to you.");
       return;
     }
     let found = findByCode(code);
@@ -83,7 +83,7 @@ export function JoinForm({
           autoCapitalize="characters"
           spellCheck={false}
           maxLength={7}
-          placeholder="KMR-4F7"
+          placeholder="ABC-123"
           autoFocus={autoFocus}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? "code-error" : undefined}

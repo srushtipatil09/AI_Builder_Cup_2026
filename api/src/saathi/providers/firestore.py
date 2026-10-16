@@ -1,6 +1,7 @@
 """Firestore client and data repository."""
 
 import logging
+import os
 import secrets
 import time
 from datetime import datetime, timezone
@@ -36,6 +37,12 @@ def normalize_code(code: str) -> str:
     return clean
 
 
+def _check_path(path: str) -> None:
+    """An empty segment (a missing household id) would be a 400 from Firestore. Refuse it here."""
+    if not path or any(part == "" for part in path.split("/")):
+        raise ValueError(f"Malformed Firestore path: {path!r}")
+
+
 class FirestoreRepository:
     def __init__(self, client: Optional[firestore.Client] = None):
         self._settings = load_settings()
@@ -50,6 +57,13 @@ class FirestoreRepository:
         self._use_fallback = False
         # Desks are read on every call start; keep them in memory for a short time.
         self._desk_cache: dict[str, tuple[float, Desk]] = {}
+
+    def _fall_back(self, exc: Exception) -> None:
+        """Local runs switch to the in-memory store. On Cloud Run the error surfaces instead: one bad call must not
+        turn the whole process into a store that answers "saved" and keeps nothing."""
+        if os.environ.get("K_SERVICE"):
+            raise exc
+        self._use_fallback = True
 
     @property
     def client(self) -> Optional[firestore.Client]:
@@ -75,7 +89,7 @@ class FirestoreRepository:
                     return HouseholdRecord(**doc.to_dict())
             except GoogleAPICallError as exc:
                 logger.error("Firestore get_household error: %s; falling back to in-memory", exc)
-                self._use_fallback = True
+                self._fall_back(exc)
         data = self._fallback_store["households"].get(household_id)
         return HouseholdRecord(**data) if data else None
 
@@ -87,7 +101,7 @@ class FirestoreRepository:
                 return
             except GoogleAPICallError as exc:
                 logger.error("Firestore save_household error: %s; falling back to in-memory", exc)
-                self._use_fallback = True
+                self._fall_back(exc)
         self._fallback_store["households"][household.id] = household.model_dump()
 
     # Desk methods
@@ -109,7 +123,7 @@ class FirestoreRepository:
                     return Desk(**doc.to_dict())
             except GoogleAPICallError as exc:
                 logger.error("Firestore get_desk error: %s; falling back to in-memory", exc)
-                self._use_fallback = True
+                self._fall_back(exc)
         data = self._fallback_store["desks"].get(household_id)
         return Desk(**data) if data else None
 
@@ -122,7 +136,7 @@ class FirestoreRepository:
                 return
             except GoogleAPICallError as exc:
                 logger.error("Firestore save_desk error: %s; falling back to in-memory", exc)
-                self._use_fallback = True
+                self._fall_back(exc)
         self._fallback_store["desks"][household_id] = desk.model_dump()
 
     # Family pairing codes
@@ -142,7 +156,7 @@ class FirestoreRepository:
                 return record
             except GoogleAPICallError as exc:
                 logger.error("Firestore create_family_code error: %s; falling back to in-memory", exc)
-                self._use_fallback = True
+                self._fall_back(exc)
         self._fallback_store["family_codes"][code] = record.model_dump()
         return record
 
@@ -156,7 +170,7 @@ class FirestoreRepository:
                     return FamilyLinkRecord(**doc.to_dict())
             except GoogleAPICallError as exc:
                 logger.error("Firestore find_family_code error: %s; falling back to in-memory", exc)
-                self._use_fallback = True
+                self._fall_back(exc)
         data = self._fallback_store["family_codes"].get(norm)
         return FamilyLinkRecord(**data) if data else None
 
@@ -170,7 +184,7 @@ class FirestoreRepository:
                     rows.append(doc.to_dict() or {})
             except GoogleAPICallError as exc:
                 logger.error("Firestore household_family_codes error: %s; falling back to in-memory", exc)
-                self._use_fallback = True
+                self._fall_back(exc)
         if not rows:
             rows = [r for r in self._fallback_store["family_codes"].values() if r.get("household_id") == household_id]
         records = [FamilyLinkRecord(**r) for r in rows]
@@ -202,13 +216,14 @@ class FirestoreRepository:
                 return record
             except GoogleAPICallError as exc:
                 logger.error("Firestore mark_family_code_joined error: %s; falling back to in-memory", exc)
-                self._use_fallback = True
+                self._fall_back(exc)
         self._fallback_store["family_codes"][record.code] = record.model_dump()
         return record
 
 
     # Generic documents. Paths are "collection/doc/collection/doc...". Falls back to memory offline.
     def doc_get(self, path: str) -> Optional[dict]:
+        _check_path(path)
         client = self.client
         if client and not self._use_fallback:
             try:
@@ -216,11 +231,12 @@ class FirestoreRepository:
                 return doc.to_dict() if doc.exists else None
             except GoogleAPICallError as exc:
                 logger.error("Firestore doc_get %s: %s; falling back to in-memory", path, exc)
-                self._use_fallback = True
+                self._fall_back(exc)
         data = self._docs.get(path)
         return dict(data) if data is not None else None
 
     def doc_set(self, path: str, data: dict, merge: bool = True) -> None:
+        _check_path(path)
         client = self.client
         if client and not self._use_fallback:
             try:
@@ -228,11 +244,12 @@ class FirestoreRepository:
                 return
             except GoogleAPICallError as exc:
                 logger.error("Firestore doc_set %s: %s; falling back to in-memory", path, exc)
-                self._use_fallback = True
+                self._fall_back(exc)
         current = self._docs.get(path, {}) if merge else {}
         self._docs[path] = {**current, **data}
 
     def doc_delete(self, path: str) -> None:
+        _check_path(path)
         client = self.client
         if client and not self._use_fallback:
             try:
@@ -240,11 +257,12 @@ class FirestoreRepository:
                 return
             except GoogleAPICallError as exc:
                 logger.error("Firestore doc_delete %s: %s", path, exc)
-                self._use_fallback = True
+                self._fall_back(exc)
         self._docs.pop(path, None)
 
     def col_list(self, path: str, limit: int = 100) -> list[dict]:
         """Documents of one collection, each with its id under "_id"."""
+        _check_path(path)
         client = self.client
         if client and not self._use_fallback:
             try:
@@ -256,7 +274,7 @@ class FirestoreRepository:
                 return rows
             except GoogleAPICallError as exc:
                 logger.error("Firestore col_list %s: %s; falling back to in-memory", path, exc)
-                self._use_fallback = True
+                self._fall_back(exc)
         prefix = path.rstrip("/") + "/"
         rows = []
         for key, value in self._docs.items():
@@ -272,7 +290,7 @@ class FirestoreRepository:
                 return [ref.id for ref in client.collection(path).list_documents()]
             except GoogleAPICallError as exc:
                 logger.error("Firestore list_doc_ids %s: %s; falling back to in-memory", path, exc)
-                self._use_fallback = True
+                self._fall_back(exc)
         prefix = path.rstrip("/") + "/"
         ids = {key[len(prefix):].split("/", 1)[0] for key in self._docs if key.startswith(prefix)}
         ids |= set(self._fallback_store["desks"].keys()) if path == "households" else set()
@@ -288,7 +306,7 @@ class FirestoreRepository:
                 return float((ref.get().to_dict() or {}).get(field, amount))
             except GoogleAPICallError as exc:
                 logger.error("Firestore increment %s: %s; falling back to in-memory", path, exc)
-                self._use_fallback = True
+                self._fall_back(exc)
         row = self._docs.setdefault(path, {})
         row[field] = float(row.get(field, 0)) + amount
         return row[field]

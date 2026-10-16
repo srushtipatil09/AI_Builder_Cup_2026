@@ -25,10 +25,11 @@ type Message = {
 
 // Shown as one row on a phone, and grouped by what they change on a wide window.
 const groups = [
+  { title: "Ask", items: ["How has she been in the last 4 days?", "Did she eat well this week?"] },
   { title: "Memories", items: ["She likes the temple garden.", "She waters the rose plant every morning."] },
   { title: "People", items: ["Meena is her sister, not her daughter.", "Add Sunil, her nephew, in Lucknow."] },
   { title: "Check-in", items: ["Move the check-in to 9 in the morning.", "Quiet hours are 1 pm to 3 pm."] },
-  { title: "Reminders", items: ["The BP tablet is now after breakfast."] },
+  { title: "Reminders", items: ["The BP tablet is now after breakfast.", "Remind her to walk at 6 every evening.", "Lunch every day at 1 pm, dal from the fridge."] },
 ];
 
 const quick = groups.flatMap((g) => g.items.slice(0, 1));
@@ -44,7 +45,7 @@ export function TellSaathiTab({ desk, setDesk, author, name, guideSlot, househol
     {
       id: "hello",
       from: "saathi",
-      text: `Tell me what changed for ${who}, in your own words. I read the change back and save it only after you confirm. I never suggest a dose.`,
+      text: `Tell me what changed for ${who}, or ask how ${who} has been. I read each change back and save it only after you confirm. I answer questions only from what Saathi has recorded, and I never suggest a dose.`,
     },
   ]);
   const threadRef = useRef<HTMLOListElement>(null);
@@ -77,6 +78,8 @@ export function TellSaathiTab({ desk, setDesk, author, name, guideSlot, househol
           ...list,
           { id: newId(), from: "saathi", text: `${proposal.readback} Should I save this?`, proposal },
         ]);
+      } else if (proposal.status === "answered") {
+        setMessages((list) => [...list, { id: newId(), from: "saathi", text: proposal.answer || "I have nothing recorded for that." }]);
       } else {
         setMessages((list) => [...list, { id: newId(), from: "saathi", text: proposal.question || "I could not turn that into one change." }]);
       }

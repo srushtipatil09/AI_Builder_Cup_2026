@@ -107,6 +107,7 @@ function CategorySection({ category, files, householdId, who, onUploaded }: Sect
   const [note, setNote] = useState("");
   const [failed, setFailed] = useState(false);
   const [shared, setShared] = useState(false);
+  const [chosen, setChosen] = useState<File | null>(null);
   const single = category.id === "profile_photo";
   const images = single || category.id === "family_photos";
 
@@ -128,6 +129,7 @@ function CategorySection({ category, files, householdId, who, onUploaded }: Sect
       setFailed(false);
       setNote(single ? "Photo saved." : "Saved.");
       form.reset();
+      setChosen(null);
       setShared(false);
     } catch (err) {
       setFailed(true);
@@ -165,35 +167,59 @@ function CategorySection({ category, files, householdId, who, onUploaded }: Sect
     <section className="doc-cat" aria-labelledby={headingId}>
       <header>
         <h3 id={headingId}>{category.title}</h3>
-        <span className="doc-count">{files.length === 0 ? "None yet" : `${files.length} saved`}</span>
+        <span className={files.length === 0 ? "doc-count" : "doc-count doc-count-on"}>
+          {files.length === 0 ? "None yet" : `${files.length} saved`}
+        </span>
       </header>
       <p className="doc-hint">{category.hint}</p>
 
       <form className="doc-form" onSubmit={(e) => void submit(e)}>
-        <label className="field">
-          {single ? "Photo" : "File"}
-          <input
-            ref={input}
-            type="file"
-            accept={images ? "image/jpeg,image/png,image/webp" : "image/jpeg,image/png,image/webp,application/pdf"}
-            disabled={busy}
-          />
-        </label>
+        <div className="field">
+          <span id={`${headingId}-file`}>{single ? "Photo" : "File"}</span>
+          <label className={chosen ? "doc-picker doc-picker-on" : "doc-picker"}>
+            <input
+              ref={input}
+              className="visually-hidden"
+              type="file"
+              aria-labelledby={`${headingId}-file`}
+              accept={images ? "image/jpeg,image/png,image/webp" : "image/jpeg,image/png,image/webp,application/pdf"}
+              disabled={busy}
+              onChange={(e) => {
+                setChosen(e.target.files?.[0] ?? null);
+                setNote("");
+              }}
+            />
+            <span className="doc-picker-button" aria-hidden="true">
+              {chosen ? "Change" : "Choose file"}
+            </span>
+            <span className="doc-picker-name">
+              {chosen ? `${chosen.name} · ${sizeLabel(chosen.size)}` : images ? "JPEG, PNG, or WebP" : "JPEG, PNG, WebP, or PDF"}
+            </span>
+          </label>
+        </div>
         {single ? null : (
           <label className="field">
-            Label <span className="optional">(optional)</span>
+            <span>
+              Label <span className="optional">(optional)</span>
+            </span>
             <input name="label" maxLength={80} placeholder={`e.g. ${category.title}, ${new Date().getFullYear()}`} />
           </label>
         )}
         {category.privateOnly ? (
-          <p className="doc-private">Always private. Only {who}&rsquo;s household can open it.</p>
+          <p className="doc-private">
+            <span className="doc-lock" aria-hidden="true" />
+            Always private. Only {who}&rsquo;s household can open it.
+          </p>
         ) : (
-          <label className="check">
+          <label className="doc-share">
             <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} disabled={busy} />
-            Anyone with the link can see this (otherwise it stays private)
+            <span>
+              Share with anyone who has the link
+              <small>Leave unticked to keep it private.</small>
+            </span>
           </label>
         )}
-        <button className="primary" type="submit" disabled={busy}>
+        <button className="primary doc-submit" type="submit" disabled={busy || !chosen}>
           {busy ? "Uploading…" : single && files.length > 0 ? "Replace photo" : "Upload"}
         </button>
       </form>

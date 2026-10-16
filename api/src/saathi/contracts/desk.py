@@ -29,7 +29,10 @@ class Memory(BaseModel):
 
 
 class Medicine(BaseModel):
+    """Any reminder. Older records have no kind and are medicines."""
+
     id: str
+    kind: Literal["medicine", "exercise", "call", "meal", "other"] = "medicine"
     name: str
     dose: str = ""
     schedule: Literal["Once", "Daily"] = "Daily"

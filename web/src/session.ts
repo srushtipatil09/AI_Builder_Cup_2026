@@ -18,6 +18,8 @@ export type HouseholdSession = {
   joinSkipped?: boolean;
   // When the account holder agreed to what Saathi stores, at signup.
   consentAt?: string;
+  // A caretaker can look after several family members. Empty means the first one, named by the email.
+  activeHousehold?: string;
 };
 
 const ACCOUNTS = "saathi.accounts";
@@ -70,6 +72,7 @@ export function writeSession(session: HouseholdSession) {
     familyCode: session.familyCode ?? null,
     joinSkipped: session.joinSkipped ?? false,
     consentAt: session.consentAt ?? null,
+    activeHousehold: session.activeHousehold ?? null,
   }).catch(() => {
     // Not signed in with Firebase, or offline: the browser copy still works.
   });
@@ -101,9 +104,14 @@ export function afterSignIn(session: HouseholdSession): string {
   return needsJoin(session) ? "/join" : homePath(session);
 }
 
-// The browser keys a household's desk by the caretaker's email.
+// The household the care desk shows: the family member chosen last, or the first one (named by the email).
+export function activeHouseholdId(session: HouseholdSession | null): string {
+  return session?.activeHousehold || session?.email || "";
+}
+
+// The browser keys each household's desk cache by its id.
 export function householdKey(session: HouseholdSession | null): string {
-  return `saathi.desk.${session?.email || "local"}`;
+  return `saathi.desk.${activeHouseholdId(session) || "local"}`;
 }
 
 export function emailError(email: string): string | null {
@@ -137,5 +145,6 @@ export function fromProfile(p: AccountProfile): HouseholdSession {
     familyCode: p.familyCode ?? undefined,
     joinSkipped: p.joinSkipped || undefined,
     consentAt: p.consentAt ?? undefined,
+    activeHousehold: p.activeHousehold ?? undefined,
   };
 }

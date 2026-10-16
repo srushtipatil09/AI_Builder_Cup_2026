@@ -43,13 +43,15 @@ export function AppShell() {
   }, [demo]);
 
   function leave() {
+    // Logging out by accident is hard to undo for a parent, so a real account asks first.
+    if (!demo && !window.confirm("Log out of Saathi on this phone?")) return;
     if (!demo) clearSession();
     navigate(isPhoneEntry() ? "/login" : "/");
   }
 
   const title = demo ? "Kamla" : session?.parentName || "Your household";
   const detail = demo
-    ? "Kamla Sharma, 78 · synthetic household"
+    ? "78 · Demo"
     : parent?.familyCode
       ? parent.caretakerName
         ? `With ${parent.caretakerName}’s family`
