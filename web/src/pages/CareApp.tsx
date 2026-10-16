@@ -4,7 +4,10 @@ import { blankDesk, demoDesk, formatClock, formatQuiet, today, useDesk, type Des
 import { useFamilyLink } from "../family";
 import { useHealth } from "../health";
 import { householdKey, readSession } from "../session";
-import { DailyTab } from "./desk/DailyTab";
+import { RoutineTab } from "./desk/RoutineTab";
+import { useUpdates } from "../lib/useUpdates";
+import { SyncStatus } from "./SyncStatus";
+import { DocumentsCard, useProfilePhoto } from "./desk/DocumentsCard";
 import { EmergencyTab } from "./desk/EmergencyTab";
 import { FamilyCard } from "./desk/FamilyCard";
 import { MedicineTab } from "./desk/MedicineTab";
@@ -52,10 +55,16 @@ function TabIcon({ id }: { id: TabId }) {
   );
 }
 
-function Avatar({ name, photo }: { name: string; photo: boolean }) {
+function Avatar({ name, photo, src }: { name: string; photo: boolean; src?: string | null }) {
   return (
     <span className="avatar" aria-hidden="true">
-      {photo ? <img src="/photos/hero.jpg" width="864" height="1152" alt="" /> : (name || "?").charAt(0)}
+      {src ? (
+        <img src={src} alt="" />
+      ) : photo ? (
+        <img src="/photos/hero.jpg" width="864" height="1152" alt="" />
+      ) : (
+        (name || "?").charAt(0)
+      )}
     </span>
   );
 }
@@ -97,7 +106,7 @@ export function CareApp({ demo, onLeave }: Props) {
   const health = useHealth();
   const caretaker = demo ? "Rahul" : session?.caretakerName || "";
   const storageKey = demo ? "saathi.desk.demo.v2" : householdKey(session);
-  const { desk, setDesk, reset } = useDesk(storageKey, () =>
+  const { desk, setDesk, reset, sync, syncedAt, syncError, retry } = useDesk(storageKey, () =>
     demo ? demoDesk() : blankDesk(session?.parentName ?? "", session?.language ?? "Hindi"),
   );
   const [active, setActive] = useState<TabId>(readTab);
@@ -108,7 +117,14 @@ export function CareApp({ demo, onLeave }: Props) {
   const name = desk.profile.preferredName;
   const who = name || "your parent";
   const author = caretaker || "You";
-  const family = useFamilyLink(demo ? "demo" : storageKey, name, caretaker);
+  const family = useFamilyLink(demo ? "demo" : session?.email || "", name, caretaker, !demo && Boolean(session?.email));
+  // The household id the API knows this desk by: the demo household, or the caretaker's account email.
+  const householdId = demo ? "demo-kamla-sharma" : session?.email || "";
+  const state = useUpdates(householdId, Boolean(householdId));
+  const [photoVersion, setPhotoVersion] = useState(0);
+  const photoUrl = useProfilePhoto(householdId, !demo, photoVersion);
+  const urgentAlerts = (state.updates?.alerts ?? []).filter((a) => a.tier >= 2);
+  const conversationMemories = desk.memories.filter((m) => m.author === "conversation").map((m) => m.text);
 
   useEffect(() => {
     document.title = demo ? "Caretaker demo · Saathi" : "Care desk · Saathi";
@@ -179,7 +195,7 @@ export function CareApp({ demo, onLeave }: Props) {
         </div>
 
         <div className="care-parent">
-          <Avatar name={name} photo={demo} />
+          <Avatar name={name} photo={demo} src={photoUrl} />
           <div>
             <p className="care-parent-name">{name || "Your parent"}</p>
             <p className="care-parent-meta">
@@ -198,7 +214,7 @@ export function CareApp({ demo, onLeave }: Props) {
             <span className="pill-dot" aria-hidden="true" />
             {health.text}
           </p>
-          <p>Saved in this browser. Cloud sync is not connected yet.</p>
+          <p>{demo ? "Demo data. Nothing here is saved to an account." : "Changes save to your account in the cloud and show on every device you log in on."}</p>
           <div className="care-side-actions">
             {demo ? (
               <button
@@ -220,7 +236,7 @@ export function CareApp({ demo, onLeave }: Props) {
       </aside>
 
       <header className="care-mbar">
-        <Avatar name={name} photo={demo} />
+        <Avatar name={name} photo={demo} src={photoUrl} />
         <div className="care-mbar-text">
           <p className="care-mbar-title">Caring for {name || "your parent"}</p>
           <p className="care-mbar-sub">{demo ? "Caretaker demo · synthetic household" : caretaker || "Caretaker"}</p>
@@ -241,7 +257,20 @@ export function CareApp({ demo, onLeave }: Props) {
           </p>
           <h1>{current.label}</h1>
           <p className="care-sub">{subtitle(active, who)}</p>
+          <SyncStatus sync={sync} syncedAt={syncedAt} error={syncError} onRetry={retry} demo={demo} />
         </header>
+
+        {active !== "routine" && urgentAlerts.length ? (
+          <section className={`alert-banner alert-tier-${Math.max(...urgentAlerts.map((a) => a.tier))}`} role="alert">
+            <p>
+              <strong>{urgentAlerts.some((a) => a.tier >= 3) ? "Needs your attention now. " : "New Saathi update. "}</strong>
+              {urgentAlerts[0].message}
+            </p>
+            <button className="ghost" type="button" onClick={() => choose("routine")}>
+              Open Routine
+            </button>
+          </section>
+        ) : null}
 
         {active === "profile" && doneCount < steps.length ? (
           <section className="setup" aria-labelledby="setup-title">
@@ -282,11 +311,20 @@ export function CareApp({ demo, onLeave }: Props) {
 
         {active === "profile" ? (
           <>
-            <FamilyCard link={family.link} name={name} demo={demo} onCreate={family.create} />
+            <FamilyCard link={family.link} name={name} demo={demo} onCreate={() => void family.create()} error={family.error} busy={family.busy} />
             <ProfileTab key={version} desk={desk} setDesk={setDesk} author={author} />
+            <DocumentsCard
+              householdId={householdId}
+              name={name}
+              demo={demo}
+              onChanged={() => setPhotoVersion((v) => v + 1)}
+            />
           </>
         ) : null}
-        {active === "routine" ? <DailyTab
+        {active === "routine" ? <RoutineTab
+            householdId={householdId}
+            state={state}
+            conversationMemories={conversationMemories}
             demo={demo}
             name={name}
             medicines={desk.medicines}
@@ -298,7 +336,7 @@ export function CareApp({ demo, onLeave }: Props) {
               }))
             }
           /> : null}
-        {active === "ask" ? <TellSaathiTab desk={desk} setDesk={setDesk} author={author} name={name} guideSlot={guideSlot} /> : null}
+        {active === "ask" ? <TellSaathiTab desk={desk} setDesk={setDesk} author={author} name={name} guideSlot={guideSlot} householdId={householdId} /> : null}
         {active === "reminders" ? <MedicineTab desk={desk} setDesk={setDesk} name={name} author={author} /> : null}
         {active === "contacts" ? <EmergencyTab desk={desk} setDesk={setDesk} name={name} /> : null}
       </main>

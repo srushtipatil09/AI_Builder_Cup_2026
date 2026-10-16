@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { isCode, normalizeCode } from "../family";
-import { afterSignIn, emailError, passwordError, writeSession, type HouseholdSession, type Role } from "../session";
-import { signInWithGoogle } from "../lib/firebase";
+import { fetchMe } from "../lib/api";
+import { afterSignIn, fromProfile, emailError, passwordError, writeSession, type HouseholdSession, type Role } from "../session";
+import { authMessage, signInWithGoogle, signUpWithEmail } from "../lib/firebase";
 import { Field } from "./Field";
 import { AuthLayout } from "./AuthLayout";
 
@@ -29,12 +30,13 @@ export function SignupPage() {
   const [role, setRole] = useState<Role | null>(codeParam ? "parent" : null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [googleNote, setGoogleNote] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     document.title = "Create account · Saathi";
   }, []);
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!role) return;
     setGoogleNote("");
@@ -59,6 +61,16 @@ export function SignupPage() {
       return;
     }
 
+    setBusy(true);
+    try {
+      await signUpWithEmail(email, password);
+    } catch (err) {
+      setErrors({ email: authMessage(err) });
+      requestAnimationFrame(() => summaryRef.current?.focus());
+      setBusy(false);
+      return;
+    }
+    setBusy(false);
     const session: HouseholdSession =
       role === "caretaker"
         ? { email, role, caretakerName: name, parentName: parent, language }
@@ -73,6 +85,14 @@ export function SignupPage() {
     setGoogleNote("");
     try {
       const user = await signInWithGoogle();
+      // An existing account keeps its role and names.
+      const existing = await fetchMe().catch(() => null);
+      if (existing) {
+        const back = fromProfile({ ...existing, email: user.email });
+        writeSession(back);
+        navigate(afterSignIn(back));
+        return;
+      }
       const first = user.name.split(" ")[0] || user.name;
       const session: HouseholdSession =
         role === "caretaker"
@@ -81,7 +101,7 @@ export function SignupPage() {
       writeSession(session);
       navigate(role === "parent" && codeParam ? `/join/${codeParam}` : afterSignIn(session));
     } catch (err) {
-      setGoogleNote("Google sign-in did not finish. Try again.");
+      setGoogleNote(authMessage(err));
       console.warn("Google sign-in failed", err);
     }
   }
@@ -183,7 +203,7 @@ export function SignupPage() {
           <Field label="Email" name="email" type="email" autoComplete="email" error={errors.email} />
           <Field label="Password" name="password" type="password" autoComplete="new-password" error={errors.password} />
           <div className="auth-actions">
-            <button className="primary" type="submit">
+            <button className="primary" type="submit" disabled={busy}>
               Create account
             </button>
             <p className="divider" aria-hidden="true">

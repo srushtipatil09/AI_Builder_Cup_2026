@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // Care desk records. Until Firestore writes land, they are kept in this browser only.
 
@@ -140,38 +140,136 @@ function read(key: string, seed: Desk): Desk {
 
 import { fetchDesk, saveDesk } from "./lib/api";
 
+export type SyncState = "loading" | "synced" | "saving" | "offline";
+
+const SAVE_DELAY_MS = 600;
+const RETRY_MS = 10_000;
+const REFRESH_MS = 20_000;
+
+// The care desk, kept in sync with Firestore through the API.
+// - Nothing is sent to the server until its copy has been loaded, so a new device cannot overwrite it with a blank desk.
+// - Edits are saved after a short pause. A failed save is kept and retried; the status says so.
+// - With no unsaved edits, the desk refreshes every 20 seconds, when the tab regains focus, and when the network returns.
 export function useDesk(key: string, seed: () => Desk) {
-  const [desk, setDesk] = useState<Desk>(() => read(key, seed()));
+  const [desk, setDeskState] = useState<Desk>(() => read(key, seed()));
+  const [sync, setSync] = useState<SyncState>("loading");
+  const [syncedAt, setSyncedAt] = useState<number | null>(null);
+  const [syncError, setSyncError] = useState("");
+  const dirty = useRef(false);
+  const loaded = useRef(false);
+  const saving = useRef(false);
+  const latest = useRef(desk);
+  latest.current = desk;
+  const isDemo = key.includes("demo");
+  const hhId = key.replace("saathi.desk.", "");
 
-  useEffect(() => {
-    const isDemo = key.includes("demo");
-    const hhId = key.replace("saathi.desk.", "");
-    fetchDesk(hhId, isDemo)
-      .then((serverDesk) => {
-        if (serverDesk) {
-          setDesk((prev) => ({ ...prev, ...serverDesk }));
-        }
-      })
-      .catch(() => {
-        // Keep local cache if offline or API unavailable
-      });
-  }, [key]);
+  const remember = useCallback(
+    (next: Desk) => {
+      try {
+        localStorage.setItem(key, JSON.stringify(next));
+      } catch {
+        // Private mode: edits last until the tab closes.
+      }
+    },
+    [key],
+  );
 
-  useEffect(() => {
+  const setDesk: React.Dispatch<React.SetStateAction<Desk>> = useCallback((update) => {
+    dirty.current = true;
+    setDeskState((prev) => (typeof update === "function" ? (update as (d: Desk) => Desk)(prev) : update));
+  }, []);
+
+  const load = useCallback(async () => {
+    if (saving.current) return;
     try {
-      localStorage.setItem(key, JSON.stringify(desk));
-    } catch {
-      // Private mode: edits last until the tab closes.
+      const server = await fetchDesk(hhId, isDemo);
+      loaded.current = true;
+      setSyncError("");
+      if (dirty.current) {
+        // Unsaved local edits win; they are saved next.
+        setSyncedAt(Date.now());
+        return;
+      }
+      const base = seed();
+      // A brand-new server desk is empty; keep the names entered at signup and save them.
+      const profile = { ...base.profile };
+      for (const [k, v] of Object.entries(server.profile ?? {})) {
+        if (v !== "" && v !== undefined && v !== null) (profile as Record<string, unknown>)[k] = v;
+      }
+      const next = { ...base, ...server, profile };
+      remember(next);
+      setDeskState(next);
+      if (!server.profile?.preferredName && profile.preferredName) dirty.current = true;
+      setSync("synced");
+      setSyncedAt(Date.now());
+    } catch (err) {
+      setSync("offline");
+      setSyncError(err instanceof Error ? err.message : "Could not reach the server.");
     }
-    const isDemo = key.includes("demo");
-    const hhId = key.replace("saathi.desk.", "");
-    saveDesk(hhId, desk, isDemo).catch(() => {});
-  }, [key, desk]);
+  }, [hhId, isDemo, remember]);
+
+  const flush = useCallback(async () => {
+    if (!loaded.current || !dirty.current || saving.current) return;
+    saving.current = true;
+    setSync("saving");
+    const sending = latest.current;
+    dirty.current = false;
+    try {
+      await saveDesk(hhId, sending, isDemo);
+      remember(sending);
+      setSync(dirty.current ? "saving" : "synced");
+      setSyncedAt(Date.now());
+      setSyncError("");
+    } catch (err) {
+      dirty.current = true;
+      setSync("offline");
+      setSyncError(err instanceof Error ? err.message : "Could not save.");
+    } finally {
+      saving.current = false;
+    }
+  }, [hhId, isDemo, remember]);
+
+  // First load, then keep fresh.
+  useEffect(() => {
+    loaded.current = false;
+    dirty.current = false;
+    setSync("loading");
+    void load();
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      if (dirty.current) void flush();
+      else void load();
+    };
+    const id = window.setInterval(refresh, REFRESH_MS);
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("online", refresh);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("online", refresh);
+    };
+  }, [load, flush]);
+
+  // Save after edits, and retry while offline.
+  useEffect(() => {
+    if (!dirty.current) return;
+    remember(desk);
+    const wait = sync === "offline" ? RETRY_MS : SAVE_DELAY_MS;
+    const id = window.setTimeout(() => {
+      if (!loaded.current) void load().then(() => flush());
+      else void flush();
+    }, wait);
+    return () => window.clearTimeout(id);
+  }, [desk, sync, flush, load, remember]);
 
   function reset() {
     setDesk(seed());
   }
 
-  return { desk, setDesk, reset };
-}
+  const retry = useCallback(() => {
+    if (dirty.current) void flush();
+    else void load();
+  }, [flush, load]);
 
+  return { desk, setDesk, reset, sync, syncedAt, syncError, retry };
+}

@@ -18,9 +18,6 @@ export type FamilyLink = {
 
 type Store = Record<string, FamilyLink>;
 
-// No 0/O, 1/I/L, so a code read aloud over the phone is not misheard.
-const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-
 function load(): Store {
   try {
     return JSON.parse(localStorage.getItem(KEY) ?? "{}") as Store;
@@ -37,13 +34,6 @@ function save(store: Store) {
   }
 }
 
-function makeCode(): string {
-  const bytes = new Uint8Array(6);
-  crypto.getRandomValues(bytes);
-  const chars = [...bytes].map((b) => ALPHABET[b % ALPHABET.length]).join("");
-  return `${chars.slice(0, 3)}-${chars.slice(3)}`;
-}
-
 // "kmr4f7", "KMR 4F7" and "kmr-4f7" all become "KMR-4F7".
 export function normalizeCode(input: string): string {
   const clean = input.toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -58,15 +48,16 @@ export function joinUrl(code: string): string {
   return `${window.location.origin}/join/${code}`;
 }
 
-import { createPairingLink, pairFamilyCode } from "./lib/api";
+import { createPairingLink, fetchPairing, lookupFamilyCode, pairFamilyCode } from "./lib/api";
 
 export function findByCode(code: string): FamilyLink | null {
   return load()[normalizeCode(code)] ?? null;
 }
 
-export function markJoined(code: string, name: string) {
+// Tell the server the parent joined. Throws when the server cannot be reached, so the screen can say so.
+export async function markJoined(code: string, name: string) {
   const norm = normalizeCode(code);
-  pairFamilyCode(norm, name).catch(() => {});
+  await pairFamilyCode(norm, name);
   const store = load();
   const link = store[norm];
   if (!link) return;
@@ -78,48 +69,80 @@ function forHousehold(household: string): FamilyLink | null {
   return Object.values(load()).find((l) => l.household === household) ?? null;
 }
 
-// The caretaker's view of the link: create it on demand, make a new one, and see when the parent joins.
-export function useFamilyLink(household: string, parentName: string, caretakerName: string) {
+// The caretaker's view of the link: the server is the record. It is read now, every 20 seconds, and when the tab
+// regains focus, so "Joined" appears when the parent joins on their own phone.
+export function useFamilyLink(household: string, parentName: string, caretakerName: string, enabled = true) {
   const [link, setLink] = useState<FamilyLink | null>(() => forHousehold(household));
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    // A join in another tab of this browser updates the status here.
-    const refresh = () => setLink(forHousehold(household));
-    refresh();
-    window.addEventListener("storage", refresh);
-    window.addEventListener("focus", refresh);
-    return () => {
-      window.removeEventListener("storage", refresh);
-      window.removeEventListener("focus", refresh);
-    };
-  }, [household]);
-
-  function create() {
-    createPairingLink(household, caretakerName, parentName)
-      .then((remote) => {
-        const store = load();
-        for (const [code, l] of Object.entries(store)) if (l.household === household) delete store[code];
-        store[remote.code] = remote;
-        save(store);
+    if (!enabled) return;
+    let live = true;
+    const pull = async () => {
+      try {
+        const remote = await fetchPairing(household);
+        if (!live) return;
+        setError("");
+        if (remote) {
+          const store = load();
+          for (const [code, l] of Object.entries(store)) if (l.household === household && code !== remote.code) delete store[code];
+          store[remote.code] = remote;
+          save(store);
+        }
         setLink(remote);
-      })
-      .catch(() => {
-        // Fallback to local code if offline
-        const store = load();
-        for (const [code, l] of Object.entries(store)) if (l.household === household) delete store[code];
-        const next: FamilyLink = {
-          code: makeCode(),
-          household,
-          parentName,
-          caretakerName,
-          createdAt: new Date().toISOString(),
-        };
-        store[next.code] = next;
-        save(store);
-        setLink(next);
-      });
+      } catch {
+        if (live) setLink((prev) => prev ?? forHousehold(household));
+      }
+    };
+    void pull();
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") void pull();
+    }, 20_000);
+    const onFocus = () => void pull();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      live = false;
+      window.clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [household, enabled]);
+
+  async function create() {
+    setBusy(true);
+    setError("");
+    try {
+      const remote = await createPairingLink(household, caretakerName, parentName);
+      const store = load();
+      for (const [code, l] of Object.entries(store)) if (l.household === household) delete store[code];
+      store[remote.code] = remote;
+      save(store);
+      setLink(remote);
+    } catch {
+      // A code made only on this device would not work on the parent's phone, so none is made.
+      setError("Could not make a family code. Check the connection and try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  return { link, create };
+  return { link, create, error, busy };
 }
 
+// The household a family code belongs to: this browser's record first, then the API.
+export async function householdForCode(code: string): Promise<string | null> {
+  const local = findByCode(code);
+  if (local) return local.household;
+  try {
+    return (await lookupFamilyCode(normalizeCode(code))).household;
+  } catch {
+    return null;
+  }
+}
+
+// Remember a link fetched from the API so this browser recognises the code from now on.
+export function cacheLink(link: FamilyLink) {
+  const store = load();
+  store[link.code] = link;
+  save(store);
+}

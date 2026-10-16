@@ -35,6 +35,19 @@ class Settings(BaseSettings):
     max_daily_live_minutes: int = MAX_DAILY_LIVE_MINUTES
     max_daily_extract_calls: int = MAX_DAILY_EXTRACT_CALLS
     bigquery_max_bytes_billed: int = BIGQUERY_MAX_BYTES_BILLED
+    bigquery_dataset: str = "saathi"
+    # Bucket for photos and documents (caretaker|person/public|private/<user-id>/...). Empty means "<project>-media".
+    uploads_bucket: str = ""
+    # Signs the 30-minute links to private files. Set a long random value; keep it out of source and logs.
+    link_signing_secret: str = ""
+    bigquery_location: str = "US"
+    # Cloud Tasks hand-off for post-call work. Empty worker_url keeps the work in this process.
+    task_queue: str = "saathi-pipeline"
+    worker_url: str = ""
+    task_invoker_email: str = ""
+    # Require a verified Firebase identity (or a joined family code) for every non-demo household.
+    # Off by default: email and password accounts do not yet have a Firebase identity.
+    require_household_auth: bool = False
 
 
 def load_settings() -> Settings:

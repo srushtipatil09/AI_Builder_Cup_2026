@@ -62,6 +62,8 @@ class ExtractionResult(BaseModel):
     family_episodes: list[FamilyEpisode] = Field(default_factory=list)
     memory_corrections: list[MemoryCorrection] = Field(default_factory=list)
     declined_topics: list[str] = Field(default_factory=list)
+    fasting_stated: bool = False
+    illness_stated: bool = False
     summary: str = ""
 
 
@@ -73,8 +75,35 @@ Extract structured observations adhering strictly to these rules:
 3. Mood must only be extracted if explicitly stated by the Parent (e.g. "achha lag raha hai", "udaas hoon", "akela lagta hai").
 4. Negations (e.g. "I did not fall", "kal baat nahi hui") must be recorded accurately as negative/unreported events, never positive occurrences.
 5. If the Parent corrects a fact (e.g. "Meena meri behen hain, beti nahi"), record it under memory_corrections.
-6. Extract family interactions as family_episodes (person, when last spoke, what said, where they are, what asked).
+6. Set fasting_stated only when the Parent says they are fasting (vrat, upvaas, roza). Set illness_stated only when the Parent says they are unwell (cold, fever, bukhar, sardi).
+7. Extract family interactions as family_episodes (person, when last spoke, what said, where they are, what asked).
 """
+
+
+def _squash(text: str) -> str:
+    return "".join(ch for ch in text.lower() if ch.isalnum())
+
+
+def ground_in_parent_words(result: ExtractionResult, parent_quotes: list[str]) -> ExtractionResult:
+    """Drop observations whose evidence quote is not in the parent's own words (master plan section 10)."""
+    haystack = _squash(" ".join(parent_quotes))
+
+    def ok(quote: str) -> bool:
+        needle = _squash(quote)
+        return bool(needle) and needle in haystack
+
+    result.meals = [m for m in result.meals if ok(m.evidence_quote)]
+    result.discomfort = [d for d in result.discomfort if ok(d.evidence_quote)]
+    result.social_contacts = [c for c in result.social_contacts if ok(c.evidence_quote)]
+    result.family_episodes = [e for e in result.family_episodes if ok(e.evidence_quote)]
+    result.memory_corrections = [c for c in result.memory_corrections if ok(c.evidence_quote)]
+    if result.mood_stated and not parent_quotes:
+        result.mood_stated = None
+    return result
+
+
+FASTING_WORDS = ["vrat", "upvaas", "upwas", "roza", "fasting", "fast "]
+ILLNESS_WORDS = ["bukhar", "fever", "sardi", "zukam", "cold", "khansi", "cough", "tabiyat kharab"]
 
 
 def extract_session(utterances: list[dict], parent_name: str = "") -> ExtractionResult:
@@ -92,9 +121,14 @@ def extract_session(utterances: list[dict], parent_name: str = "") -> Extraction
 
     transcript = "\n".join(transcript_lines)
 
-    # 1. Attempt Gemini Structured Extraction
+    # 1. Attempt Gemini Structured Extraction (skipped once the daily call cap is reached)
+    from saathi.usage import extraction_allowed, record_extraction
+
     try:
+        if not extraction_allowed():
+            raise RuntimeError("daily extraction cap reached")
         client = get_genai_client()
+        record_extraction()
         response = client.models.generate_content(
             model=settings.extract_model or "gemini-2.5-flash",
             contents=f"{EXTRACTION_PROMPT}\n\nTranscript:\n{transcript}",
@@ -106,7 +140,7 @@ def extract_session(utterances: list[dict], parent_name: str = "") -> Extraction
         )
         if response and response.text:
             data = json.loads(response.text)
-            return ExtractionResult(**data)
+            return ground_in_parent_words(ExtractionResult(**data), parent_quotes)
     except Exception as exc:
         logger.warning("Gemini extraction failed (%s); using deterministic rule parser", exc)
 
@@ -116,6 +150,11 @@ def extract_session(utterances: list[dict], parent_name: str = "") -> Extraction
 
     for line in parent_quotes:
         lowered = line.lower()
+
+        if any(w in lowered for w in FASTING_WORDS):
+            res.fasting_stated = True
+        if any(w in lowered for w in ILLNESS_WORDS):
+            res.illness_stated = True
 
         # Meal detection
         if any(w in lowered for w in ["khana", "lunch", "dinner", "breakfast", "roti", "chai"]):

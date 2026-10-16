@@ -15,6 +15,10 @@ FORBIDDEN_DIAGNOSES = [
     r"\bmci\b",
     r"\bmanic\b",
     r"\bdimagi bimari\b",
+    r"\bbhoolne ki bimari\b",
+    r"\bmanovikar\b",
+    r"\bpaagal(?:pan)?\b",
+    r"\bavsaad\b",
 ]
 
 # Forbidden dosage and prescription advice
@@ -44,6 +48,11 @@ FORBIDDEN_CERTAINTY = [
 ]
 
 
+# Alarm words do not belong in a sentence below Level 3, and a fall is never asserted by this layer.
+ALARM_ABOVE_TIER = [r"\bemergency\b", r"\burgent\b", r"\bcritical\b"]
+UNGROUNDED_EVENTS = [r"\bfell\b", r"\bhas fallen\b", r"\bfall (?:was )?confirmed\b", r"\bcollapsed\b"]
+
+
 class SafetyGuardResult:
     def __init__(self, is_safe: bool, final_text: str, violations: list[str]):
         self.is_safe = is_safe
@@ -56,6 +65,8 @@ def validate_caregiver_text(
     parent_name: str = "your parent",
     metric_fact: str = "routine observations",
     fallback_action: str = "Call to check in",
+    tier: int = 2,
+    has_evidence: bool = True,
 ) -> SafetyGuardResult:
     """Validates caregiver-facing draft.
 
@@ -83,6 +94,17 @@ def validate_caregiver_text(
     for pattern in FORBIDDEN_CERTAINTY:
         if re.search(pattern, text_lower):
             violations.append(f"Forbidden false certainty: {pattern}")
+
+    # 5. Alarm words above the tier, ungrounded events, ungrounded numbers
+    if tier < 3:
+        for pattern in ALARM_ABOVE_TIER:
+            if re.search(pattern, text_lower):
+                violations.append(f"Alarm word above tier: {pattern}")
+        for pattern in UNGROUNDED_EVENTS:
+            if re.search(pattern, text_lower):
+                violations.append(f"Ungrounded event claim: {pattern}")
+    if not has_evidence and re.search(r"\d", draft_text):
+        violations.append("Number with no evidence id")
 
     if violations:
         # Construct deterministic factual fallback

@@ -3,7 +3,7 @@ import type { Medicine } from "../../desk";
 import { ColumnChart, DotChart } from "./charts";
 import { UrgentReminders } from "./UrgentReminders";
 
-type Props = {
+export type Props = {
   demo: boolean;
   name: string;
   medicines: Medicine[];
@@ -13,7 +13,8 @@ type Props = {
 
 const moods: Mood[] = ["Good", "Okay", "Low"];
 
-export function DailyTab({ demo, name, medicines, onOpenReminders, onConfirmReminder }: Props) {
+// The static synthetic view. RoutineTab falls back to it when the demo cannot reach the API.
+export function StaticDemoRoutine({ demo, name, medicines, onOpenReminders, onConfirmReminder }: Props) {
   // Urgent reminders always come first on this tab.
   const urgent = (
     <UrgentReminders medicines={medicines} name={name} onOpen={onOpenReminders} onConfirm={onConfirmReminder} />

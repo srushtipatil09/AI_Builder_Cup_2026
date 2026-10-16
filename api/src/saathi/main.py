@@ -11,6 +11,7 @@ from saathi import __version__
 from saathi.config import load_settings
 from saathi.cost import MIN_INSTANCES, SESSION_CAP_SECONDS
 from saathi.households.routes import router as households_router
+from saathi.households.updates import router as updates_router
 from saathi.live.routes import router as sessions_router
 from saathi.demo.routes import router as demo_router
 
@@ -47,7 +48,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from saathi.accounts.routes import router as accounts_router
+from saathi.files.routes import link_router as file_links_router, router as files_router
+
+app.include_router(accounts_router)
+app.include_router(files_router)
+app.include_router(file_links_router)
 app.include_router(households_router)
+app.include_router(updates_router)
 app.include_router(sessions_router)
 app.include_router(demo_router)
 

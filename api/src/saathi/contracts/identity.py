@@ -13,6 +13,10 @@ class ActorContext(BaseModel):
     email: str = ""
     name: str = ""
     is_demo: bool = False
+    # True only when a Firebase ID token was verified for this request.
+    verified: bool = False
+    # A joined family code the caller presented (the parent's device has no account).
+    family_code: str = ""
 
 
 class HouseholdRecord(BaseModel):

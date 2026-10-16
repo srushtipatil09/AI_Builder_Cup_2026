@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from saathi.auth.firebase import get_current_actor
+from saathi.auth.firebase import add_member, ensure_household_access, get_current_actor, is_demo_household
 from saathi.contracts.desk import Desk, create_demo_desk
 from saathi.contracts.identity import ActorContext, FamilyLinkRecord, HouseholdRecord
 from saathi.providers.firestore import get_repository
@@ -56,10 +56,11 @@ def get_household_desk(
     household_id: str,
     actor: ActorContext = Depends(get_current_actor),
 ) -> Desk:
+    ensure_household_access(actor, household_id)
     repo = get_repository()
     desk = repo.get_desk(household_id)
     if not desk:
-        desk = create_demo_desk() if "demo" in household_id.lower() else Desk()
+        desk = create_demo_desk() if is_demo_household(household_id) else Desk()
         repo.save_desk(household_id, desk)
     return desk
 
@@ -70,6 +71,7 @@ def update_household_desk(
     desk: Desk,
     actor: ActorContext = Depends(get_current_actor),
 ) -> Desk:
+    ensure_household_access(actor, household_id)
     repo = get_repository()
     repo.save_desk(household_id, desk)
     return desk
@@ -82,6 +84,7 @@ def create_pairing_link(
     parent_name: str = "",
     actor: ActorContext = Depends(get_current_actor),
 ) -> FamilyLinkRecord:
+    ensure_household_access(actor, household_id)
     if household_id in ("demo", "demo-kamla-sharma"):
         return FamilyLinkRecord(
             code="KMR-4F7",
@@ -92,11 +95,26 @@ def create_pairing_link(
         )
 
     repo = get_repository()
-    return repo.create_family_code(
+    record = repo.create_family_code(
         household_id=household_id,
         caretaker_name=caretaker_name,
         parent_name=parent_name,
     )
+    repo.revoke_family_codes(household_id, keep=record.code)
+    return record
+
+
+@router.get("/households/{household_id}/pairing", response_model=Optional[FamilyLinkRecord])
+def current_pairing_link(
+    household_id: str,
+    actor: ActorContext = Depends(get_current_actor),
+) -> Optional[FamilyLinkRecord]:
+    """The household's current family code and whether the parent has joined with it."""
+    ensure_household_access(actor, household_id)
+    if household_id in ("demo", "demo-kamla-sharma"):
+        return None
+    codes = get_repository().household_family_codes(household_id)
+    return codes[0] if codes else None
 
 
 @router.get("/pair/{code}", response_model=FamilyLinkRecord)
@@ -121,7 +139,7 @@ def lookup_family_code(code: str) -> FamilyLinkRecord:
 
 
 @router.post("/pair", response_model=FamilyLinkRecord)
-def pair_with_family_code(body: PairRequest) -> FamilyLinkRecord:
+def pair_with_family_code(body: PairRequest, actor: ActorContext = Depends(get_current_actor)) -> FamilyLinkRecord:
     if body.code.upper().replace("-", "") == "KMR4F7":
         return FamilyLinkRecord(
             code="KMR-4F7",
@@ -140,6 +158,8 @@ def pair_with_family_code(body: PairRequest) -> FamilyLinkRecord:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Invalid or expired family code.",
         )
+    if actor.verified:
+        add_member(record.household_id, actor.uid)
     return record
 
 

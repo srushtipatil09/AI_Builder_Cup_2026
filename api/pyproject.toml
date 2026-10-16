@@ -14,9 +14,11 @@ dependencies = [
   "firebase-admin>=6.6",
   "google-cloud-bigquery>=3.27",
   "google-cloud-tasks>=2.18",
+  "google-cloud-storage>=2.18",
 ]
 
 [project.optional-dependencies]
+adk = ["google-adk>=1.0"]
 dev = ["httpx>=0.28", "pytest>=8.3"]
 
 [build-system]

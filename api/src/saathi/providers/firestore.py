@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 from google.api_core.exceptions import GoogleAPICallError
 
 from saathi.config import load_settings
@@ -44,6 +45,8 @@ class FirestoreRepository:
             "desks": {},
             "family_codes": {},
         }
+        # Generic documents by path ("households/h/sessions/s") when Firestore is unreachable.
+        self._docs: dict[str, dict] = {}
         self._use_fallback = False
         # Desks are read on every call start; keep them in memory for a short time.
         self._desk_cache: dict[str, tuple[float, Desk]] = {}
@@ -157,6 +160,35 @@ class FirestoreRepository:
         data = self._fallback_store["family_codes"].get(norm)
         return FamilyLinkRecord(**data) if data else None
 
+    def household_family_codes(self, household_id: str) -> list[FamilyLinkRecord]:
+        """Every code made for this household, newest first."""
+        client = self.client
+        rows: list[dict] = []
+        if client and not self._use_fallback:
+            try:
+                for doc in client.collection("family_codes").where(filter=FieldFilter("household_id", "==", household_id)).stream():
+                    rows.append(doc.to_dict() or {})
+            except GoogleAPICallError as exc:
+                logger.error("Firestore household_family_codes error: %s; falling back to in-memory", exc)
+                self._use_fallback = True
+        if not rows:
+            rows = [r for r in self._fallback_store["family_codes"].values() if r.get("household_id") == household_id]
+        records = [FamilyLinkRecord(**r) for r in rows]
+        return sorted(records, key=lambda r: r.created_at, reverse=True)
+
+    def revoke_family_codes(self, household_id: str, keep: str = "") -> None:
+        """A new code replaces the old ones, so a code the family stopped using cannot be used to join."""
+        for record in self.household_family_codes(household_id):
+            if record.code == keep:
+                continue
+            client = self.client
+            if client and not self._use_fallback:
+                try:
+                    client.collection("family_codes").document(record.code).delete()
+                except GoogleAPICallError as exc:
+                    logger.error("Firestore revoke_family_codes error: %s", exc)
+            self._fallback_store["family_codes"].pop(record.code, None)
+
     def mark_family_code_joined(self, code: str, joined_name: str) -> Optional[FamilyLinkRecord]:
         record = self.find_family_code(code)
         if not record:
@@ -173,6 +205,93 @@ class FirestoreRepository:
                 self._use_fallback = True
         self._fallback_store["family_codes"][record.code] = record.model_dump()
         return record
+
+
+    # Generic documents. Paths are "collection/doc/collection/doc...". Falls back to memory offline.
+    def doc_get(self, path: str) -> Optional[dict]:
+        client = self.client
+        if client and not self._use_fallback:
+            try:
+                doc = client.document(path).get()
+                return doc.to_dict() if doc.exists else None
+            except GoogleAPICallError as exc:
+                logger.error("Firestore doc_get %s: %s; falling back to in-memory", path, exc)
+                self._use_fallback = True
+        data = self._docs.get(path)
+        return dict(data) if data is not None else None
+
+    def doc_set(self, path: str, data: dict, merge: bool = True) -> None:
+        client = self.client
+        if client and not self._use_fallback:
+            try:
+                client.document(path).set(data, merge=merge)
+                return
+            except GoogleAPICallError as exc:
+                logger.error("Firestore doc_set %s: %s; falling back to in-memory", path, exc)
+                self._use_fallback = True
+        current = self._docs.get(path, {}) if merge else {}
+        self._docs[path] = {**current, **data}
+
+    def doc_delete(self, path: str) -> None:
+        client = self.client
+        if client and not self._use_fallback:
+            try:
+                client.document(path).delete()
+                return
+            except GoogleAPICallError as exc:
+                logger.error("Firestore doc_delete %s: %s", path, exc)
+                self._use_fallback = True
+        self._docs.pop(path, None)
+
+    def col_list(self, path: str, limit: int = 100) -> list[dict]:
+        """Documents of one collection, each with its id under "_id"."""
+        client = self.client
+        if client and not self._use_fallback:
+            try:
+                rows = []
+                for doc in client.collection(path).limit(limit).stream():
+                    row = doc.to_dict() or {}
+                    row["_id"] = doc.id
+                    rows.append(row)
+                return rows
+            except GoogleAPICallError as exc:
+                logger.error("Firestore col_list %s: %s; falling back to in-memory", path, exc)
+                self._use_fallback = True
+        prefix = path.rstrip("/") + "/"
+        rows = []
+        for key, value in self._docs.items():
+            if key.startswith(prefix) and "/" not in key[len(prefix):]:
+                rows.append({**value, "_id": key[len(prefix):]})
+        return rows[:limit]
+
+    def list_doc_ids(self, path: str) -> list[str]:
+        """Ids of every document in a collection, including ones that only have subcollections."""
+        client = self.client
+        if client and not self._use_fallback:
+            try:
+                return [ref.id for ref in client.collection(path).list_documents()]
+            except GoogleAPICallError as exc:
+                logger.error("Firestore list_doc_ids %s: %s; falling back to in-memory", path, exc)
+                self._use_fallback = True
+        prefix = path.rstrip("/") + "/"
+        ids = {key[len(prefix):].split("/", 1)[0] for key in self._docs if key.startswith(prefix)}
+        ids |= set(self._fallback_store["desks"].keys()) if path == "households" else set()
+        return sorted(ids)
+
+    def increment(self, path: str, field: str, amount: float) -> float:
+        """Add to a numeric field and return the new total."""
+        client = self.client
+        if client and not self._use_fallback:
+            try:
+                ref = client.document(path)
+                ref.set({field: firestore.Increment(amount)}, merge=True)
+                return float((ref.get().to_dict() or {}).get(field, amount))
+            except GoogleAPICallError as exc:
+                logger.error("Firestore increment %s: %s; falling back to in-memory", path, exc)
+                self._use_fallback = True
+        row = self._docs.setdefault(path, {})
+        row[field] = float(row.get(field, 0)) + amount
+        return row[field]
 
 
 # Global repository singleton

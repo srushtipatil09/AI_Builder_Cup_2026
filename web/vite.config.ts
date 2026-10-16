@@ -1,6 +1,9 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+// VITE_API_TARGET lets a second dev API (another port) serve this page without editing the config.
+const api = process.env.VITE_API_TARGET ?? "http://127.0.0.1:8080";
+
 export default defineConfig({
   plugins: [react()],
   envDir: "../",
@@ -11,9 +14,9 @@ export default defineConfig({
       ".trycloudflare.com",
     ],
     proxy: {
-      "/health": "http://127.0.0.1:8080",
+      "/health": api,
       "/api": {
-        target: "http://127.0.0.1:8080",
+        target: api,
         changeOrigin: true,
         ws: true,
       },
