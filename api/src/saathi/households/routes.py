@@ -56,13 +56,10 @@ def get_household_desk(
     household_id: str,
     actor: ActorContext = Depends(get_current_actor),
 ) -> Desk:
-    if household_id in ("demo", "demo-kamla-sharma") or actor.is_demo:
-        return create_demo_desk()
-
     repo = get_repository()
     desk = repo.get_desk(household_id)
     if not desk:
-        desk = Desk()
+        desk = create_demo_desk() if "demo" in household_id.lower() else Desk()
         repo.save_desk(household_id, desk)
     return desk
 
@@ -73,10 +70,6 @@ def update_household_desk(
     desk: Desk,
     actor: ActorContext = Depends(get_current_actor),
 ) -> Desk:
-    if household_id in ("demo", "demo-kamla-sharma") or actor.is_demo:
-        # In demo mode, return the updated desk without persisting to real household
-        return desk
-
     repo = get_repository()
     repo.save_desk(household_id, desk)
     return desk

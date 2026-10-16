@@ -28,10 +28,8 @@ export async function fetchDesk(householdId: string, isDemo = false): Promise<De
 }
 
 export async function saveDesk(householdId: string, desk: Desk, isDemo = false): Promise<Desk> {
-  if (isDemo) {
-    return desk;
-  }
-  const res = await fetch(`${BASE_URL}/households/${householdId}/desk`, {
+  const url = isDemo ? `${BASE_URL}/demo/desk` : `${BASE_URL}/households/${householdId}/desk`;
+  const res = await fetch(url, {
     method: "PUT",
     headers: getAuthHeaders(householdId),
     body: JSON.stringify(desk),

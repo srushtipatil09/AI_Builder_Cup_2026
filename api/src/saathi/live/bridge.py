@@ -198,3 +198,15 @@ class LiveBridgeSession:
                 })
             except Exception as exc:
                 logger.error("Failed to save session to Firestore: %s", exc)
+
+        # Trigger post-call intelligence pipeline (extraction, vector memory, memory cards)
+        if self.utterances:
+            try:
+                from saathi.worker import process_session, ProcessSessionRequest
+                process_session(ProcessSessionRequest(
+                    sessionId=self.session_id,
+                    householdId=self.household_id,
+                    utterances=self.utterances,
+                ))
+            except Exception as exc:
+                logger.warning("Post-session extraction pipeline failed (%s)", exc)
