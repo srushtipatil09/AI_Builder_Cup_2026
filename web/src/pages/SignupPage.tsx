@@ -8,6 +8,7 @@ import { authMessage, signInWithGoogle, signUpWithEmail } from "../lib/firebase"
 import { Field } from "./Field";
 import { AuthLayout } from "./AuthLayout";
 import { LanguageOptions } from "../lib/languages";
+import { useToast } from "../toast";
 
 const CONSENT_ERROR = "Tick the box to agree to what Saathi keeps.";
 
@@ -33,8 +34,8 @@ export function SignupPage() {
   const summaryRef = useRef<HTMLDivElement>(null);
   const [role, setRole] = useState<Role | null>(codeParam ? "parent" : null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [googleNote, setGoogleNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
   const [consent, setConsent] = useState(false);
 
   useEffect(() => {
@@ -44,7 +45,6 @@ export function SignupPage() {
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!role) return;
-    setGoogleNote("");
     const data = new FormData(event.currentTarget);
     const value = (key: string) => String(data.get(key) ?? "").trim();
     const name = value("name");
@@ -88,7 +88,6 @@ export function SignupPage() {
 
   async function onGoogle() {
     if (!role) return;
-    setGoogleNote("");
     if (!consent) {
       setErrors({ consent: CONSENT_ERROR });
       requestAnimationFrame(() => summaryRef.current?.focus());
@@ -113,7 +112,7 @@ export function SignupPage() {
       // Google gave a name and an email; the details step asks for the rest, then goes on to the join link if there is one.
       navigate(codeParam && role === "parent" ? `/details?then=/join/${codeParam}` : "/details");
     } catch (err) {
-      setGoogleNote(authMessage(err));
+      toast(authMessage(err), "bad");
       console.warn("Google sign-in failed", err);
     }
   }
@@ -265,11 +264,6 @@ export function SignupPage() {
               Continue with Google
             </button>
           </div>
-          {googleNote ? (
-            <p className="field-error" role="status">
-              {googleNote}
-            </p>
-          ) : null}
         </form>
       ) : null}
 

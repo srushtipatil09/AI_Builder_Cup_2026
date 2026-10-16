@@ -5,6 +5,7 @@ import type { UpdatesState } from "../../lib/useUpdates";
 import { StaticDemoRoutine, type Props } from "./DailyTab";
 import { ColumnChart, DotChart } from "./charts";
 import { UrgentReminders } from "./UrgentReminders";
+import { useToast } from "../../toast";
 
 type LiveProps = Props & {
   householdId: string;
@@ -37,8 +38,7 @@ export function RoutineTab(props: LiveProps) {
   const { demo, name, medicines, onOpenReminders, onConfirmReminder, householdId, state, conversationMemories } = props;
   const { updates, metrics, error, loadedAt, refresh } = state;
   const [busy, setBusy] = useState("");
-  const [note, setNote] = useState("");
-  const [pushNote, setPushNote] = useState("");
+  const toast = useToast();
   const who = name || "the parent";
   const seeded = useRef(false);
 
@@ -64,12 +64,11 @@ export function RoutineTab(props: LiveProps) {
 
   async function run(label: string, action: () => Promise<unknown>) {
     setBusy(label);
-    setNote("");
     try {
       await action();
       refresh();
     } catch (err) {
-      setNote(err instanceof Error ? err.message : "That did not work.");
+      toast(err instanceof Error ? err.message : "That did not work.", "bad");
     } finally {
       setBusy("");
     }
@@ -197,11 +196,13 @@ export function RoutineTab(props: LiveProps) {
           <button
             className="ghost"
             type="button"
-            onClick={() => void enableCaretakerPush(householdId).then((r) => setPushNote(pushMessage(r)))}
+            onClick={() =>
+              void enableCaretakerPush(householdId).then((r) => toast(pushMessage(r), r === "on" ? "ok" : r === "error" ? "bad" : "info"))
+            }
           >
             Notify me on this device
           </button>{" "}
-          <span className="alert-meta">{pushNote || "Alerts always show here. A push says only “New Saathi update”."}</span>
+          <span className="alert-meta">Alerts always show here. A push says only “New Saathi update”.</span>
         </p>
       </section>
 
@@ -375,7 +376,6 @@ export function RoutineTab(props: LiveProps) {
               </button>
             </li>
           </ul>
-          {note ? <p className="error">{note}</p> : null}
         </section>
       ) : null}
     </div>

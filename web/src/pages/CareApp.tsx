@@ -437,7 +437,7 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
 
         {active === "profile" ? (
           <>
-            <FamilyCard link={family.link} name={name} demo={demo} onCreate={() => void family.create()} error={family.error} busy={family.busy} />
+            <FamilyCard link={family.link} name={name} demo={demo} onCreate={() => void family.create()} busy={family.busy} />
             <ProfileTab key={version} desk={desk} setDesk={setDesk} author={author} photo={photoUrl} sync={sync} syncError={syncError} />
             <DocumentsCard
               householdId={householdId}
@@ -462,7 +462,7 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
             }
           /> : null}
         {active === "ask" ? <TellSaathiTab desk={desk} setDesk={setDesk} author={author} name={name} guideSlot={guideSlot} householdId={householdId} /> : null}
-        {active === "reminders" ? <MedicineTab desk={desk} setDesk={setDesk} name={name} author={author} sync={sync} syncError={syncError} /> : null}
+        {active === "reminders" ? <MedicineTab desk={desk} setDesk={setDesk} name={name} author={author} /> : null}
         {active === "contacts" ? <EmergencyTab desk={desk} setDesk={setDesk} name={name} householdId={householdId} /> : null}
       </main>
 

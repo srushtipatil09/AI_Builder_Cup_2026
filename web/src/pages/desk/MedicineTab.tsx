@@ -1,8 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useUndoable } from "./undo";
 import { DatePicker, TimePicker } from "./Pickers";
-import { SaveNote } from "../SyncStatus";
-import type { SyncState } from "../../desk";
+import { useToast } from "../../toast";
 import {
   formatClock,
   formatDate,
@@ -21,8 +20,6 @@ type Props = {
   setDesk: React.Dispatch<React.SetStateAction<Desk>>;
   name: string;
   author: string;
-  sync: SyncState;
-  syncError?: string;
 };
 
 type Draft = Omit<Medicine, "id" | "confirmedOn" | "confirmedBy"> & { kind: ReminderKind };
@@ -128,14 +125,14 @@ function ReminderFields({ value, onChange }: { value: Draft; onChange: (patch: P
   );
 }
 
-export function MedicineTab({ desk, setDesk, name, author, sync, syncError }: Props) {
+export function MedicineTab({ desk, setDesk, name, author }: Props) {
   const who = name || "the parent";
+  const toast = useToast();
   const [draft, setDraft] = useState<Draft>(empty);
   const [pending, setPending] = useState<Draft | null>(null);
   const [formKey, setFormKey] = useState(0);
   const [editing, setEditing] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Pick<Draft, "kind" | "schedule">>({ kind: "medicine", schedule: "Daily" });
-  const [added, setAdded] = useState("");
   // An edit is read back before it is saved, the same as a new reminder.
   const [editPending, setEditPending] = useState<Draft | null>(null);
   const [editValues, setEditValues] = useState<Draft | null>(null);
@@ -149,7 +146,6 @@ export function MedicineTab({ desk, setDesk, name, author, sync, syncError }: Pr
     const next = toDraft(new FormData(event.currentTarget));
     setDraft(next);
     setPending(next);
-    setAdded("");
   }
 
   // Step two: an explicit confirm saves it.
@@ -158,7 +154,7 @@ export function MedicineTab({ desk, setDesk, name, author, sync, syncError }: Pr
     const id = newId();
     setDesk((d) => ({ ...d, medicines: [...d.medicines, { id, ...pending }] }));
     highlight(id);
-    setAdded(`Saved: ${pending.name}.`);
+    toast(`Saved: ${pending.name}.`, "ok");
     setPending(null);
     setDraft({ ...empty, kind: pending.kind });
     setFormKey((k) => k + 1);
@@ -177,6 +173,7 @@ export function MedicineTab({ desk, setDesk, name, author, sync, syncError }: Pr
     setDesk((d) => ({ ...d, medicines: d.medicines.map((m) => (m.id === id ? { ...m, ...next } : m)) }));
     closeEdit();
     highlight(id);
+    toast(`Saved: ${next.name}.`, "ok");
   }
 
   function closeEdit() {
@@ -237,9 +234,6 @@ export function MedicineTab({ desk, setDesk, name, author, sync, syncError }: Pr
               <button className="primary" type="submit">
                 Review reminder
               </button>
-              <span role="status" className="saved">
-                {added}
-              </span>
             </div>
           </form>
         )}
@@ -355,7 +349,6 @@ export function MedicineTab({ desk, setDesk, name, author, sync, syncError }: Pr
         ) : (
           <p className="empty">No reminders yet.</p>
         )}
-        <SaveNote sync={sync} error={syncError} />
         <p className="note">Spoken reminders arrive when the voice connection is live.</p>
       </section>
     </div>

@@ -5670,6 +5670,82 @@ button.orb:disabled {
   text-overflow: ellipsis;
 }
 
+/* Notices for a save, a copy, or an upload. They replace the line that used to sit under a form. */
+.toast-slot {
+  position: fixed;
+  z-index: 45;
+  top: calc(16px + env(safe-area-inset-top));
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(360px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+@media (max-width: 1023px) {
+  .toast-slot {
+    top: calc(84px + env(safe-area-inset-top));
+    right: 16px;
+    left: 16px;
+    width: auto;
+  }
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 8px 12px 16px;
+  border-radius: 16px;
+  background: var(--ink);
+  color: #f4fbfa;
+  box-shadow: 0 12px 30px -12px rgb(0 0 0 / 0.5);
+  font-size: 1rem;
+  line-height: 1.35;
+  pointer-events: auto;
+  animation: toast-in 0.2s ease-out;
+}
+
+.toast-ok {
+  box-shadow: inset 4px 0 0 #9ddec0, 0 12px 30px -12px rgb(0 0 0 / 0.5);
+}
+
+.toast-bad {
+  box-shadow: inset 4px 0 0 #f0b4b4, 0 12px 30px -12px rgb(0 0 0 / 0.5);
+}
+
+.toast-info {
+  box-shadow: inset 4px 0 0 var(--marigold), 0 12px 30px -12px rgb(0 0 0 / 0.5);
+}
+
+.toast .text-link {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: var(--marigold);
+  font-weight: 700;
+  flex: none;
+}
+
+.toast .text-link:hover {
+  background: rgb(255 255 255 / 0.1);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}
+
 /* Time and date pickers: our own popups, since the browser's cannot be styled. */
 .picker {
   position: relative;

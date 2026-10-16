@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEven
 import { deleteFile, uploadFile, type FileCategory, type StoredFile } from "../../lib/api";
 import { useAppDispatch, useAppSelector } from "../../store";
 import { fileLinksForget, fileUrl, linkUsable, loadCategories, loadFileLink, loadFiles } from "../../store/reads";
+import { useToast } from "../../toast";
 
 type Props = {
   householdId: string;
@@ -86,14 +87,13 @@ type UploaderProps = {
 // One form for every kind of record: pick what it is, pick the file(s), upload. Each category used to repeat the same form.
 function Uploader({ categories, householdId, who, hasProfilePhoto, onUploaded }: UploaderProps) {
   const input = useRef<HTMLInputElement>(null);
+  const toast = useToast();
   const [categoryId, setCategoryId] = useState<string>(categories.find((c) => c.id === "prescriptions")?.id ?? categories[0].id);
   const [chosen, setChosen] = useState<File[]>([]);
   const [label, setLabel] = useState("");
   const [shared, setShared] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const [note, setNote] = useState("");
-  const [failed, setFailed] = useState(false);
 
   const category = categories.find((c) => c.id === categoryId) ?? categories[0];
   const single = category.id === "profile_photo";
@@ -103,14 +103,9 @@ function Uploader({ categories, householdId, who, hasProfilePhoto, onUploaded }:
     const all = Array.from(list ?? []);
     const files = all.filter((f) => (imagesOnly ? IMAGE_TYPES : ALL_TYPES).split(",").includes(f.type));
     setChosen(single ? files.slice(0, 1) : files);
-    setFailed(files.length < all.length);
-    setNote(
-      files.length < all.length
-        ? imagesOnly
-          ? "Only JPEG, PNG or WebP images are accepted here."
-          : "Only JPEG, PNG, WebP or PDF files are accepted."
-        : "",
-    );
+    if (files.length < all.length) {
+      toast(imagesOnly ? "Only JPEG, PNG or WebP images are accepted here." : "Only JPEG, PNG, WebP or PDF files are accepted.", "bad");
+    }
   }
 
   function onDrop(event: DragEvent<HTMLLabelElement>) {
@@ -122,12 +117,10 @@ function Uploader({ categories, householdId, who, hasProfilePhoto, onUploaded }:
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!chosen.length) {
-      setFailed(true);
-      setNote("Choose a file first.");
+      toast("Choose a file first.", "bad");
       return;
     }
     setBusy(true);
-    setNote("");
     let saved = 0;
     try {
       for (const file of chosen) {
@@ -136,16 +129,14 @@ function Uploader({ categories, householdId, who, hasProfilePhoto, onUploaded }:
         saved += 1;
       }
       await onUploaded();
-      setFailed(false);
-      setNote(single ? "Photo saved." : saved === 1 ? "Saved." : `${saved} files saved.`);
+      toast(single ? "Photo saved." : saved === 1 ? "Saved." : `${saved} files saved.`, "ok");
       setChosen([]);
       setLabel("");
       setShared(false);
       if (input.current) input.current.value = "";
     } catch (err) {
       if (saved) await onUploaded();
-      setFailed(true);
-      setNote(`${saved ? `${saved} saved, then it stopped. ` : ""}${err instanceof Error ? err.message : "The upload did not finish. Try again."}`);
+      toast(`${saved ? `${saved} saved, then it stopped. ` : ""}${err instanceof Error ? err.message : "The upload did not finish. Try again."}`, "bad");
     } finally {
       setBusy(false);
     }
@@ -168,7 +159,6 @@ function Uploader({ categories, householdId, who, hasProfilePhoto, onUploaded }:
                 onClick={() => {
                   setCategoryId(c.id);
                   setChosen([]);
-                  setNote("");
                   if (input.current) input.current.value = "";
                 }}
               >
@@ -251,12 +241,6 @@ function Uploader({ categories, householdId, who, hasProfilePhoto, onUploaded }:
           </button>
         </div>
       </div>
-
-      {note ? (
-        <p className={failed ? "field-error" : "note"} role={failed ? "alert" : "status"}>
-          {note}
-        </p>
-      ) : null}
     </form>
   );
 }
@@ -271,8 +255,8 @@ type LibraryProps = {
 // Everything saved so far, in one list. A filter row narrows it to one kind of record.
 function Library({ categories, files, householdId, onChanged }: LibraryProps) {
   const dispatch = useAppDispatch();
+  const toast = useToast();
   const [filter, setFilter] = useState("all");
-  const [note, setNote] = useState("");
   const titles = Object.fromEntries(categories.map((c) => [c.id, c.title]));
   const counts = categories.map((c) => ({ c, n: files.filter((f) => f.category === c.id).length })).filter((x) => x.n > 0);
   const active = filter !== "all" && !counts.some((x) => x.c.id === filter) ? "all" : filter;
@@ -283,7 +267,7 @@ function Library({ categories, files, householdId, onChanged }: LibraryProps) {
       const url = await dispatch(fileUrl(householdId, file.id));
       window.open(url, "_blank", "noopener");
     } catch {
-      setNote("Could not open that file. Try again.");
+      toast("Could not open that file. Try again.", "bad");
     }
   }
 
@@ -293,9 +277,9 @@ function Library({ categories, files, householdId, onChanged }: LibraryProps) {
       await deleteFile(householdId, file.id);
       dispatch(fileLinksForget([file.id]));
       await onChanged();
-      setNote("Deleted.");
+      toast("Deleted.", "ok");
     } catch {
-      setNote("Could not delete that file. Try again.");
+      toast("Could not delete that file. Try again.", "bad");
     }
   }
 
@@ -343,11 +327,6 @@ function Library({ categories, files, householdId, onChanged }: LibraryProps) {
           </ul>
         </>
       )}
-      {note ? (
-        <p className="note" role="status">
-          {note}
-        </p>
-      ) : null}
     </div>
   );
 }

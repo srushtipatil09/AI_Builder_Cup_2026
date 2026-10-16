@@ -59,22 +59,3 @@ export function SyncStatus({ sync, syncedAt, error, onRetry, demo }: Props) {
     </p>
   );
 }
-
-// The note under a form. It follows the same save state as the header, so it never claims more than happened.
-export function SaveNote({ sync, error }: { sync: SyncState; error?: string }) {
-  if (sync === "loading") return null;
-  if (sync === "offline") {
-    return (
-      <p className="note note-bad" role="alert">
-        {(error ?? "").includes("paused")
-          ? "Not saved yet: saving is paused for a moment. The change is kept on this device."
-          : "Not saved yet. The change is kept on this device and will be sent again."}
-      </p>
-    );
-  }
-  return (
-    <p className="note" role="status" aria-live="polite">
-      {sync === "saving" ? "Saving to the cloud…" : "Saved to the cloud."}
-    </p>
-  );
-}

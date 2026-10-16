@@ -12,6 +12,7 @@ import { InstallSheet } from "./InstallSheet";
 import { NearbyPanel, type NearbyCard } from "./NearbyPanel";
 import { telHref } from "./NearbyList";
 import { locationChoice, locationMessage, shareLocationOnce } from "../lib/location";
+import { useToast } from "../toast";
 
 type Props = { demo: boolean; name?: string; householdId?: string };
 
@@ -19,9 +20,9 @@ type Message = { id: string; role: "parent" | "assistant"; text: string };
 
 export function CompanionChat({ demo, name, householdId }: Props) {
   const dispatch = useAppDispatch();
+  const toast = useToast();
   const [status, setStatus] = useState<"idle" | "connecting" | "listening" | "thinking" | "speaking" | "paused">("idle");
   const [messages, setMessages] = useState<Message[]>([]);
-  const [alertNote, setAlertNote] = useState<string>("");
   const [chatError, setChatError] = useState<string>("");
   const socketRef = useRef<WebSocket | null>(null);
   const recognitionRef = useRef<any>(null);
@@ -39,14 +40,12 @@ export function CompanionChat({ demo, name, householdId }: Props) {
   const inviteRef = useRef<{ id: string; reason: string } | null>(null);
   const statusRef = useRef(status);
   statusRef.current = status;
-  const [pushNote, setPushNote] = useState("");
   // Contact family asks once before it sends, so a stray tap does not alarm anyone.
   const [confirmFamily, setConfirmFamily] = useState(false);
   // Nearby help: the sheet, a card the voice assistant found, and a Call button it offered. The parent taps; nothing dials itself.
   const [nearbyOpen, setNearbyOpen] = useState(false);
   const [nearbyCard, setNearbyCard] = useState<NearbyCard>(null);
   const [callOffer, setCallOffer] = useState<{ name: string; phone: string } | null>(null);
-  const [locationNote, setLocationNote] = useState("");
   const [locationAsked, setLocationAsked] = useState(() => locationChoice(householdId ?? ""));
   // The household's language: from the account first, then from the server once the line is open.
   const [language, setLanguage] = useState(() => languageFor(demo ? "Hindi" : readSession()?.language));
@@ -242,12 +241,13 @@ export function CompanionChat({ demo, name, householdId }: Props) {
         } else if (data.type === "turn_complete") {
           openRoleRef.current = null;
         } else if (data.type === "alert") {
-          setAlertNote("Your family has been told. If you need help right now, call local emergency services.");
+          toast("Your family has been told. If you need help right now, call local emergency services.", "info");
         } else if (data.type === "impact_label") {
-          setAlertNote(
+          toast(
             data.category === "possible_impact"
               ? "A loud sound was heard. Saathi is asking if you are all right."
               : "An ordinary sound was heard (a door, a spoon, the TV). No alert was raised.",
+            "info",
           );
         } else if (data.type === "error") {
           setChatError(
@@ -270,7 +270,7 @@ export function CompanionChat({ demo, name, householdId }: Props) {
           setMessages((prev) => [...prev, { id: Math.random().toString(), role: "assistant", text: data.text }]);
           speakText(data.text);
           if (data.distress) {
-            setAlertNote("Saathi is checking on you. If nobody answers, your family is told.");
+            toast("Saathi is checking on you. If nobody answers, your family is told.", "info");
           }
         }
       } catch (err) {
@@ -348,16 +348,16 @@ export function CompanionChat({ demo, name, householdId }: Props) {
     setMessages((prev) => [...prev, { id: Math.random().toString(), role: "assistant", text }]);
     speakText(text);
     contactFamily(hhRef.current)
-      .then(() => setAlertNote("Your family has been told you want to talk."))
-      .catch(() => setAlertNote("Could not reach your family just now. Please call them."));
+      .then(() => toast("Your family has been told you want to talk.", "ok"))
+      .catch(() => toast("Could not reach your family just now. Please call them.", "bad"));
   }
 
   function sendDemoClip(clip: "thud" | "door", note: string) {
-    setAlertNote(note);
+    toast(note, "info");
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ type: "demo_clip", clip }));
     } else {
-      setAlertNote("Tap Talk first so Saathi is connected, then play the clip.");
+      toast("Tap Talk first so Saathi is connected, then play the clip.", "bad");
     }
   }
 
@@ -371,10 +371,10 @@ export function CompanionChat({ demo, name, householdId }: Props) {
 
   // Labeled simulation: the same invitation the scheduler sends, picked up by this open chat.
   function simulateMorningInactivity() {
-    setAlertNote("Simulated. This build does not read a Nest sensor.");
+    toast("Simulated. This build does not read a Nest sensor.", "info");
     simulateInactivity()
       .then(() => void startFromInvite())
-      .catch(() => setAlertNote("Could not reach Saathi to simulate inactivity. Try again."));
+      .catch(() => toast("Could not reach Saathi to simulate inactivity. Try again.", "bad"));
   }
 
   // The open chat tells the server it is ready, and picks up a check-in Saathi has started.
@@ -539,11 +539,6 @@ export function CompanionChat({ demo, name, householdId }: Props) {
             {chatError}
           </p>
         ) : null}
-        {alertNote ? (
-          <p className="chat-note" role="status">
-            {alertNote}
-          </p>
-        ) : null}
       </div>
 
       <article className="captions" aria-label="Captions">
@@ -622,14 +617,13 @@ export function CompanionChat({ demo, name, householdId }: Props) {
             onClick={() =>
               void shareLocationOnce(hhRef.current).then((r) => {
                 if (r === "saved") dispatch(nearbyForget(hhRef.current));
-                setLocationNote(locationMessage(r));
+                toast(locationMessage(r), r === "saved" ? "ok" : r === "error" ? "bad" : "info");
                 setLocationAsked(locationChoice(hhRef.current));
               })
             }
           >
             Allow location once, so Saathi can find help near you
           </button>
-          {locationNote ? <span> {locationNote}</span> : null}
         </p>
       ) : null}
       {nearbyOpen ? <NearbyPanel householdId={hhRef.current} demo={demo} card={nearbyCard} language={language} onClose={() => setNearbyOpen(false)} /> : null}
@@ -639,11 +633,10 @@ export function CompanionChat({ demo, name, householdId }: Props) {
           <button
             className="text-link"
             type="button"
-            onClick={() => void enableParentPush(hhRef.current).then((r) => setPushNote(pushMessage(r)))}
+            onClick={() => void enableParentPush(hhRef.current).then((r) => toast(pushMessage(r), r === "on" ? "ok" : r === "error" ? "bad" : "info"))}
           >
             Get a reminder when it is time to talk
           </button>
-          {pushNote ? <span> {pushNote}</span> : null}
         </p>
       ) : null}
 

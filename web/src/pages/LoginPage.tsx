@@ -6,14 +6,15 @@ import { authMessage, signInWithEmail, signInWithGoogle } from "../lib/firebase"
 import { fetchMe } from "../lib/api";
 import { Field } from "./Field";
 import { AuthLayout } from "./AuthLayout";
+import { useToast } from "../toast";
 
 export function LoginPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const summaryRef = useRef<HTMLDivElement>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [googleNote, setGoogleNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     document.title = "Log in · Saathi";
@@ -21,7 +22,6 @@ export function LoginPage() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setGoogleNote("");
     const data = new FormData(event.currentTarget);
     const email = String(data.get("email") ?? "").trim();
     const password = String(data.get("password") ?? "");
@@ -70,13 +70,12 @@ export function LoginPage() {
   }
 
   async function onGoogle() {
-    setGoogleNote("");
     setBusy(true);
     try {
       const user = await signInWithGoogle();
       await finish(user.email, user.name, true);
     } catch (err) {
-      setGoogleNote(authMessage(err));
+      toast(authMessage(err), "bad");
       console.warn("Google sign-in failed", err);
     } finally {
       setBusy(false);
@@ -143,11 +142,6 @@ export function LoginPage() {
             Continue with Google
           </button>
         </div>
-        {googleNote ? (
-          <p className="field-error" role="status">
-            {googleNote}
-          </p>
-        ) : null}
       </form>
       <p className="auth-switch">
         No account yet? <Link to={params.get("next")?.startsWith("/join/") ? `/signup?code=${params.get("next")!.slice(6)}` : "/signup"}>Create account</Link>

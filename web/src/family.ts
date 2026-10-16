@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useToast } from "./toast";
 
 // A family code pairs the caretaker's desk with the parent's phone.
 // This build keeps codes in the browser; a code made on one device is only recognised on another
@@ -74,8 +75,8 @@ function forHousehold(household: string): FamilyLink | null {
 // The caretaker's family code. The browser keeps the last answer and reads the server once when that answer is stale.
 export function useFamilyLink(household: string, parentName: string, caretakerName: string, enabled = true) {
   const dispatch = useAppDispatch();
+  const toast = useToast();
   const cached = useAppSelector((state) => (household ? state.care.byId[household]?.family ?? null : null));
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const link = cached ?? forHousehold(household);
 
@@ -86,7 +87,6 @@ export function useFamilyLink(household: string, parentName: string, caretakerNa
 
   async function create() {
     setBusy(true);
-    setError("");
     try {
       const remote = await dispatch(createFamilyLink({ householdId: household, caretakerName, parentName })).unwrap();
       const store = load();
@@ -95,13 +95,13 @@ export function useFamilyLink(household: string, parentName: string, caretakerNa
       save(store);
     } catch {
       // A code made only on this device would not work on the parent's phone, so none is made.
-      setError("Could not make a family code. Check the connection and try again.");
+      toast("Could not make a family code. Check the connection and try again.", "bad");
     } finally {
       setBusy(false);
     }
   }
 
-  return { link, create, error, busy };
+  return { link, create, busy };
 }
 
 // The household a family code belongs to: this browser's record first, then the API.

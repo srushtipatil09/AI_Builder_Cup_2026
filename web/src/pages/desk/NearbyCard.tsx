@@ -3,6 +3,7 @@ import { deleteLocation, type NearbyKind } from "../../lib/api";
 import { useAppDispatch, useAppSelector } from "../../store";
 import { loadNearby, nearbyAllFromCache, nearbyForget, nearbyFromCache } from "../../store/reads";
 import { NearbyList } from "../NearbyList";
+import { useToast } from "../../toast";
 
 const sections: { id: NearbyKind; title: string }[] = [
   { id: "hospital", title: "Hospitals" },
@@ -23,7 +24,7 @@ export function NearbyCard({ householdId, name, city: deskCity = "", contactsKey
   const data = nearbyAllFromCache(record) ?? nearbyFromCache(record, "people");
   const [error, setError] = useState(false);
   const [open, setOpen] = useState<NearbyKind>("hospital");
-  const [note, setNote] = useState("");
+  const toast = useToast();
 
   const load = useCallback(
     (tab: "all" | "people" = "all", force = false) => {
@@ -58,11 +59,11 @@ export function NearbyCard({ householdId, name, city: deskCity = "", contactsKey
   async function forget() {
     try {
       await deleteLocation(householdId);
-      setNote("The saved position is deleted.");
+      toast("The saved position is deleted.", "ok");
       dispatch(nearbyForget(householdId));
       load("all", true);
     } catch {
-      setNote("Could not delete it. Try again.");
+      toast("Could not delete it. Try again.", "bad");
     }
   }
 
@@ -87,11 +88,6 @@ export function NearbyCard({ householdId, name, city: deskCity = "", contactsKey
           </button>
         ) : null}
       </p>
-      {note ? (
-        <p className="note" role="status">
-          {note}
-        </p>
-      ) : null}
 
       {error ? (
         <p className="field-error" role="alert">

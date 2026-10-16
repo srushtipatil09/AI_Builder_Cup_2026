@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { FamilyMember } from "../../lib/api";
 import { LanguageOptions } from "../../lib/languages";
+import { useToast } from "../../toast";
 
 type Props = {
   members: FamilyMember[];
@@ -38,6 +39,7 @@ function status(m: FamilyMember) {
 
 // Every family member this caretaker looks after: switch between their desks, see who needs attention, add one.
 export function FamilySwitcher({ members, activeId, demo, loadError, onSwitch, onAdd, onClose }: Props) {
+  const toast = useToast();
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -69,7 +71,7 @@ export function FamilySwitcher({ members, activeId, demo, loadError, onSwitch, o
     try {
       await onAdd(name, String(data.get("member-language") ?? "Hindi"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not add that family member. Try again.");
+      toast(err instanceof Error ? err.message : "Could not add that family member. Try again.", "bad");
     } finally {
       setBusy(false);
     }

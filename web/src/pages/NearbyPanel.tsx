@@ -5,6 +5,7 @@ import { LANGUAGES, type Language, type PhoneWords } from "../lib/languages";
 import { useAppDispatch, useAppSelector } from "../store";
 import { OPEN_NOW_FRESH_MS, loadNearby, nearbyForget, nearbyFromCache, placesAgeMs, type NearbyTab } from "../store/reads";
 import { NearbyList } from "./NearbyList";
+import { useToast } from "../toast";
 
 const tabs: { id: NearbyTab; word: keyof PhoneWords; en: string }[] = [
   { id: "hospital", word: "hospital", en: "Hospitals" },
@@ -35,8 +36,8 @@ export function NearbyPanel({ householdId, onClose, card, demo = false, language
   const initial = tabs.find((t) => t.id === card?.kind)?.id ?? "hospital";
   const [tab, setTab] = useState<NearbyTab>(initial);
   const [failed, setFailed] = useState(false);
-  const [note, setNote] = useState("");
   const [asking, setAsking] = useState(false);
+  const toast = useToast();
   const record = useAppSelector((state) => state.reads.nearby[householdId]);
   const data = nearbyFromCache(record, tab);
   const late = isLateNow();
@@ -66,7 +67,7 @@ export function NearbyPanel({ householdId, onClose, card, demo = false, language
   async function allowLocation() {
     setAsking(true);
     const result = await shareLocationOnce(householdId);
-    setNote(locationMessage(result));
+    toast(locationMessage(result), result === "saved" ? "ok" : result === "error" ? "bad" : "info");
     setAsking(false);
     if (result === "saved") {
       dispatch(nearbyForget(householdId));
@@ -138,11 +139,6 @@ export function NearbyPanel({ householdId, onClose, card, demo = false, language
               {asking ? "Asking…" : "Allow location"}
             </button>
           </div>
-        ) : null}
-        {note ? (
-          <p className="note" role="status">
-            {note}
-          </p>
         ) : null}
 
         {tab === "park" && late ? (
