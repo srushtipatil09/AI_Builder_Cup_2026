@@ -5,6 +5,9 @@ import { completeSession, contactFamily, invitationEvent, nextInvitation, sendHe
 import { enableParentPush, pushMessage } from "../lib/push";
 import { readSession } from "../session";
 import { InstallSheet } from "./InstallSheet";
+import { NearbyPanel, type NearbyCard } from "./NearbyPanel";
+import { telHref } from "./NearbyList";
+import { locationChoice, locationMessage, shareLocationOnce } from "../lib/location";
 
 type Props = { demo: boolean; name?: string; householdId?: string };
 
@@ -34,6 +37,12 @@ export function CompanionChat({ demo, name, householdId }: Props) {
   const [pushNote, setPushNote] = useState("");
   // Contact family asks once before it sends, so a stray tap does not alarm anyone.
   const [confirmFamily, setConfirmFamily] = useState(false);
+  // Nearby help: the sheet, a card the voice assistant found, and a Call button it offered. The parent taps; nothing dials itself.
+  const [nearbyOpen, setNearbyOpen] = useState(false);
+  const [nearbyCard, setNearbyCard] = useState<NearbyCard>(null);
+  const [callOffer, setCallOffer] = useState<{ name: string; phone: string } | null>(null);
+  const [locationNote, setLocationNote] = useState("");
+  const [locationAsked, setLocationAsked] = useState(() => locationChoice(householdId ?? ""));
 
   useEffect(() => {
     // Open the line while the page loads, so the greeting starts right after Talk is tapped.
@@ -234,6 +243,11 @@ export function CompanionChat({ demo, name, householdId }: Props) {
               ? "Saathi could not confirm who you are. Log in again, then tap Talk."
               : "Saathi ran into a problem. Tap Talk to try again.",
           );
+        } else if (data.type === "nearby") {
+          setNearbyCard({ kind: data.kind, items: data.items ?? [], positionShared: !!data.positionShared });
+          setNearbyOpen(true);
+        } else if (data.type === "call_offer") {
+          setCallOffer({ name: String(data.name ?? ""), phone: String(data.phone ?? "") });
         } else if (data.type === "ended") {
           stopSession();
         } else if (data.type === "thinking") {
@@ -534,6 +548,43 @@ export function CompanionChat({ demo, name, householdId }: Props) {
           </ul>
         </details>
       ) : null}
+
+      {callOffer ? (
+        <div className="call-offer" role="alert">
+          <p>
+            <span lang="hi">कॉल करें:</span> <strong>{callOffer.name}</strong>
+          </p>
+          <a className="primary call-offer-button" href={telHref(callOffer.phone)}>
+            <span lang="hi">कॉल करें</span> <span className="control-en">Call {callOffer.name}</span>
+          </a>
+          <button className="text-link" type="button" onClick={() => setCallOffer(null)}>
+            <span lang="hi">नहीं</span> <span className="control-en">Not now</span>
+          </button>
+        </div>
+      ) : null}
+
+      <button className="ghost nearby-open" type="button" onClick={() => { setNearbyCard(null); setNearbyOpen(true); }}>
+        <span lang="hi" className="control-hi">आस-पास मदद</span>
+        <span className="control-en">Nearby help: hospital, park, people, food</span>
+      </button>
+      {!demo && hhRef.current && !locationAsked ? (
+        <p className="push-opt">
+          <button
+            className="text-link"
+            type="button"
+            onClick={() =>
+              void shareLocationOnce(hhRef.current).then((r) => {
+                setLocationNote(locationMessage(r));
+                setLocationAsked(locationChoice(hhRef.current));
+              })
+            }
+          >
+            Allow location once, so Saathi can find help near you
+          </button>
+          {locationNote ? <span> {locationNote}</span> : null}
+        </p>
+      ) : null}
+      {nearbyOpen ? <NearbyPanel householdId={hhRef.current} demo={demo} card={nearbyCard} onClose={() => setNearbyOpen(false)} /> : null}
 
       {hhRef.current ? (
         <p className="push-opt">

@@ -48,7 +48,7 @@ export function LoginPage() {
   }
 
   // The role and names belong to the account, so they come from its stored profile.
-  async function finish(email: string, displayName: string) {
+  async function finish(email: string, displayName: string, google = false) {
     let session: HouseholdSession | null = null;
     try {
       const profile = await fetchMe();
@@ -62,6 +62,8 @@ export function LoginPage() {
       caretakerName: displayName.split(" ")[0] || displayName,
       parentName: "",
       language: "Hindi",
+      // A Google account with no profile yet is a new caretaker: ask for the parent's name and city once.
+      detailsPending: google || undefined,
     };
     writeSession(session);
     navigate(nextPath(params, session));
@@ -72,7 +74,7 @@ export function LoginPage() {
     setBusy(true);
     try {
       const user = await signInWithGoogle();
-      await finish(user.email, user.name);
+      await finish(user.email, user.name, true);
     } catch (err) {
       setGoogleNote(authMessage(err));
       console.warn("Google sign-in failed", err);

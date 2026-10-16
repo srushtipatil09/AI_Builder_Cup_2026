@@ -13,6 +13,7 @@ This is a prototype policy. It is not a DPDP or HIPAA certification.
 | Account profile | Firestore `users/<uid>`, written by `GET` and `PUT /api/v1/me` | Until the account is deleted. Role, names, language, and family code |
 | Photos and documents | Cloud Storage, with metadata in Firestore `households/<id>/files` | Until deleted. Prescriptions, reports, bills, medicine strips, identity proofs, and insurance are always private |
 | Private file links | Signed by the API with `LINK_SIGNING_SECRET`, kept in Secret Manager (`saathi-link-signing`) | 30 minutes. A tampered or expired link is refused |
+| Parent's position | Firestore `households/<id>/place/current`, rounded to about 100 m, saved once after the parent taps Allow location; never saved for the shared demo | Until the family taps Forget the position, or it is replaced. Used only to find hospitals, parks, food and medical shops near the parent. The city on the care desk is the fallback |
 | Consent | Firestore `users/<uid>.consentAt`, set when Create account is submitted with the agreement box ticked | Until the account is deleted |
 | Demo visitor counter | Firestore `_usage/<day>/demo_visitors/<hash>` | A daily, salted hash of the caller's address, not the address. Counts demo voice sessions (three a day) |
 

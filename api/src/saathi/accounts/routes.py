@@ -39,6 +39,10 @@ class AccountProfile(BaseModel):
     language: str = "Hindi"
     familyCode: Optional[str] = None
     joinSkipped: bool = False
+    # Set when the account was made with Google and the person has not yet given their details (city, parent name).
+    detailsPending: bool = False
+    # The parent's city, used until their phone shares a position.
+    city: str = ""
     # When the account holder agreed, at signup, to what Saathi stores (docs/PRIVACY.md). ISO time.
     consentAt: Optional[str] = None
     # Family members added after the first. Written by POST /me/households only.

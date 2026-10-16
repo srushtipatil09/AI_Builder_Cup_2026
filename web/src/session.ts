@@ -16,6 +16,10 @@ export type HouseholdSession = {
   familyCode?: string;
   // The parent chose "Skip for now" on the join step; the chat still offers Join family.
   joinSkipped?: boolean;
+  // A Google sign-up asks for the parent's name and city once, after login.
+  detailsPending?: boolean;
+  // The parent's city, until their phone shares a position.
+  city?: string;
   // When the account holder agreed to what Saathi stores, at signup.
   consentAt?: string;
   // A caretaker can look after several family members. Empty means the first one, named by the email.
@@ -54,6 +58,8 @@ export function readSession(): HouseholdSession | null {
       language: parsed.language || "Hindi",
       familyCode: parsed.familyCode,
       joinSkipped: parsed.joinSkipped,
+      detailsPending: parsed.detailsPending,
+      city: parsed.city,
     };
   } catch {
     return null;
@@ -71,6 +77,8 @@ export function writeSession(session: HouseholdSession) {
     language: session.language,
     familyCode: session.familyCode ?? null,
     joinSkipped: session.joinSkipped ?? false,
+    detailsPending: session.detailsPending ?? false,
+    city: session.city ?? "",
     consentAt: session.consentAt ?? null,
     activeHousehold: session.activeHousehold ?? null,
   }).catch(() => {
@@ -101,6 +109,7 @@ export function needsJoin(session: HouseholdSession): boolean {
 
 // Where to go straight after signing up or logging in.
 export function afterSignIn(session: HouseholdSession): string {
+  if (session.detailsPending) return "/details";
   return needsJoin(session) ? "/join" : homePath(session);
 }
 
@@ -144,6 +153,8 @@ export function fromProfile(p: AccountProfile): HouseholdSession {
     language: p.language || "Hindi",
     familyCode: p.familyCode ?? undefined,
     joinSkipped: p.joinSkipped || undefined,
+    detailsPending: p.detailsPending || undefined,
+    city: p.city || undefined,
     consentAt: p.consentAt ?? undefined,
     activeHousehold: p.activeHousehold ?? undefined,
   };

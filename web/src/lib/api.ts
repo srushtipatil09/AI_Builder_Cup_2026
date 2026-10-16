@@ -247,6 +247,51 @@ export const confirmAsk = (id: string, proposal: Proposal) =>
   postJson<{ status: string; desk: Desk }>(`${hh(id)}/ask/confirm`, id, { proposal_id: proposal.id, hash: proposal.hash });
 export const cancelAsk = (id: string, proposalId: string) => postJson(`${hh(id)}/ask/${encodeURIComponent(proposalId)}/cancel`, id);
 
+// ---- Nearby help ----
+
+export type NearbyKind = "hospital" | "pharmacy" | "park" | "restaurant";
+
+export type NearbyItem = {
+  name: string;
+  address?: string;
+  phone?: string;
+  distanceM?: number | null;
+  openNow?: boolean | null;
+  lat?: number | null;
+  lng?: number | null;
+  relation?: string;
+  nearby?: boolean;
+  note?: string;
+};
+
+export type Nearby = {
+  location: { set: boolean; updatedAt: string; city: string };
+  helplines: NearbyItem[];
+  people: NearbyItem[];
+  places: Partial<Record<NearbyKind, NearbyItem[]>>;
+  available: boolean;
+};
+
+export const fetchNearby = (id: string, kind: NearbyKind | "people" | "helplines" | "all" = "all") =>
+  getJson<Nearby>(`${hh(id)}/nearby?kind=${kind}`, id);
+
+export async function saveLocation(id: string, lat: number, lng: number): Promise<void> {
+  await postJsonMethod("PUT", `${hh(id)}/location`, id, { lat, lng });
+}
+
+export async function deleteLocation(id: string): Promise<void> {
+  await postJsonMethod("DELETE", `${hh(id)}/location`, id);
+}
+
+async function postJsonMethod(method: string, path: string, householdId: string, body?: unknown): Promise<void> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method,
+    headers: await getAuthHeaders(householdId),
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${path}: ${res.status}`);
+}
+
 // ---- The parent's open chat ----
 
 export type Invitation = { id: string; reason: string; attempt: number };
@@ -277,6 +322,9 @@ export type AccountProfile = {
   language: string;
   familyCode?: string | null;
   joinSkipped?: boolean;
+  // A Google sign-up that still owes its details (the parent's name, city).
+  detailsPending?: boolean;
+  city?: string;
   consentAt?: string | null;
   // The household the care desk shows. The server keeps it only if it is one of this account's households.
   activeHousehold?: string | null;

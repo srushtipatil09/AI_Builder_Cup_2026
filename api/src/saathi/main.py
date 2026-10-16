@@ -52,12 +52,14 @@ app.add_middleware(
 
 from saathi.accounts.routes import router as accounts_router
 from saathi.files.routes import link_router as file_links_router, router as files_router
+from saathi.nearby.routes import router as nearby_router
 
 app.include_router(accounts_router)
 app.include_router(files_router)
 app.include_router(file_links_router)
 app.include_router(households_router)
 app.include_router(updates_router)
+app.include_router(nearby_router)
 app.include_router(sessions_router)
 app.include_router(demo_router)
 

@@ -106,10 +106,11 @@ export function SignupPage() {
       const first = user.name.split(" ")[0] || user.name;
       const session: HouseholdSession =
         role === "caretaker"
-          ? { email: user.email, role, caretakerName: first, parentName: "", language: "Hindi", consentAt: new Date().toISOString() }
-          : { email: user.email, role, caretakerName: "", parentName: first, language: "Hindi", consentAt: new Date().toISOString() };
+          ? { email: user.email, role, caretakerName: first, parentName: "", language: "Hindi", consentAt: new Date().toISOString(), detailsPending: true }
+          : { email: user.email, role, caretakerName: "", parentName: first, language: "Hindi", consentAt: new Date().toISOString(), detailsPending: true };
       writeSession(session);
-      navigate(role === "parent" && codeParam ? `/join/${codeParam}` : afterSignIn(session));
+      // Google gave a name and an email; the details step asks for the rest, then goes on to the join link if there is one.
+      navigate(codeParam && role === "parent" ? `/details?then=/join/${codeParam}` : "/details");
     } catch (err) {
       setGoogleNote(authMessage(err));
       console.warn("Google sign-in failed", err);

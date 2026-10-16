@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { useUndoable } from "./undo";
 import { newId, phoneProblem, type Contact, type Desk } from "../../desk";
+import { NearbyCard } from "./NearbyCard";
 
 type Props = {
   desk: Desk;
   setDesk: React.Dispatch<React.SetStateAction<Desk>>;
   name: string;
+  householdId: string;
 };
 
 type Fields = Omit<Contact, "id">;
@@ -56,7 +58,7 @@ function ContactFields({ value, who, error }: { value?: Fields; who: string; err
   );
 }
 
-export function EmergencyTab({ desk, setDesk, name }: Props) {
+export function EmergencyTab({ desk, setDesk, name, householdId }: Props) {
   const undoable = useUndoable();
   const who = name || "the parent";
   const [addError, setAddError] = useState("");
@@ -187,6 +189,8 @@ export function EmergencyTab({ desk, setDesk, name }: Props) {
           </div>
         </form>
       </section>
+
+      {householdId ? <NearbyCard householdId={householdId} name={name} /> : null}
 
       <section className="panel panel-wide" aria-labelledby="helpline">
         <h2 id="helpline">Someone to talk to</h2>

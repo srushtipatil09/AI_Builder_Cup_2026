@@ -25,6 +25,8 @@ class LiveContext:
     declined_topics: list[str] = field(default_factory=list)
     family_thread: str = ""
     family_person: str = ""
+    # The parent allowed their position to be used for nearby help.
+    place_shared: bool = False
 
     def chars(self) -> int:
         return sum(len(x) for x in self.summaries) + sum(len(x) for x in self.declined_topics) + len(self.family_thread)
@@ -79,6 +81,9 @@ def build_live_context(household_id: str, desk: Desk) -> LiveContext:
             declined.extend(o.get("declined_topics") or [])
         ctx.declined_topics = list(dict.fromkeys(declined))[:10]
         ctx.family_thread, ctx.family_person = _family_thread(household_id, desk)
+        from saathi.nearby.service import get_spot
+
+        ctx.place_shared = get_spot(household_id) is not None
     except Exception as exc:
         logger.warning("Live context could not be built (%s); continuing with the desk only", exc)
     return ctx

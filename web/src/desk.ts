@@ -178,9 +178,9 @@ export function demoDesk(): Desk {
   };
 }
 
-export function blankDesk(preferredName: string, language: string): Desk {
+export function blankDesk(preferredName: string, language: string, city = ""): Desk {
   return {
-    profile: { preferredName, language, city: "", persona: "Saathi", checkIn: "", quietHours: "" },
+    profile: { preferredName, language, city, persona: "Saathi", checkIn: "", quietHours: "" },
     people: [],
     memories: [],
     medicines: [],

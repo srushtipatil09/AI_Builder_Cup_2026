@@ -28,6 +28,7 @@ type DeskProps = Props & {
   householdId: string;
   seedName: string;
   seedLanguage: string;
+  seedCity: string;
   memberCount: number;
   accountPhoto: string | null;
   onOpenMembers: () => void;
@@ -162,6 +163,7 @@ export function CareApp({ demo, onLeave }: Props) {
         householdId={activeId}
         seedName={current?.parentName ?? session?.parentName ?? ""}
         seedLanguage={current?.language ?? session?.language ?? "Hindi"}
+        seedCity={current?.city || session?.city || ""}
         memberCount={list.length}
         accountPhoto={demo ? null : accountPhoto}
         onOpenMembers={() => {
@@ -184,12 +186,12 @@ export function CareApp({ demo, onLeave }: Props) {
   );
 }
 
-function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage, memberCount, accountPhoto, onOpenMembers }: DeskProps) {
+function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage, seedCity, memberCount, accountPhoto, onOpenMembers }: DeskProps) {
   const health = useHealth();
   const caretaker = demo ? "Rahul" : session?.caretakerName || "";
   const storageKey = demo ? "saathi.desk.demo.v2" : `saathi.desk.${householdId || "local"}`;
   const { desk, setDesk, sync, syncedAt, syncError, retry } = useDesk(storageKey, () =>
-    demo ? demoDesk() : blankDesk(seedName, seedLanguage),
+    demo ? demoDesk() : blankDesk(seedName, seedLanguage, seedCity),
   );
   const [active, setActive] = useState<TabId>(readTab);
   // Forms use default values, so a reset remounts them.
@@ -450,7 +452,7 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
           /> : null}
         {active === "ask" ? <TellSaathiTab desk={desk} setDesk={setDesk} author={author} name={name} guideSlot={guideSlot} householdId={householdId} /> : null}
         {active === "reminders" ? <MedicineTab desk={desk} setDesk={setDesk} name={name} author={author} /> : null}
-        {active === "contacts" ? <EmergencyTab desk={desk} setDesk={setDesk} name={name} /> : null}
+        {active === "contacts" ? <EmergencyTab desk={desk} setDesk={setDesk} name={name} householdId={householdId} /> : null}
       </main>
 
       {active === "ask" ? (
