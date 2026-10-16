@@ -1,0 +1,55 @@
+{
+  "passed": 30,
+  "total": 30,
+  "groups": {
+    "correction": {
+      "passed": 2,
+      "total": 2
+    },
+    "declined": {
+      "passed": 1,
+      "total": 1
+    },
+    "discomfort": {
+      "passed": 1,
+      "total": 1
+    },
+    "family": {
+      "passed": 3,
+      "total": 3
+    },
+    "fasting": {
+      "passed": 2,
+      "total": 2
+    },
+    "hypothetical": {
+      "passed": 2,
+      "total": 2
+    },
+    "illness": {
+      "passed": 2,
+      "total": 2
+    },
+    "meal": {
+      "passed": 2,
+      "total": 2
+    },
+    "mood": {
+      "passed": 2,
+      "total": 2
+    },
+    "negation": {
+      "passed": 6,
+      "total": 6
+    },
+    "someone_else": {
+      "passed": 5,
+      "total": 5
+    },
+    "unknown": {
+      "passed": 2,
+      "total": 2
+    }
+  },
+  "failures": []
+}
