@@ -4,12 +4,33 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from saathi.contracts.desk import create_demo_desk
+from saathi.contracts.desk import Desk, create_demo_desk
+from saathi.providers.firestore import get_repository
 
 router = APIRouter(prefix="/api/v1/demo", tags=["demo"])
 
 # Demo logical clock state (scoped to demo household only)
 _demo_offset_seconds: int = 0
+
+
+@router.get("/desk", response_model=Desk)
+def get_demo_desk() -> Desk:
+    """Returns the persistent demo Care Desk from Firestore, seeded if missing."""
+    repo = get_repository()
+    desk = repo.get_desk("demo-kamla-sharma")
+    if not desk:
+        desk = create_demo_desk()
+        repo.save_desk("demo-kamla-sharma", desk)
+    return desk
+
+
+@router.put("/desk", response_model=Desk)
+def update_demo_desk(desk: Desk) -> Desk:
+    """Saves updates to the demo Care Desk in live Firestore."""
+    repo = get_repository()
+    repo.save_desk("demo-kamla-sharma", desk)
+    return desk
+
 
 
 class AdvanceClockRequest(BaseModel):
