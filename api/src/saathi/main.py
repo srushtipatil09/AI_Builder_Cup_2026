@@ -6,6 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from saathi import __version__
 from saathi.config import load_settings
 from saathi.cost import MIN_INSTANCES, SESSION_CAP_SECONDS
+from saathi.households.routes import router as households_router
+from saathi.live.routes import router as sessions_router
+from saathi.demo.routes import router as demo_router
 
 settings = load_settings()
 app = FastAPI(title="Saathi API", version=__version__)
@@ -16,6 +19,13 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+app.include_router(households_router)
+app.include_router(sessions_router)
+app.include_router(demo_router)
+
+
+
 
 
 @app.get("/health")
