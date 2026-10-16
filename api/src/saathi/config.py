@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     firebase_project_id: str | None = None
     api_base_url: str = "http://localhost:8080"
     web_origin: str = "http://localhost:5173"
+    # More browser origins allowed by CORS, comma separated. The Firebase Hosting domains of the project
+    # (<project>.web.app, <project>.firebaseapp.com) and localhost are always allowed.
+    cors_extra_origins: str = ""
     demo_enabled: bool = True
     app_module: str = "main:app"
     extract_model: str = "gemini-2.5-flash"
@@ -48,6 +51,16 @@ class Settings(BaseSettings):
     # Require a verified Firebase identity (or a joined family code) for every non-demo household.
     # Off by default: email and password accounts do not yet have a Firebase identity.
     require_household_auth: bool = False
+
+
+def cors_origins(settings: Settings) -> list[str]:
+    """Exact origins the browser may call the API from, with credentials."""
+    origins = [settings.web_origin, "http://localhost:5173", "http://127.0.0.1:5173"]
+    project = settings.firebase_project_id or settings.google_cloud_project
+    if project:
+        origins += [f"https://{project}.web.app", f"https://{project}.firebaseapp.com"]
+    origins += [o.strip() for o in settings.cors_extra_origins.split(",") if o.strip()]
+    return [o.rstrip("/") for o in dict.fromkeys(origins) if o]
 
 
 def load_settings() -> Settings:

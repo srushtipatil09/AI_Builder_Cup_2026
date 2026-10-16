@@ -20,6 +20,11 @@ def _access(actor: ActorContext, household_id: str) -> None:
     ensure_household_access(actor, household_id)
 
 
+def _phone_access(actor: ActorContext, household_id: str) -> None:
+    """The parent's phone may use its joined family code here."""
+    ensure_household_access(actor, household_id, allow_family_code=True)
+
+
 def _clean(row: dict) -> dict:
     return {k: v for k, v in row.items() if k != "_id" and k != "embedding"}
 
@@ -128,7 +133,7 @@ def cancel_ask(household_id: str, proposal_id: str, actor: ActorContext = Depend
 @router.post("/heartbeat")
 def heartbeat(household_id: str, actor: ActorContext = Depends(get_current_actor)) -> dict:
     """The open, visible chat says it is ready. A closed app sends nothing."""
-    _access(actor, household_id)
+    _phone_access(actor, household_id)
     from saathi.scheduling.service import record_heartbeat
 
     record_heartbeat(household_id)
@@ -138,7 +143,7 @@ def heartbeat(household_id: str, actor: ActorContext = Depends(get_current_actor
 @router.get("/invitation")
 def next_invitation(household_id: str, actor: ActorContext = Depends(get_current_actor)) -> dict:
     """The check-in the open chat should play now, or none."""
-    _access(actor, household_id)
+    _phone_access(actor, household_id)
     from saathi.scheduling.service import claim_due_invitation
 
     return {"invitation": claim_due_invitation(household_id)}
@@ -154,7 +159,7 @@ def invitation_event(
     actor: ActorContext = Depends(get_current_actor),
 ) -> dict:
     """played, responded, snoozed (counts as a response), or device_unavailable."""
-    _access(actor, household_id)
+    _phone_access(actor, household_id)
     from saathi.scheduling.service import mark_invitation
 
     return mark_invitation(household_id, invitation_id, event, body.reason)
@@ -163,7 +168,7 @@ def invitation_event(
 @router.post("/contact-family")
 def contact_family(household_id: str, actor: ActorContext = Depends(get_current_actor)) -> dict:
     """The parent pressed Contact family. Level 3: the caregiver is told now, with no analytics in the way."""
-    _access(actor, household_id)
+    _phone_access(actor, household_id)
     from saathi.notify import raise_alert
 
     desk = get_repository().get_desk(household_id)

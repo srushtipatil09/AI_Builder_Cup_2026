@@ -56,7 +56,7 @@ def get_household_desk(
     household_id: str,
     actor: ActorContext = Depends(get_current_actor),
 ) -> Desk:
-    ensure_household_access(actor, household_id)
+    ensure_household_access(actor, household_id, allow_family_code=True)
     repo = get_repository()
     desk = repo.get_desk(household_id)
     if not desk:

@@ -112,14 +112,16 @@ def test_household_access_rules() -> None:
     rec = repo.create_family_code("hh-test-access")
     repo.mark_family_code_joined(rec.code, "Kamla")
     parent = ActorContext(uid="anonymous", household_id="hh-test-access", role="parent", family_code=rec.code)
-    assert has_household_access(parent, "hh-test-access")[0] is True
+    assert has_household_access(parent, "hh-test-access", allow_family_code=True)[0] is True
     assert has_household_access(parent, "hh-test-someone-else")[0] is True  # legacy mode, flag off
     from saathi.config import load_settings
     import saathi.auth.firebase as fb
     fb.load_settings = lambda: type("S", (), {"require_household_auth": True})()
     try:
-        assert has_household_access(parent, "hh-test-someone-else")[0] is False
-        assert has_household_access(parent, "hh-test-access")[0] is True
+        assert has_household_access(parent, "hh-test-someone-else", allow_family_code=True)[0] is False
+        assert has_household_access(parent, "hh-test-access", allow_family_code=True)[0] is True
+        # Off the phone routes the code opens nothing: files, pairing, desk writes.
+        assert has_household_access(parent, "hh-test-access")[0] is False
     finally:
         fb.load_settings = load_settings
 
