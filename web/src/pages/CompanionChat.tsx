@@ -6,7 +6,7 @@ type Props = { demo: boolean; name?: string };
 type Message = { id: string; role: "parent" | "assistant"; text: string };
 
 export function CompanionChat({ demo, name }: Props) {
-  const [status, setStatus] = useState<"idle" | "connecting" | "listening" | "speaking" | "paused">("idle");
+  const [status, setStatus] = useState<"idle" | "connecting" | "listening" | "thinking" | "speaking" | "paused">("idle");
   const [messages, setMessages] = useState<Message[]>([]);
   const [alertNote, setAlertNote] = useState<string>("");
   const socketRef = useRef<WebSocket | null>(null);
@@ -90,6 +90,8 @@ export function CompanionChat({ demo, name }: Props) {
             : `Namaste${name ? ` ${name}` : ""}, aaj aapka din kaisa raha?`;
           setMessages([{ id: "init", role: "assistant", text: greeting }]);
           speakText(greeting);
+        } else if (data.type === "thinking") {
+          setStatus("thinking");
         } else if (data.type === "transcript") {
           setMessages((prev) => [...prev, { id: Math.random().toString(), role: "assistant", text: data.text }]);
           speakText(data.text);
@@ -113,6 +115,7 @@ export function CompanionChat({ demo, name }: Props) {
   }
 
   function handleUserUtterance(text: string) {
+    setStatus("thinking");
     setMessages((prev) => [...prev, { id: Math.random().toString(), role: "parent", text }]);
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ type: "user_transcript", text }));
@@ -183,7 +186,7 @@ export function CompanionChat({ demo, name }: Props) {
   return (
     <section className="chat-screen" aria-labelledby="chat-title">
       <div className="companion">
-        <div className={`orb ${status === "listening" ? "orb-listening" : status === "speaking" ? "orb-speaking" : ""}`} aria-hidden="true">
+        <div className={`orb ${status === "listening" ? "orb-listening" : status === "speaking" ? "orb-speaking" : status === "thinking" ? "orb-thinking" : ""}`} aria-hidden="true">
           <span lang="hi">सा</span>
         </div>
         <h1 id="chat-title">Talk</h1>
@@ -194,6 +197,7 @@ export function CompanionChat({ demo, name }: Props) {
           {status === "idle" && "Not connected yet. Tap Talk once so the browser can connect and use audio."}
           {status === "connecting" && "Connecting to Saathi Live..."}
           {status === "listening" && "Listening... Speak in Hindi or English."}
+          {status === "thinking" && "Saathi is thinking..."}
           {status === "speaking" && "Saathi is speaking..."}
           {status === "paused" && "Session paused."}
         </p>

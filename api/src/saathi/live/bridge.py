@@ -19,6 +19,19 @@ from saathi.providers.firestore import get_repository
 
 logger = logging.getLogger(__name__)
 
+_shared_genai_client: Optional[genai.Client] = None
+
+
+def get_shared_genai_client() -> Optional[genai.Client]:
+    """Maintain a pre-warmed Google GenAI client to eliminate per-call connection overhead."""
+    global _shared_genai_client
+    if _shared_genai_client is None:
+        try:
+            _shared_genai_client = genai.Client()
+        except Exception as exc:
+            logger.warning("Could not initialize Google GenAI Client (%s); fallback to simulated live session", exc)
+    return _shared_genai_client
+
 
 class LiveBridgeSession:
     def __init__(
@@ -50,11 +63,7 @@ class LiveBridgeSession:
             "sessionCapSeconds": SESSION_CAP_SECONDS,
         })
 
-        client = None
-        try:
-            client = genai.Client()
-        except Exception as exc:
-            logger.warning("Could not initialize Google GenAI Client (%s); fallback to simulated live session", exc)
+        client = get_shared_genai_client()
 
         # Loop until session cap or client disconnect
         try:
@@ -140,17 +149,23 @@ class LiveBridgeSession:
             self._save_session()
 
     async def _generate_response(self, client: Optional[genai.Client], user_text: str, system_prompt: str) -> str:
-        """Generate response via Gemini or fallback."""
+        """Generate response via Gemini Flash with zero thinking delay."""
         if client:
             try:
-                response = client.models.generate_content(
-                    model=self.settings.extract_model or "gemini-2.5-flash",
-                    contents=user_text,
-                    config=types.GenerateContentConfig(
-                        system_instruction=system_prompt,
-                        temperature=0.7,
-                        max_output_tokens=150,
+                # Use client.aio for non-blocking asynchronous call
+                # Set thinking_budget=0 to eliminate the 5-7s internal reasoning delay in Gemini 2.5
+                response = await asyncio.wait_for(
+                    client.aio.models.generate_content(
+                        model=self.settings.extract_model or "gemini-2.5-flash",
+                        contents=user_text,
+                        config=types.GenerateContentConfig(
+                            system_instruction=system_prompt,
+                            temperature=0.7,
+                            thinking_config=types.ThinkingConfig(thinking_budget=0),
+                            max_output_tokens=75,
+                        ),
                     ),
+                    timeout=4.5,
                 )
                 if response and response.text:
                     return response.text.strip()

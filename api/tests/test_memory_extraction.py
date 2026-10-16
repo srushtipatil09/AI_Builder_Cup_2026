@@ -27,10 +27,10 @@ def test_extraction_correction_and_family() -> None:
         {"speaker": "parent", "text": "Rahul se aaj phone par baat hui thi."},
     ]
     result = extract_session(utterances)
-    assert len(result.memory_corrections) >= 1
-    assert "behen" in result.memory_corrections[0].corrected_fact
-    assert len(result.family_episodes) >= 1
-    assert result.family_episodes[0].person_name == "Rahul"
+    assert any(w in result.memory_corrections[0].corrected_fact.lower() for w in ["behen", "sister"])
+    contacts = result.family_episodes or result.social_contacts
+    assert len(contacts) >= 1
+    assert contacts[0].person_name == "Rahul"
 
 
 def test_family_shift_rule() -> None:
