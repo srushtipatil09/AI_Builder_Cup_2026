@@ -1,8 +1,8 @@
 # Deploy Saathi.
 #
-# Two projects, on purpose:
-#   saathi-511717  Cloud Run API + worker, Artifact Registry, Cloud Tasks, media bucket
-#   saathi-5afcf   Firebase Hosting, Auth, and the Firestore database the API uses
+# Cloud project and Firebase project come from .env (GOOGLE_CLOUD_PROJECT, FIREBASE_PROJECT_ID).
+# Cloud Run, Artifact Registry, and Cloud Tasks use the Cloud project.
+# Hosting, Auth, and Firestore use the Firebase project.
 #
 # The image is built with Cloud Build from api/Dockerfile and pushed to
 # us-central1-docker.pkg.dev/saathi-511717/saathi/api. One image, two services:
@@ -39,9 +39,6 @@ if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
 }
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$ServiceAccount = "backend-dev@$GcpProject.iam.gserviceaccount.com"
-$Image = "$Region-docker.pkg.dev/$GcpProject/saathi/api:$Tag"
-$HostingUrl = "https://$FirebaseProject.web.app"
 $SigningSecret = "saathi-link-signing"
 
 function Find-Cmd {
@@ -133,6 +130,15 @@ function Get-RunUrl {
 $Gcloud = Find-Gcloud
 $Npm = Find-Cmd "npm"
 $DotEnv = Read-DotEnv (Join-Path $Root ".env")
+if (-not $PSBoundParameters.ContainsKey("GcpProject")) {
+    $GcpProject = Env-Or $DotEnv "GOOGLE_CLOUD_PROJECT" $GcpProject
+}
+if (-not $PSBoundParameters.ContainsKey("FirebaseProject")) {
+    $FirebaseProject = Env-Or $DotEnv "FIREBASE_PROJECT_ID" $FirebaseProject
+}
+$ServiceAccount = "backend-dev@$GcpProject.iam.gserviceaccount.com"
+$Image = "$Region-docker.pkg.dev/$GcpProject/saathi/api:$Tag"
+$HostingUrl = "https://$FirebaseProject.web.app"
 
 Write-Host ""
 Write-Host "Saathi deploy"

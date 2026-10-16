@@ -666,7 +666,7 @@ class LiveBridgeSession:
         return lang.listening
 
     def _save_session(self) -> None:
-        """Persist the session with its transcript. The post-call pipeline starts from /complete."""
+        """Persist the session with its transcript, then make sure the post-call pipeline runs on it."""
         elapsed = round(time.monotonic() - self.start_time, 1)
         if not self.household_id:
             # A parent who has not joined a family yet: the talk is not stored anywhere.
@@ -674,6 +674,9 @@ class LiveBridgeSession:
                 record_live_minutes(elapsed if self.utterances else 0.0)
             except Exception as exc:
                 logger.warning("Could not record Live minutes (%s)", exc)
+            return
+        if not self.utterances:
+            # The page opens a line early so the greeting is quick; a line nobody spoke on is not a conversation.
             return
         repo = get_repository()
         now = datetime.now(timezone.utc).isoformat()
@@ -691,18 +694,17 @@ class LiveBridgeSession:
         except Exception as exc:
             logger.warning("Could not record Live minutes (%s)", exc)
 
-        # The browser normally calls /complete, which starts the pipeline. If it never does (a closed tab),
-        # start it here after a grace period. The pipeline is idempotent per session id.
-        if self.utterances:
-            import threading
+        # The transcript is saved now, so the pipeline can run. /complete may have started it already and found no
+        # transcript yet ("awaiting_transcript"), or never been called (a text-only talk, a closed tab). Starting
+        # it here covers both; the pipeline is idempotent per session id. This runs at once, not on a timer: Cloud
+        # Run stops giving this instance CPU soon after the socket closes.
+        # Only a talk where the parent said something is summarised for the family.
+        if any(u.get("speaker") == "parent" for u in self.utterances):
+            row = repo.doc_get(f"households/{self.household_id}/sessions/{self.session_id}") or {}
+            if row.get("pipeline_status") in (None, "awaiting_transcript"):
+                from saathi.taskqueue import enqueue_post_call
 
-            def late_start() -> None:
-                row = repo.doc_get(f"households/{self.household_id}/sessions/{self.session_id}") or {}
-                if not row.get("pipeline_status"):
-                    from saathi.taskqueue import enqueue_post_call
-
-                    enqueue_post_call(self.household_id, self.session_id)
-
-            timer = threading.Timer(30.0, late_start)
-            timer.daemon = True
-            timer.start()
+                try:
+                    enqueue_post_call(self.household_id, self.session_id, stage="transcript")
+                except Exception as exc:
+                    logger.warning("Could not start the post-call pipeline for %s (%s)", self.session_id, exc)

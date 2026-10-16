@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// Care desk records. Until Firestore writes land, they are kept in this browser only.
+// Care desk records. Each edit is saved to Firestore through the store (store/care.ts); this browser keeps a copy.
 
 export type Profile = {
   preferredName: string;

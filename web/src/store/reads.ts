@@ -30,6 +30,8 @@ const PEOPLE_FRESH_MS = 30 * 60 * 1000;
 const HELPLINES_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
 const CATEGORIES_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
 const FILES_FRESH_MS = 10 * 60 * 1000;
+// The shared demo's files can be changed by anyone trying it.
+const DEMO_FILES_FRESH_MS = 60 * 1000;
 const MEMBERS_FRESH_MS = 10 * 60 * 1000;
 // Private file links stop working after 30 minutes; one is reused until 5 minutes before that.
 const LINK_DEFAULT_MS = 30 * 60 * 1000;
@@ -184,7 +186,8 @@ export const loadFiles = createAsyncThunk(
     condition: ({ householdId, force }, { getState }) => {
       if (!householdId) return false;
       const hit = (getState() as ReadsRoot).reads.files[householdId];
-      if (!force && hit && fresh(hit.at, FILES_FRESH_MS)) return false;
+      const limit = householdId.startsWith("demo-") ? DEMO_FILES_FRESH_MS : FILES_FRESH_MS;
+      if (!force && hit && fresh(hit.at, limit)) return false;
       return claim(`files:${householdId}`);
     },
   },

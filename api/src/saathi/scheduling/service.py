@@ -89,7 +89,9 @@ def send_fcm_notification(fcm_token: str, title: str, body: str) -> bool:
             logger.warning("FCM dispatch failed (%s)", exc)
             return False
 
-    return True
+    # No Firebase project configured: nothing was sent, so do not count it as sent.
+    logger.warning("FCM not configured; push '%s' was not sent", body)
+    return False
 
 
 def in_quiet_hours(hhmm: str, quiet: str) -> bool:

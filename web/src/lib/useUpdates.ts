@@ -2,6 +2,7 @@ import { useCallback, useEffect } from "react";
 import type { Metrics, Updates } from "./api";
 import { loadCareSnapshot } from "../store/care";
 import { useAppDispatch, useAppSelector } from "../store";
+import { POLL_MS } from "../store/storage";
 
 export type UpdatesState = {
   updates: Updates | null;
@@ -21,6 +22,21 @@ export function useUpdates(householdId: string, enabled = true): UpdatesState {
   useEffect(() => {
     if (!enabled || !householdId) return;
     void dispatch(loadCareSnapshot({ householdId, demo }));
+  }, [demo, dispatch, enabled, householdId]);
+
+  // While the desk is open and visible it asks again every minute, and at once when the tab comes back into view.
+  // That is how a conversation the parent just had, or an edit by another caretaker, reaches this screen.
+  useEffect(() => {
+    if (!enabled || !householdId) return;
+    const poll = () => {
+      if (document.visibilityState === "visible") void dispatch(loadCareSnapshot({ householdId, demo, maxAgeMs: POLL_MS - 5000 }));
+    };
+    const timer = window.setInterval(poll, POLL_MS);
+    document.addEventListener("visibilitychange", poll);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", poll);
+    };
   }, [demo, dispatch, enabled, householdId]);
 
   const refresh = useCallback(() => {

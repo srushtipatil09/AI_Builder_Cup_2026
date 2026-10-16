@@ -3,12 +3,17 @@ import { useUndoable } from "./undo";
 import { TimePicker } from "./Pickers";
 import { newId, parseQuiet, type Desk, type Profile } from "../../desk";
 import { LanguageOptions } from "../../lib/languages";
+import type { SyncState } from "../../desk";
+import { SaveNote } from "../SyncStatus";
 
 type Props = {
   desk: Desk;
   setDesk: React.Dispatch<React.SetStateAction<Desk>>;
   author: string;
   photo?: string | null;
+  // Where the desk's last change is: saving, saved to Firestore, or only on this device.
+  sync: SyncState;
+  syncError?: string;
 };
 
 function formatWhen(iso: string) {
@@ -19,9 +24,9 @@ function text(data: FormData, key: string) {
   return String(data.get(key) ?? "").trim();
 }
 
-export function ProfileTab({ desk, setDesk, author, photo }: Props) {
+export function ProfileTab({ desk, setDesk, author, photo, sync, syncError }: Props) {
   const undoable = useUndoable();
-  const [saved, setSaved] = useState("");
+  const [saved, setSaved] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [editingPerson, setEditingPerson] = useState<string | null>(null);
   const [editingMemory, setEditingMemory] = useState<string | null>(null);
@@ -49,7 +54,7 @@ export function ProfileTab({ desk, setDesk, author, photo }: Props) {
     };
     setDesk((d) => ({ ...d, profile }));
     setProfileError("");
-    setSaved("Saved in this browser.");
+    setSaved(true);
   }
 
   function addPerson(event: FormEvent<HTMLFormElement>) {
@@ -102,7 +107,7 @@ export function ProfileTab({ desk, setDesk, author, photo }: Props) {
         <h2 id="person-title">This person</h2>
         <p className="panel-lede">How Saathi greets them, and when it checks in.</p>
         {photo ? <img className="person-portrait" src={photo} alt={p.preferredName || "Profile photo"} width={864} height={1152} /> : null}
-        <form className="form-grid" onSubmit={saveProfile} onChange={() => setSaved("")}>
+        <form className="form-grid" onSubmit={saveProfile} onChange={() => setSaved(false)}>
           <label className="field">
             Preferred name
             <input name="preferredName" defaultValue={p.preferredName} required autoComplete="off" />
@@ -146,9 +151,7 @@ export function ProfileTab({ desk, setDesk, author, photo }: Props) {
             <button className="primary" type="submit">
               Save
             </button>
-            <span role="status" className="saved">
-              {saved}
-            </span>
+            {saved ? <SaveNote sync={sync} error={syncError} /> : null}
           </div>
         </form>
       </section>

@@ -3,7 +3,7 @@ import type { Desk, Medicine } from "../desk";
 import { createPairingLink, fetchDesk, fetchMetrics, fetchPairing, fetchUpdates, pausedForMs, saveDesk } from "../lib/api";
 import { clearSession } from "../session";
 import type { SyncState } from "../desk";
-import { isFresh, loadCareCache, saveCareCache, type CareRecord } from "./storage";
+import { DEMO_FRESH_MS, FRESH_MS, isFresh, loadCareCache, saveCareCache, type CareRecord } from "./storage";
 
 type Row = CareRecord & {
   loaded: boolean;
@@ -63,14 +63,17 @@ function mergeDesk(base: Desk, server: Desk): { desk: Desk; dirty: boolean } {
   };
 }
 
-type LoadArg = { householdId: string; demo: boolean; seed?: Desk; force?: boolean };
+// maxAgeMs: how old a copy may be and still be used (the poll passes a little under its interval).
+type LoadArg = { householdId: string; demo: boolean; seed?: Desk; force?: boolean; maxAgeMs?: number };
+
+const freshLimit = (demo: boolean, maxAgeMs?: number) => maxAgeMs ?? (demo ? DEMO_FRESH_MS : FRESH_MS);
 
 export const loadCareSnapshot = createAsyncThunk(
   "care/loadSnapshot",
   async ({ householdId, demo, force }: LoadArg, { getState, rejectWithValue }) => {
     // A forced refresh is for the numbers a demo action or a call just changed. A fresh desk is not read again.
     const row = (getState() as { care: CareState }).care.byId[householdId];
-    const keepDesk = Boolean(force && row?.desk && !row.dirty && isFresh(row.readAt));
+    const keepDesk = Boolean(force && row?.desk && !row.dirty && isFresh(row.readAt, Date.now(), freshLimit(demo)));
     try {
       const [desk, updates, metrics] = await Promise.all([
         keepDesk ? Promise.resolve(null) : fetchDesk(householdId, demo),
@@ -90,10 +93,10 @@ export const loadCareSnapshot = createAsyncThunk(
     }
   },
   {
-    condition: ({ householdId, force }, { getState }) => {
+    condition: ({ householdId, demo, force, maxAgeMs }, { getState }) => {
       if (!householdId || householdId === "local" || pausedForMs() > 0 || readsInFlight.has(householdId)) return false;
       const row = (getState() as { care: CareState }).care.byId[householdId];
-      if (!force && row?.desk && isFresh(row.readAt)) return false;
+      if (!force && row?.desk && isFresh(row.readAt, Date.now(), freshLimit(demo, maxAgeMs))) return false;
       readsInFlight.add(householdId);
       return true;
     },
@@ -190,6 +193,8 @@ const careSlice = createSlice({
       row.desk = action.payload.desk;
       row.loaded = true;
       row.dirty = true;
+      // The save goes out after a short pause; until it lands the change is "saving", not "saved".
+      if (row.sync !== "offline") row.sync = "saving";
       row.error = "";
       persist(state.byId);
     },

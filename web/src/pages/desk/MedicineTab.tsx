@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { useUndoable } from "./undo";
 import { DatePicker, TimePicker } from "./Pickers";
+import { SaveNote } from "../SyncStatus";
+import type { SyncState } from "../../desk";
 import {
   formatClock,
   formatDate,
@@ -19,6 +21,8 @@ type Props = {
   setDesk: React.Dispatch<React.SetStateAction<Desk>>;
   name: string;
   author: string;
+  sync: SyncState;
+  syncError?: string;
 };
 
 type Draft = Omit<Medicine, "id" | "confirmedOn" | "confirmedBy"> & { kind: ReminderKind };
@@ -124,7 +128,7 @@ function ReminderFields({ value, onChange }: { value: Draft; onChange: (patch: P
   );
 }
 
-export function MedicineTab({ desk, setDesk, name, author }: Props) {
+export function MedicineTab({ desk, setDesk, name, author, sync, syncError }: Props) {
   const who = name || "the parent";
   const [draft, setDraft] = useState<Draft>(empty);
   const [pending, setPending] = useState<Draft | null>(null);
@@ -351,7 +355,8 @@ export function MedicineTab({ desk, setDesk, name, author }: Props) {
         ) : (
           <p className="empty">No reminders yet.</p>
         )}
-        <p className="note">Saved in this browser. Spoken reminders arrive when the voice connection is live.</p>
+        <SaveNote sync={sync} error={syncError} />
+        <p className="note">Spoken reminders arrive when the voice connection is live.</p>
       </section>
     </div>
   );

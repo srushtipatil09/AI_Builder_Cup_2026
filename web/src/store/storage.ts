@@ -5,6 +5,11 @@ import type { Metrics, Updates } from "../lib/api";
 // One copy of a household, shared by every tab of this browser. A fresh copy is not read from the server again.
 export const CARE_STORAGE_KEY = "saathi.care:v1";
 export const FRESH_MS = 15 * 60 * 1000;
+// The demo household is one shared account: anyone may have changed it, so a copy is trusted only briefly.
+export const DEMO_FRESH_MS = 30 * 1000;
+// An open care desk asks again this often (while the tab is visible), so new conversations and other people's
+// edits show up without a reload. The server keeps its own short copies, so this costs few database reads.
+export const POLL_MS = 60 * 1000;
 export const DEMO_HOUSEHOLD_ID = "demo-kamla-sharma";
 
 export type CareRecord = {
@@ -16,8 +21,8 @@ export type CareRecord = {
   familyAt: number;
 };
 
-export function isFresh(at: number, now = Date.now()): boolean {
-  return at > 0 && now - at < FRESH_MS;
+export function isFresh(at: number, now = Date.now(), limit = FRESH_MS): boolean {
+  return at > 0 && now - at < limit;
 }
 
 function emptyRecord(): CareRecord {
