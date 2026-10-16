@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from saathi import __version__
-from saathi.config import load_settings
+from saathi.config import cors_origins, load_settings
 from saathi.cost import MIN_INSTANCES, SESSION_CAP_SECONDS
 from saathi.households.routes import router as households_router
 from saathi.households.updates import router as updates_router
@@ -42,8 +42,9 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Saathi API", version=__version__, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.web_origin, "http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_origin_regex=r"https://.*|http://localhost:\d+",
+    allow_origins=cors_origins(settings),
+    # Any local dev port; never an arbitrary https site, since credentials are allowed.
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],

@@ -111,13 +111,17 @@ def get_current_actor(
     return actor_from_token(token, x_household_id, x_role, x_family_code)
 
 
-def has_household_access(actor: ActorContext, household_id: str) -> tuple[bool, str]:
+def has_household_access(
+    actor: ActorContext, household_id: str, allow_family_code: bool = False
+) -> tuple[bool, str]:
     """Decide whether this actor may touch this household. Returns (allowed, reason).
 
     - Demo households: open.
     - A verified Firebase identity: the verified email equals the household id, the uid owns or belongs to the
       household, or the household is unclaimed (first verified caller claims it).
-    - A joined family code that names this household: the parent's device.
+    - A joined family code that names this household: the parent's device, and only on routes that pass
+      allow_family_code (the live session, text turn, complete, heartbeat, invitation, contact family, desk read).
+      Anyone holding the join link has the code, so it never opens files, pairing, or desk writes.
     - Anything else is allowed only while REQUIRE_HOUSEHOLD_AUTH is off (local runs without Firebase).
     """
     if is_demo_household(household_id):
@@ -126,7 +130,7 @@ def has_household_access(actor: ActorContext, household_id: str) -> tuple[bool, 
     from saathi.providers.firestore import get_repository
 
     repo = get_repository()
-    if actor.family_code and _code_names_household(actor.family_code, household_id):
+    if allow_family_code and actor.family_code and _code_names_household(actor.family_code, household_id):
         return True, "family_code"
     if actor.verified:
         if actor.email and actor.email.lower() == household_id.lower():
@@ -157,8 +161,8 @@ def _code_names_household(code: str, household_id: str) -> bool:
     return bool(record and record.household_id == household_id and record.joined_at)
 
 
-def ensure_household_access(actor: ActorContext, household_id: str) -> None:
-    allowed, reason = has_household_access(actor, household_id)
+def ensure_household_access(actor: ActorContext, household_id: str, allow_family_code: bool = False) -> None:
+    allowed, reason = has_household_access(actor, household_id, allow_family_code)
     if not allowed:
         code = status.HTTP_401_UNAUTHORIZED if reason == "authentication_required" else status.HTTP_403_FORBIDDEN
         raise HTTPException(status_code=code, detail="You do not have access to this household.")
