@@ -4,10 +4,8 @@ import logging
 import math
 from typing import Optional
 
-from google import genai
-from google.genai import types
-
 from saathi.config import load_settings
+from saathi.providers.gemini import get_genai_client
 from saathi.memory.extract import FamilyEpisode
 from saathi.providers.firestore import get_repository
 
@@ -18,7 +16,7 @@ def generate_embedding(text: str) -> list[float]:
     """Generate normalized embedding vector via Google Gen AI."""
     settings = load_settings()
     try:
-        client = genai.Client()
+        client = get_genai_client()
         response = client.models.embed_content(
             model=settings.embed_model or "text-multilingual-embedding-002",
             contents=text,

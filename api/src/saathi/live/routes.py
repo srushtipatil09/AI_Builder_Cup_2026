@@ -1,19 +1,23 @@
 """Live audio WebSocket bridge and session endpoints."""
 
 import json
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from google.genai import types
 from pydantic import BaseModel
 
 from saathi.auth.firebase import get_current_actor
+from saathi.config import load_settings
 from saathi.contracts.desk import Desk, create_demo_desk
 from saathi.contracts.identity import ActorContext
 from saathi.live.bridge import LiveBridgeSession
 from saathi.live.prompts import build_system_instruction
 from saathi.providers.firestore import get_repository
+from saathi.providers.gemini import get_genai_client
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +58,10 @@ async def live_voice_bridge(websocket: WebSocket, session_id: str):
         return
 
     repo = get_repository()
-    desk = create_demo_desk() if "demo" in household_id.lower() else (repo.get_desk(household_id) or Desk())
+    if "demo" in household_id.lower():
+        desk = create_demo_desk()
+    else:
+        desk = await asyncio.get_running_loop().run_in_executor(None, repo.get_desk, household_id) or Desk()
 
     bridge = LiveBridgeSession(
         websocket=websocket,
@@ -109,12 +116,33 @@ def text_session_turn(
     system_prompt = build_system_instruction(desk, now)
 
     user_text = body.text.lower()
+    if any(w in user_text for w in ["ouch", "gir", "chot", "dard"]):
+        return TextTurnResponse(
+            session_id=session_id,
+            reply="Kya hua? Gir gaye kya? Main yahin hoon.",
+        )
+
+    settings = load_settings()
+    try:
+        response = get_genai_client().models.generate_content(
+            model=settings.extract_model or "gemini-2.5-flash",
+            contents=body.text,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=0.7,
+                max_output_tokens=150,
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
+            ),
+        )
+        if response and response.text:
+            return TextTurnResponse(session_id=session_id, reply=response.text.strip())
+    except Exception as exc:
+        logger.warning("Vertex reply failed (%s); using the local line", exc)
+
     if any(w in user_text for w in ["khana", "lunch", "dinner", "breakfast", "roti"]):
         reply = "Achha laga sunkar. Aapne dawai li ya abhi baaki hai?"
     elif any(w in user_text for w in ["rahul", "beta", "phone", "baat"]):
         reply = "Rahul se kab baat hui thi? Kya baat hui?"
-    elif any(w in user_text for w in ["ouch", "gir", "chot", "dard"]):
-        reply = "Kya hua? Gir gaye kya? Main yahin hoon."
     else:
         reply = f"Namaste {desk.profile.preferredName or 'ji'}, aaj aapka din kaisa raha?"
 

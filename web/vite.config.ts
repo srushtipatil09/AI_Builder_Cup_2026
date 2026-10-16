@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     port: 5173,
     allowedHosts: [
-      "installed-surrey-fighter-gone.trycloudflare.com",
+      "specifies-previously-ticket-beatles.trycloudflare.com",
       ".trycloudflare.com",
     ],
     proxy: {

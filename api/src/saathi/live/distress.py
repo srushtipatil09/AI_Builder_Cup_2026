@@ -3,10 +3,10 @@
 import logging
 from typing import Literal, Optional
 from pydantic import BaseModel
-from google import genai
 from google.genai import types
 
 from saathi.config import load_settings
+from saathi.providers.gemini import get_genai_client
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ def classify_impact_audio(clip_description: str = "", audio_bytes: Optional[byte
 
     # Gemini Flash Classifier
     try:
-        client = genai.Client()
+        client = get_genai_client()
         prompt = f"""Classify this sudden loud acoustic event: '{clip_description}'.
 Is it 'possible_impact' (a heavy body fall or crash), 'ordinary_noise' (door closing, dropped spoon, TV), or 'unclear'?"""
         response = client.models.generate_content(

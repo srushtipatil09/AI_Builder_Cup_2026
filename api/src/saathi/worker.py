@@ -55,6 +55,7 @@ def process_session(body: ProcessSessionRequest):
                 author="conversation",
                 addedAt=corr.evidence_quote,
             ))
+        repo.save_desk(household_id, desk)
     return {
         "status": "processed",
         "sessionId": session_id,

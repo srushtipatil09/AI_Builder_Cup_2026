@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { isCode, normalizeCode } from "../family";
 import { afterSignIn, emailError, passwordError, writeSession, type HouseholdSession, type Role } from "../session";
+import { signInWithGoogle } from "../lib/firebase";
 import { Field } from "./Field";
 import { AuthLayout } from "./AuthLayout";
 
@@ -65,6 +66,24 @@ export function SignupPage() {
     writeSession(session);
     // A parent goes on to the join step: with the link's code filled in, or empty to enter or skip.
     navigate(role === "parent" && codeParam ? `/join/${codeParam}` : afterSignIn(session));
+  }
+
+  async function onGoogle() {
+    if (!role) return;
+    setGoogleNote("");
+    try {
+      const user = await signInWithGoogle();
+      const first = user.name.split(" ")[0] || user.name;
+      const session: HouseholdSession =
+        role === "caretaker"
+          ? { email: user.email, role, caretakerName: first, parentName: "", language: "Hindi" }
+          : { email: user.email, role, caretakerName: "", parentName: first, language: "Hindi" };
+      writeSession(session);
+      navigate(role === "parent" && codeParam ? `/join/${codeParam}` : afterSignIn(session));
+    } catch (err) {
+      setGoogleNote("Google sign-in did not finish. Try again.");
+      console.warn("Google sign-in failed", err);
+    }
   }
 
   const lede =
@@ -173,7 +192,7 @@ export function SignupPage() {
             <button
               className="ghost"
               type="button"
-              onClick={() => setGoogleNote("Google sign-in is not connected in this build.")}
+              onClick={onGoogle}
             >
               Continue with Google
             </button>
@@ -191,7 +210,7 @@ export function SignupPage() {
       ) : role === "parent" ? (
         <p className="note">Next, you can join your family with the code they sent, or skip it for now.</p>
       ) : (
-        <p className="note">This build keeps the session in this browser. Cloud sign-in is not connected yet.</p>
+        <p className="note">Sign up with Google or an email.</p>
       )}
       <p className="auth-switch">
         Already have an account? <Link to={codeParam ? `/login?next=/join/${codeParam}` : "/login"}>Log in</Link>

@@ -56,7 +56,9 @@ def test_complete_session() -> None:
     assert body["sessionId"] == "test-sess-2"
 
 
-def test_websocket_live_voice_bridge() -> None:
+def test_websocket_live_voice_bridge(monkeypatch) -> None:
+    # No cloud call: this exercises the text path the bridge falls back to.
+    monkeypatch.setattr("saathi.live.bridge.get_shared_genai_client", lambda: None)
     with client.websocket_connect("/api/v1/sessions/test-ws-session/live") as ws:
         # Send auth packet
         ws.send_json({"token": "demo", "householdId": "demo-kamla-sharma"})

@@ -1,9 +1,10 @@
+import { currentIdToken } from "./firebase";
 import type { Desk } from "../desk";
 import type { FamilyLink } from "../family";
 
 const BASE_URL = "/api/v1";
 
-function getAuthHeaders(householdId?: string, role?: string): HeadersInit {
+async function getAuthHeaders(householdId?: string, role?: string): Promise<HeadersInit> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -13,13 +14,19 @@ function getAuthHeaders(householdId?: string, role?: string): HeadersInit {
   if (role) {
     headers["X-Role"] = role;
   }
+  try {
+    const token = await currentIdToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+  } catch {
+    // Not signed in with Firebase; the API falls back to demo mode.
+  }
   return headers;
 }
 
 export async function fetchDesk(householdId: string, isDemo = false): Promise<Desk> {
   const url = isDemo ? `${BASE_URL}/demo/desk` : `${BASE_URL}/households/${householdId}/desk`;
   const res = await fetch(url, {
-    headers: getAuthHeaders(householdId),
+    headers: await getAuthHeaders(householdId),
   });
   if (!res.ok) {
     throw new Error(`Failed to fetch desk: ${res.statusText}`);
@@ -31,7 +38,7 @@ export async function saveDesk(householdId: string, desk: Desk, isDemo = false):
   const url = isDemo ? `${BASE_URL}/demo/desk` : `${BASE_URL}/households/${householdId}/desk`;
   const res = await fetch(url, {
     method: "PUT",
-    headers: getAuthHeaders(householdId),
+    headers: await getAuthHeaders(householdId),
     body: JSON.stringify(desk),
   });
   if (!res.ok) {
@@ -44,7 +51,7 @@ export async function createPairingLink(householdId: string, caretakerName: stri
   const params = new URLSearchParams({ caretaker_name: caretakerName, parent_name: parentName });
   const res = await fetch(`${BASE_URL}/households/${householdId}/pairing?${params}`, {
     method: "POST",
-    headers: getAuthHeaders(householdId),
+    headers: await getAuthHeaders(householdId),
   });
   if (!res.ok) {
     throw new Error(`Failed to create pairing link: ${res.statusText}`);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { emailError, findAccount, nextPath, passwordError, writeSession, type HouseholdSession } from "../session";
+import { signInWithGoogle } from "../lib/firebase";
 import { Field } from "./Field";
 import { AuthLayout } from "./AuthLayout";
 
@@ -42,6 +43,25 @@ export function LoginPage() {
     };
     writeSession(session);
     navigate(nextPath(params, session));
+  }
+
+  async function onGoogle() {
+    setGoogleNote("");
+    try {
+      const user = await signInWithGoogle();
+      const session: HouseholdSession = findAccount(user.email) ?? {
+        email: user.email,
+        role: "caretaker",
+        caretakerName: user.name,
+        parentName: "",
+        language: "Hindi",
+      };
+      writeSession(session);
+      navigate(nextPath(params, session));
+    } catch (err) {
+      setGoogleNote("Google sign-in did not finish. Try again.");
+      console.warn("Google sign-in failed", err);
+    }
   }
 
   return (
@@ -97,7 +117,7 @@ export function LoginPage() {
           <button
             className="ghost"
             type="button"
-            onClick={() => setGoogleNote("Google sign-in is not connected in this build.")}
+            onClick={onGoogle}
           >
             Continue with Google
           </button>
@@ -108,7 +128,7 @@ export function LoginPage() {
           </p>
         ) : null}
       </form>
-      <p className="note">This build keeps the session in this browser. Cloud sign-in is not connected yet.</p>
+      <p className="note">Sign in with Google or an email. Your household is kept in this browser until the desk syncs to the cloud.</p>
       <p className="auth-switch">
         No account yet? <Link to={params.get("next")?.startsWith("/join/") ? `/signup?code=${params.get("next")!.slice(6)}` : "/signup"}>Create account</Link>
       </p>

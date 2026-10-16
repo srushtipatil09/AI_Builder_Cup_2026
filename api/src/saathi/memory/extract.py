@@ -6,11 +6,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
 
 from saathi.config import load_settings
+from saathi.providers.gemini import get_genai_client
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +94,7 @@ def extract_session(utterances: list[dict], parent_name: str = "") -> Extraction
 
     # 1. Attempt Gemini Structured Extraction
     try:
-        client = genai.Client()
+        client = get_genai_client()
         response = client.models.generate_content(
             model=settings.extract_model or "gemini-2.5-flash",
             contents=f"{EXTRACTION_PROMPT}\n\nTranscript:\n{transcript}",

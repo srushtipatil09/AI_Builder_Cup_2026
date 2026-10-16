@@ -2,6 +2,7 @@
 
 import logging
 import secrets
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -13,6 +14,8 @@ from saathi.contracts.desk import Desk, Memory
 from saathi.contracts.identity import FamilyLinkRecord, HouseholdRecord
 
 logger = logging.getLogger(__name__)
+
+DESK_CACHE_SECONDS = 120
 
 # Code alphabet avoiding lookalikes (0/O, 1/I/L)
 ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
@@ -42,11 +45,13 @@ class FirestoreRepository:
             "family_codes": {},
         }
         self._use_fallback = False
+        # Desks are read on every call start; keep them in memory for a short time.
+        self._desk_cache: dict[str, tuple[float, Desk]] = {}
 
     @property
     def client(self) -> Optional[firestore.Client]:
         if self._client is None and not self._use_fallback:
-            project = self._settings.google_cloud_project or self._settings.firebase_project_id
+            project = self._settings.firebase_project_id or self._settings.google_cloud_project
             if project:
                 try:
                     self._client = firestore.Client(project=project)
@@ -84,6 +89,15 @@ class FirestoreRepository:
 
     # Desk methods
     def get_desk(self, household_id: str) -> Optional[Desk]:
+        hit = self._desk_cache.get(household_id)
+        if hit and time.monotonic() - hit[0] < DESK_CACHE_SECONDS:
+            return hit[1]
+        desk = self._load_desk(household_id)
+        if desk:
+            self._desk_cache[household_id] = (time.monotonic(), desk)
+        return desk
+
+    def _load_desk(self, household_id: str) -> Optional[Desk]:
         client = self.client
         if client and not self._use_fallback:
             try:
@@ -97,6 +111,7 @@ class FirestoreRepository:
         return Desk(**data) if data else None
 
     def save_desk(self, household_id: str, desk: Desk) -> None:
+        self._desk_cache[household_id] = (time.monotonic(), desk)
         client = self.client
         if client and not self._use_fallback:
             try:

@@ -1,6 +1,8 @@
 """Environment settings. Missing cloud values are allowed in the local scaffold."""
 
 import os
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from saathi.cost import (
@@ -9,9 +11,12 @@ from saathi.cost import (
     MAX_DAILY_LIVE_MINUTES,
 )
 
+# Repo-root .env, whether the process was started in the repo or in api/.
+_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=str(_ENV_FILE), extra="ignore")
 
     google_cloud_project: str = ""
     cloud_region: str = "us-central1"
@@ -22,7 +27,9 @@ class Settings(BaseSettings):
     app_module: str = "main:app"
     extract_model: str = "gemini-2.5-flash"
     insight_model: str = "gemini-2.5-flash"
-    live_model: str = "gemini-2.5-flash"
+    live_model: str = "gemini-live-2.5-flash-native-audio"
+    live_voice: str = "Aoede"
+    live_silence_ms: int = 700
     embed_model: str = "text-multilingual-embedding-002"
     google_genai_use_vertexai: bool = True
     max_daily_live_minutes: int = MAX_DAILY_LIVE_MINUTES

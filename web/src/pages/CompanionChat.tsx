@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { LiveAudio } from "../lib/liveAudio";
+import { currentIdToken } from "../lib/firebase";
 import { InstallSheet } from "./InstallSheet";
 
 type Props = { demo: boolean; name?: string };
@@ -11,13 +13,46 @@ export function CompanionChat({ demo, name }: Props) {
   const [alertNote, setAlertNote] = useState<string>("");
   const socketRef = useRef<WebSocket | null>(null);
   const recognitionRef = useRef<any>(null);
+  const audioRef = useRef<LiveAudio | null>(null);
+  const openRoleRef = useRef<string | null>(null);
+  const liveReadyRef = useRef(false);
+  const wantTalkRef = useRef(false);
+  const audioOkRef = useRef(true);
   const sessionIdRef = useRef<string>(`sess-${Math.random().toString(36).slice(2, 10)}`);
 
   useEffect(() => {
+    // Open the line while the page loads, so the greeting starts right after Talk is tapped.
+    connectLive(true);
     return () => {
       stopSession();
     };
   }, []);
+
+  async function beginTalking() {
+    const ws = socketRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    wantTalkRef.current = false;
+    if (audioOkRef.current) {
+      const audio = new LiveAudio();
+      audio.onFrame = (pcm) => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(pcm);
+      };
+      audio.onPlaybackEnd = () => setStatus((st) => (st === "speaking" ? "listening" : st));
+      try {
+        await audio.start();
+        audioRef.current = audio;
+        ws.send(JSON.stringify({ type: "start" }));
+        setStatus("thinking");
+        return;
+      } catch (err) {
+        console.warn("Microphone unavailable, using browser speech", err);
+        audio.stop();
+        audioOkRef.current = false;
+      }
+    }
+    ws.send(JSON.stringify({ type: "text_mode" }));
+    fallbackGreeting();
+  }
 
   function speakText(text: string) {
     if ("speechSynthesis" in window) {
@@ -62,9 +97,32 @@ export function CompanionChat({ demo, name }: Props) {
     }
   }
 
-  function connectLive() {
+  function fallbackGreeting() {
+    setStatus("listening");
+    const greeting = demo
+      ? "Namaste Kamla ji, chai ho gayi? Aaj kaisa lag raha hai?"
+      : `Namaste${name ? ` ${name}` : ""}, aaj aapka din kaisa raha?`;
+    setMessages([{ id: "init", role: "assistant", text: greeting }]);
+    speakText(greeting);
+  }
+
+  // Live captions arrive in pieces; keep growing one line per speaker turn.
+  function addCaption(role: "parent" | "assistant", text: string) {
+    const merge = openRoleRef.current === role;
+    openRoleRef.current = role;
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (merge && last && last.role === role) {
+        return [...prev.slice(0, -1), { ...last, text: last.text + text }];
+      }
+      return [...prev, { id: Math.random().toString(), role, text: text.trimStart() }];
+    });
+  }
+
+  function connectLive(early = false) {
     if (socketRef.current) return;
-    setStatus("connecting");
+    liveReadyRef.current = false;
+    setStatus(early ? "idle" : "connecting");
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.host;
     const wsUrl = `${protocol}//${host}/api/v1/sessions/${sessionIdRef.current}/live`;
@@ -72,24 +130,52 @@ export function CompanionChat({ demo, name }: Props) {
     const ws = new WebSocket(wsUrl);
     socketRef.current = ws;
 
-    ws.onopen = () => {
+    ws.binaryType = "arraybuffer";
+
+    ws.onopen = async () => {
+      let token = "demo";
+      try {
+        token = (await currentIdToken()) ?? "demo";
+      } catch {
+        // stay on the demo token
+      }
       ws.send(JSON.stringify({
         type: "authenticate",
-        token: "demo",
+        token: demo ? "demo" : token,
         householdId: demo ? "demo-kamla-sharma" : "current",
       }));
     };
 
-    ws.onmessage = (event) => {
+    ws.onmessage = async (event) => {
+      if (event.data instanceof ArrayBuffer) {
+        setStatus("speaking");
+        audioRef.current?.play(event.data);
+        return;
+      }
       try {
         const data = JSON.parse(event.data);
         if (data.type === "ready") {
+          audioOkRef.current = !!data.audio;
+        } else if (data.type === "live_ready") {
+          liveReadyRef.current = true;
+          if (wantTalkRef.current) void beginTalking();
+        } else if (data.type === "audio_unavailable") {
+          audioRef.current?.stop();
+          audioRef.current = null;
+          audioOkRef.current = false;
+          liveReadyRef.current = true;
+          if (wantTalkRef.current) void beginTalking();
+        } else if (data.type === "caption") {
+          addCaption(data.role === "parent" ? "parent" : "assistant", data.text);
+        } else if (data.type === "interrupted") {
+          audioRef.current?.interrupt();
           setStatus("listening");
-          const greeting = demo
-            ? "Namaste Kamla ji, chai ho gayi? Aaj kaisa lag raha hai?"
-            : `Namaste${name ? ` ${name}` : ""}, aaj aapka din kaisa raha?`;
-          setMessages([{ id: "init", role: "assistant", text: greeting }]);
-          speakText(greeting);
+        } else if (data.type === "turn_complete") {
+          openRoleRef.current = null;
+        } else if (data.type === "alert") {
+          setAlertNote("Alert sent to your family: Level 3 Distress Check.");
+        } else if (data.type === "ended") {
+          stopSession();
         } else if (data.type === "thinking") {
           setStatus("thinking");
         } else if (data.type === "transcript") {
@@ -111,6 +197,7 @@ export function CompanionChat({ demo, name }: Props) {
     ws.onclose = () => {
       setStatus("idle");
       socketRef.current = null;
+      liveReadyRef.current = false;
     };
   }
 
@@ -138,6 +225,8 @@ export function CompanionChat({ demo, name }: Props) {
   }
 
   function stopSession() {
+    audioRef.current?.stop();
+    audioRef.current = null;
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -261,8 +350,15 @@ export function CompanionChat({ demo, name }: Props) {
           type="button"
           onClick={() => {
             if (status === "idle") {
-              connectLive();
-            } else {
+              wantTalkRef.current = true;
+              if (!socketRef.current) {
+                connectLive();
+              } else if (liveReadyRef.current) {
+                void beginTalking();
+              } else {
+                setStatus("connecting");
+              }
+            } else if (!audioRef.current) {
               startListening();
             }
           }}
