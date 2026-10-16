@@ -1,0 +1,11 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // The browser never talks to Firestore directly.
+    // The API uses the Admin SDK and checks household and role in code.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
