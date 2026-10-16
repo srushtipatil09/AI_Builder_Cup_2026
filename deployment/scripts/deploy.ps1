@@ -42,6 +42,7 @@ $Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $ServiceAccount = "backend-dev@$GcpProject.iam.gserviceaccount.com"
 $Image = "$Region-docker.pkg.dev/$GcpProject/saathi/api:$Tag"
 $HostingUrl = "https://$FirebaseProject.web.app"
+$SigningSecret = "saathi-link-signing"
 
 function Find-Cmd {
     param([string]$Name)
@@ -159,6 +160,23 @@ if ($deployApi) {
         "--tag", $Image
     )
 
+    # The worker checks that each Cloud Tasks or Scheduler call is an ID token for the invoker account with
+    # this worker's URL as audience, so it needs its own URL. The URL is stable, so read it before deploying.
+    $knownWorkerUrl = ""
+    try { $knownWorkerUrl = Get-RunUrl "saathi-worker" } catch { $knownWorkerUrl = "" }
+
+    # LINK_SIGNING_SECRET comes from Secret Manager (setup_cloud.ps1 creates it), never from .env.
+    $secretArgs = @()
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try { & $script:Gcloud secrets describe $SigningSecret --project $GcpProject --format "value(name)" 2>$null | Out-Null } catch { } finally { $ErrorActionPreference = $previous }
+    if ($LASTEXITCODE -eq 0) {
+        $secretArgs = @("--set-secrets", "LINK_SIGNING_SECRET=${SigningSecret}:latest")
+    }
+    else {
+        Write-Warning "Secret $SigningSecret not found. Run deployment/scripts/setup_cloud.ps1 first; private file links will not work."
+    }
+
     Write-Host "Deploying saathi-worker ..."
     $workerEnv = [ordered]@{
         GOOGLE_CLOUD_PROJECT       = $GcpProject
@@ -172,15 +190,15 @@ if ($deployApi) {
         TASK_QUEUE                 = (Env-Or $DotEnv "TASK_QUEUE" "saathi-pipeline")
         UPLOADS_BUCKET             = (Env-Or $DotEnv "UPLOADS_BUCKET" "$GcpProject-media")
         REQUIRE_HOUSEHOLD_AUTH     = (Env-Or $DotEnv "REQUIRE_HOUSEHOLD_AUTH" "true")
+        TASK_INVOKER_EMAIL         = $ServiceAccount
     }
-    $signing = Env-Or $DotEnv "LINK_SIGNING_SECRET" ""
-    if ($signing) { $workerEnv["LINK_SIGNING_SECRET"] = $signing }
+    if ($knownWorkerUrl) { $workerEnv["WORKER_URL"] = $knownWorkerUrl }
 
     $workerFile = Join-Path $env:TEMP "saathi-worker-env.yaml"
     try {
         if (-not $DryRun) { Write-EnvFile $workerFile $workerEnv }
         Write-Host ("  worker env keys: " + ($workerEnv.Keys -join ", "))
-        Invoke-Gcloud @(
+        Invoke-Gcloud -GcloudArgs (@(
             "run", "deploy", "saathi-worker",
             "--project", $GcpProject,
             "--region", $Region,
@@ -197,7 +215,7 @@ if ($deployApi) {
             "--memory", "1Gi",
             "--port", "8080",
             "--env-vars-file", $workerFile
-        )
+        ) + $secretArgs)
         Invoke-Gcloud @(
             "run", "services", "add-iam-policy-binding", "saathi-worker",
             "--project", $GcpProject,
@@ -212,6 +230,14 @@ if ($deployApi) {
 
     $workerUrl = Get-RunUrl "saathi-worker"
     Write-Host "Worker URL: $workerUrl"
+    if (-not $knownWorkerUrl) {
+        # First deploy: the URL exists only now.
+        Invoke-Gcloud @(
+            "run", "services", "update", "saathi-worker",
+            "--project", $GcpProject, "--region", $Region,
+            "--update-env-vars", "WORKER_URL=$workerUrl"
+        )
+    }
 
     Write-Host "Deploying saathi-api ..."
     $apiEnv = [ordered]@{
@@ -231,13 +257,12 @@ if ($deployApi) {
         REQUIRE_HOUSEHOLD_AUTH     = $workerEnv["REQUIRE_HOUSEHOLD_AUTH"]
         WEB_ORIGIN                 = $HostingUrl
     }
-    if ($signing) { $apiEnv["LINK_SIGNING_SECRET"] = $signing }
 
     $apiFile = Join-Path $env:TEMP "saathi-api-env.yaml"
     try {
         if (-not $DryRun) { Write-EnvFile $apiFile $apiEnv }
         Write-Host ("  api env keys: " + ($apiEnv.Keys -join ", "))
-        Invoke-Gcloud @(
+        Invoke-Gcloud -GcloudArgs (@(
             "run", "deploy", "saathi-api",
             "--project", $GcpProject,
             "--region", $Region,
@@ -254,7 +279,7 @@ if ($deployApi) {
             "--memory", "512Mi",
             "--port", "8080",
             "--env-vars-file", $apiFile
-        )
+        ) + $secretArgs)
     }
     finally {
         if (Test-Path -LiteralPath $apiFile) { Remove-Item -LiteralPath $apiFile -Force }
