@@ -88,14 +88,16 @@ export function RoutineTab(props: LiveProps) {
       <UrgentReminders medicines={medicines} name={name} onOpen={onOpenReminders} onConfirm={onConfirmReminder} />
 
       {(updates?.alerts ?? []).filter((a) => a.tier >= 3 || !(insight || card)).map((a) => (
-        <section key={a.id} className={`panel panel-wide alert-card alert-tier-${a.tier}`} role="alert">
-          <h2>{a.tier >= 3 ? "Needs your attention now" : a.tier === 2 ? "New update" : "Note"}</h2>
-          <p>{a.message}</p>
-          <p className="alert-meta">
-            {ago(a.created_at)} · Suggested: {a.action}
-            {a.evidence_ids?.length ? ` · ${a.evidence_ids.length} record${a.evidence_ids.length === 1 ? "" : "s"}` : ""}
-          </p>
-          {a.tier >= 3 ? <p>If you cannot reach {who}, contact local emergency services.</p> : null}
+        <section key={a.id} className={`panel panel-wide alert-card alert-compact alert-tier-${a.tier}`} role="alert">
+          <div className="alert-text">
+            <h2>{a.tier >= 3 ? "Needs your attention now" : a.tier === 2 ? "New update" : "Note"}</h2>
+            <p>{a.message}</p>
+            <p className="alert-meta">
+              {ago(a.created_at)} · Suggested: {a.action}
+              {a.evidence_ids?.length ? ` · ${a.evidence_ids.length} record${a.evidence_ids.length === 1 ? "" : "s"}` : ""}
+              {a.tier >= 3 ? ` · If you cannot reach ${who}, contact local emergency services.` : ""}
+            </p>
+          </div>
           <button className="ghost" type="button" onClick={() => void run("ack", () => ackAlert(householdId, a.id))}>
             Mark as seen
           </button>

@@ -91,7 +91,7 @@ export function SiteFrame({ children, home = false }: Props) {
             </ul>
           </div>
         </div>
-        <p className="foot-base">The demo household is synthetic, and its data is labeled.</p>
+        <p className="foot-base">The demo accounts are shared and need no login. Their data is synthetic and labeled.</p>
       </footer>
     </div>
   );

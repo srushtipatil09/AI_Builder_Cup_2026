@@ -188,12 +188,12 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
   const health = useHealth();
   const caretaker = demo ? "Rahul" : session?.caretakerName || "";
   const storageKey = demo ? "saathi.desk.demo.v2" : `saathi.desk.${householdId || "local"}`;
-  const { desk, setDesk, reset, sync, syncedAt, syncError, retry } = useDesk(storageKey, () =>
+  const { desk, setDesk, sync, syncedAt, syncError, retry } = useDesk(storageKey, () =>
     demo ? demoDesk() : blankDesk(seedName, seedLanguage),
   );
   const [active, setActive] = useState<TabId>(readTab);
   // Forms use default values, so a reset remounts them.
-  const [version, setVersion] = useState(0);
+  const [version] = useState(0);
   // On Ask Saathi the right rail holds that tab's guide, which the tab renders into this slot.
   const [guideSlot, setGuideSlot] = useState<HTMLElement | null>(null);
   const name = desk.profile.preferredName;
@@ -202,7 +202,7 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
   const family = useFamilyLink(demo ? "demo" : householdId, name, caretaker, !demo && Boolean(householdId));
   const state = useUpdates(householdId, Boolean(householdId));
   const [photoVersion, setPhotoVersion] = useState(0);
-  const photoUrl = useProfilePhoto(householdId, !demo, photoVersion) ?? (demo ? DEMO_PHOTO : null);
+  const photoUrl = useProfilePhoto(householdId, true, photoVersion) ?? (demo ? DEMO_PHOTO : null);
   const switchHint = memberCount > 1 ? `Switch · ${memberCount} family members` : "Family members";
   const urgentAlerts = (state.updates?.alerts ?? []).filter((a) => a.tier >= 2);
   const conversationMemories = desk.memories.filter((m) => m.author === "conversation").map((m) => m.text);
@@ -300,7 +300,7 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
             <path d="m8 10 4 4 4-4" />
           </svg>
         </button>
-        {demo ? <p className="tag care-tag">Synthetic demo household</p> : null}
+        {demo ? <p className="tag care-tag">Demo account · shared, no login</p> : null}
 
         <div className="care-side-tabs" role="tablist" aria-orientation="vertical" aria-label="Care desk sections">
           {renderTabs("tab", "desk-tab", false)}
@@ -320,20 +320,8 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
               </span>
             </div>
           ) : null}
-          <p>{demo ? "Demo data. Nothing here is saved to an account." : "Changes save to your account in the cloud and show on every device you log in on."}</p>
+          <p>{demo ? "Shared demo: changes are saved for everyone." : "Changes save to your account in the cloud and show on every device you log in on."}</p>
           <div className="care-side-actions">
-            {demo ? (
-              <button
-                className="text-link"
-                type="button"
-                onClick={() => {
-                  reset();
-                  setVersion((v) => v + 1);
-                }}
-              >
-                Reset demo data
-              </button>
-            ) : null}
             <button className="text-link" type="button" onClick={onLeave}>
               {demo ? "Leave demo" : "Log out"}
             </button>

@@ -107,7 +107,8 @@ class FirestoreRepository:
     # Desk methods
     def get_desk(self, household_id: str) -> Optional[Desk]:
         hit = self._desk_cache.get(household_id)
-        if hit and time.monotonic() - hit[0] < DESK_CACHE_SECONDS:
+        # The shared demo accounts are edited by many people on several instances; always read the stored copy.
+        if hit and not household_id.startswith("demo-") and time.monotonic() - hit[0] < DESK_CACHE_SECONDS:
             return hit[1]
         desk = self._load_desk(household_id)
         if desk:

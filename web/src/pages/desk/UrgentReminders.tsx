@@ -60,8 +60,7 @@ export function UrgentReminders({ medicines, name, onOpen, onConfirm }: Props) {
         <div>
           <h2 id="urgent-title">Needs attention now</h2>
           <p>
-            {urgent.length === 1 ? "A reminder is" : `${urgent.length} reminders are`} due around now and{" "}
-            {who} has not confirmed {urgent.length === 1 ? "it" : "them"} yet.
+            {urgent.length === 1 ? "A reminder is" : `${urgent.length} reminders are`} due and not confirmed by {who} yet.
           </p>
         </div>
       </div>
@@ -88,7 +87,7 @@ export function UrgentReminders({ medicines, name, onOpen, onConfirm }: Props) {
         <button className="ghost" type="button" onClick={onOpen}>
           Open Reminders
         </button>
-        <span>Mark one confirmed after you have checked with {who}. Saathi never suggests a dose.</span>
+        <span>Confirm after checking with {who}. Saathi never suggests a dose.</span>
       </div>
     </section>
   );

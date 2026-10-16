@@ -535,7 +535,7 @@ export function CompanionChat({ demo, name, householdId }: Props) {
         </details>
       ) : null}
 
-      {!demo && hhRef.current ? (
+      {hhRef.current ? (
         <p className="push-opt">
           <button
             className="text-link"

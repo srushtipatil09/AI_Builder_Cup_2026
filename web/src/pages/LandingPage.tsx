@@ -54,7 +54,7 @@ export function LandingPage() {
               Try the caretaker demo
             </Link>
           </div>
-          <p className="hero-note">No account needed for either demo. The household is synthetic.</p>
+          <p className="hero-note">No login needed. Both are shared demo accounts: what you change is saved, and everyone else trying the demo sees it.</p>
         </div>
 
         <figure className="hero-media">
@@ -147,7 +147,7 @@ export function LandingPage() {
             Kamla Sharma, Varanasi
           </h2>
           <p className="demos-lede">
-            Kamla is 78. Rahul, her son, lives in Bengaluru and is the caretaker. This household is synthetic.
+            Kamla is 78. Rahul, her son, lives in Bengaluru and is the caretaker. These are shared demo accounts for reviewers: no login, and every change is saved.
           </p>
         </header>
 

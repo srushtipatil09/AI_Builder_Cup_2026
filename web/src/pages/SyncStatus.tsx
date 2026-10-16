@@ -44,10 +44,8 @@ export function SyncStatus({ sync, syncedAt, onRetry, demo }: Props) {
         ? "Loading the demo…"
         : "Loading from the cloud…"
       : sync === "saving"
-        ? demo
-          ? "Demo data"
-          : "Saving…"
-        : `${demo ? "Demo data" : "Saved to the cloud"}${syncedAt ? ` · checked ${ago(syncedAt, now)}` : ""}`;
+        ? "Saving…"
+        : `${demo ? "Demo account · saved to the cloud" : "Saved to the cloud"}${syncedAt ? ` · checked ${ago(syncedAt, now)}` : ""}`;
   return (
     <p className={`sync sync-${sync}`} role="status" aria-live="polite">
       {text}

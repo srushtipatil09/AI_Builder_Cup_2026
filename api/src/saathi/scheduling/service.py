@@ -103,7 +103,7 @@ def _parse(value: Optional[str]) -> Optional[datetime]:
 
 def _push_parent_devices(household_id: str) -> int:
     sent = 0
-    for row in get_repository().col_list(f"households/{household_id}/devices", 20):
+    for row in get_repository().col_list(f"households/{household_id}/devices", 200):
         if row.get("role") == "parent" and row.get("token"):
             if send_fcm_notification(row["token"], PUSH_CHECK_IN[0], PUSH_CHECK_IN[1]):
                 sent += 1

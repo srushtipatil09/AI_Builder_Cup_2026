@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
 import {
   deleteFile,
   fetchCategories,
@@ -6,7 +6,6 @@ import {
   listFiles,
   uploadFile,
   type FileCategory,
-  type FileCategoryId,
   type StoredFile,
 } from "../../lib/api";
 
@@ -92,59 +91,216 @@ function Thumb({ householdId, file }: { householdId: string; file: StoredFile })
   return src ? <img className="doc-thumb" src={src} alt="" /> : <span className="doc-thumb" aria-hidden="true" />;
 }
 
-type SectionProps = {
-  category: FileCategory;
-  files: StoredFile[];
+const IMAGE_TYPES = "image/jpeg,image/png,image/webp";
+const ALL_TYPES = `${IMAGE_TYPES},application/pdf`;
+
+type UploaderProps = {
+  categories: FileCategory[];
   householdId: string;
   who: string;
+  hasProfilePhoto: boolean;
   onUploaded: () => Promise<void>;
 };
 
-// One category: its own upload form and its own list, so each kind of record is added and found in one place.
-function CategorySection({ category, files, householdId, who, onUploaded }: SectionProps) {
+// One form for every kind of record: pick what it is, pick the file(s), upload. Each category used to repeat the same form.
+function Uploader({ categories, householdId, who, hasProfilePhoto, onUploaded }: UploaderProps) {
   const input = useRef<HTMLInputElement>(null);
+  const [categoryId, setCategoryId] = useState<string>(categories.find((c) => c.id === "prescriptions")?.id ?? categories[0].id);
+  const [chosen, setChosen] = useState<File[]>([]);
+  const [label, setLabel] = useState("");
+  const [shared, setShared] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [note, setNote] = useState("");
   const [failed, setFailed] = useState(false);
-  const [shared, setShared] = useState(false);
-  const [chosen, setChosen] = useState<File | null>(null);
-  const single = category.id === "profile_photo";
-  const images = single || category.id === "family_photos";
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  const category = categories.find((c) => c.id === categoryId) ?? categories[0];
+  const single = category.id === "profile_photo";
+  const imagesOnly = single || category.id === "family_photos";
+
+  function pick(list: FileList | File[] | null) {
+    const all = Array.from(list ?? []);
+    const files = all.filter((f) => (imagesOnly ? IMAGE_TYPES : ALL_TYPES).split(",").includes(f.type));
+    setChosen(single ? files.slice(0, 1) : files);
+    setFailed(files.length < all.length);
+    setNote(
+      files.length < all.length
+        ? imagesOnly
+          ? "Only JPEG, PNG or WebP images are accepted here."
+          : "Only JPEG, PNG, WebP or PDF files are accepted."
+        : "",
+    );
+  }
+
+  function onDrop(event: DragEvent<HTMLLabelElement>) {
     event.preventDefault();
-    const form = event.currentTarget;
-    const file = input.current?.files?.[0];
-    if (!file) {
+    setDragging(false);
+    if (!busy) pick(event.dataTransfer.files);
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!chosen.length) {
       setFailed(true);
       setNote("Choose a file first.");
       return;
     }
-    const label = String(new FormData(form).get("label") ?? "").trim();
     setBusy(true);
     setNote("");
+    let saved = 0;
     try {
-      await uploadFile(householdId, file, category.id, label, shared && !category.privateOnly ? "public" : "private");
+      for (const file of chosen) {
+        // A label names one file; several files keep their own names.
+        await uploadFile(householdId, file, category.id, chosen.length === 1 ? label.trim() : "", shared && !category.privateOnly ? "public" : "private");
+        saved += 1;
+      }
       await onUploaded();
       setFailed(false);
-      setNote(single ? "Photo saved." : "Saved.");
-      form.reset();
-      setChosen(null);
+      setNote(single ? "Photo saved." : saved === 1 ? "Saved." : `${saved} files saved.`);
+      setChosen([]);
+      setLabel("");
       setShared(false);
+      if (input.current) input.current.value = "";
     } catch (err) {
+      if (saved) await onUploaded();
       setFailed(true);
-      setNote(err instanceof Error ? err.message : "The upload did not finish. Try again.");
+      setNote(`${saved ? `${saved} saved, then it stopped. ` : ""}${err instanceof Error ? err.message : "The upload did not finish. Try again."}`);
     } finally {
       setBusy(false);
     }
   }
+
+  return (
+    <form className="doc-upload" onSubmit={(e) => void submit(e)} aria-label="Add a photo or document">
+      <div className="doc-step">
+        <span className="doc-step-n" aria-hidden="true">1</span>
+        <div className="doc-step-body">
+          <p className="doc-step-title" id="doc-what">What is it?</p>
+          <div className="doc-chips" role="radiogroup" aria-labelledby="doc-what">
+            {categories.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                role="radio"
+                aria-checked={c.id === category.id}
+                className={c.id === category.id ? "doc-chip doc-chip-on" : "doc-chip"}
+                onClick={() => {
+                  setCategoryId(c.id);
+                  setChosen([]);
+                  setNote("");
+                  if (input.current) input.current.value = "";
+                }}
+              >
+                {c.title}
+              </button>
+            ))}
+          </div>
+          <p className="doc-hint">{category.hint}</p>
+        </div>
+      </div>
+
+      <div className="doc-step">
+        <span className="doc-step-n" aria-hidden="true">2</span>
+        <div className="doc-step-body">
+          <p className="doc-step-title" id="doc-file">{single ? "Choose the photo" : "Choose the file"}</p>
+          <label
+            className={`doc-drop${chosen.length ? " doc-drop-on" : ""}${dragging ? " doc-drop-drag" : ""}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={onDrop}
+          >
+            <input
+              ref={input}
+              className="visually-hidden"
+              type="file"
+              multiple={!single}
+              aria-labelledby="doc-file"
+              accept={imagesOnly ? IMAGE_TYPES : ALL_TYPES}
+              disabled={busy}
+              onChange={(e) => pick(e.target.files)}
+            />
+            <span className="doc-picker-button" aria-hidden="true">{chosen.length ? "Change" : "Choose file"}</span>
+            <span className="doc-picker-name">
+              {chosen.length
+                ? chosen.length === 1
+                  ? `${chosen[0].name} · ${sizeLabel(chosen[0].size)}`
+                  : `${chosen.length} files selected`
+                : `or drop here · ${imagesOnly ? "JPEG, PNG, WebP" : "JPEG, PNG, WebP, PDF"} up to 8 MB`}
+            </span>
+          </label>
+          {single ? null : (
+            <label className="doc-label">
+              <span>
+                Label <span className="optional">(optional)</span>
+              </span>
+              <input
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                maxLength={80}
+                disabled={chosen.length > 1}
+                placeholder={chosen.length > 1 ? "Each file keeps its own name" : `e.g. ${category.title}, ${new Date().getFullYear()}`}
+              />
+            </label>
+          )}
+        </div>
+      </div>
+
+      <div className="doc-step">
+        <span className="doc-step-n" aria-hidden="true">3</span>
+        <div className="doc-step-body doc-step-row">
+          {category.privateOnly ? (
+            <p className="doc-private">
+              <span className="doc-lock" aria-hidden="true" />
+              Always private. Only {who}&rsquo;s household can open it.
+            </p>
+          ) : (
+            <label className="doc-share">
+              <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} disabled={busy} />
+              <span>
+                Share with anyone who has the link
+                <small>Leave unticked to keep it private.</small>
+              </span>
+            </label>
+          )}
+          <button className="primary doc-submit" type="submit" disabled={busy || !chosen.length}>
+            {busy ? "Uploading…" : single && hasProfilePhoto ? "Replace photo" : "Upload"}
+          </button>
+        </div>
+      </div>
+
+      {note ? (
+        <p className={failed ? "field-error" : "note"} role={failed ? "alert" : "status"}>
+          {note}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+type LibraryProps = {
+  categories: FileCategory[];
+  files: StoredFile[];
+  householdId: string;
+  onChanged: () => Promise<void>;
+};
+
+// Everything saved so far, in one list. A filter row narrows it to one kind of record.
+function Library({ categories, files, householdId, onChanged }: LibraryProps) {
+  const [filter, setFilter] = useState("all");
+  const [note, setNote] = useState("");
+  const titles = Object.fromEntries(categories.map((c) => [c.id, c.title]));
+  const counts = categories.map((c) => ({ c, n: files.filter((f) => f.category === c.id).length })).filter((x) => x.n > 0);
+  const active = filter !== "all" && !counts.some((x) => x.c.id === filter) ? "all" : filter;
+  const shown = active === "all" ? files : files.filter((f) => f.category === active);
 
   async function open(file: StoredFile) {
     try {
       const link = await fileLink(householdId, file.id);
       window.open(link.url, "_blank", "noopener");
     } catch {
-      setFailed(true);
       setNote("Could not open that file. Try again.");
     }
   }
@@ -153,114 +309,68 @@ function CategorySection({ category, files, householdId, who, onUploaded }: Sect
     if (!window.confirm(`Delete ${file.label || file.name}? This cannot be undone.`)) return;
     try {
       await deleteFile(householdId, file.id);
-      await onUploaded();
-      setFailed(false);
+      await onChanged();
       setNote("Deleted.");
     } catch {
-      setFailed(true);
       setNote("Could not delete that file. Try again.");
     }
   }
 
-  const headingId = `doc-${category.id}`;
   return (
-    <section className="doc-cat" aria-labelledby={headingId}>
-      <header>
-        <h3 id={headingId}>{category.title}</h3>
-        <span className={files.length === 0 ? "doc-count" : "doc-count doc-count-on"}>
-          {files.length === 0 ? "None yet" : `${files.length} saved`}
-        </span>
-      </header>
-      <p className="doc-hint">{category.hint}</p>
-
-      <form className="doc-form" onSubmit={(e) => void submit(e)}>
-        <div className="field">
-          <span id={`${headingId}-file`}>{single ? "Photo" : "File"}</span>
-          <label className={chosen ? "doc-picker doc-picker-on" : "doc-picker"}>
-            <input
-              ref={input}
-              className="visually-hidden"
-              type="file"
-              aria-labelledby={`${headingId}-file`}
-              accept={images ? "image/jpeg,image/png,image/webp" : "image/jpeg,image/png,image/webp,application/pdf"}
-              disabled={busy}
-              onChange={(e) => {
-                setChosen(e.target.files?.[0] ?? null);
-                setNote("");
-              }}
-            />
-            <span className="doc-picker-button" aria-hidden="true">
-              {chosen ? "Change" : "Choose file"}
-            </span>
-            <span className="doc-picker-name">
-              {chosen ? `${chosen.name} · ${sizeLabel(chosen.size)}` : images ? "JPEG, PNG, or WebP" : "JPEG, PNG, WebP, or PDF"}
-            </span>
-          </label>
-        </div>
-        {single ? null : (
-          <label className="field">
-            <span>
-              Label <span className="optional">(optional)</span>
-            </span>
-            <input name="label" maxLength={80} placeholder={`e.g. ${category.title}, ${new Date().getFullYear()}`} />
-          </label>
-        )}
-        {category.privateOnly ? (
-          <p className="doc-private">
-            <span className="doc-lock" aria-hidden="true" />
-            Always private. Only {who}&rsquo;s household can open it.
-          </p>
-        ) : (
-          <label className="doc-share">
-            <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} disabled={busy} />
-            <span>
-              Share with anyone who has the link
-              <small>Leave unticked to keep it private.</small>
-            </span>
-          </label>
-        )}
-        <button className="primary doc-submit" type="submit" disabled={busy || !chosen}>
-          {busy ? "Uploading…" : single && files.length > 0 ? "Replace photo" : "Upload"}
-        </button>
-      </form>
-
+    <div className="doc-library">
+      <div className="doc-library-head">
+        <h3>Saved files</h3>
+        <span className={files.length === 0 ? "doc-count" : "doc-count doc-count-on"}>{files.length === 0 ? "None yet" : `${files.length} saved`}</span>
+      </div>
+      {files.length === 0 ? (
+        <p className="doc-empty">Nothing saved yet. Pick what it is, choose a file, and upload. It will appear here.</p>
+      ) : (
+        <>
+          <div className="doc-chips" role="group" aria-label="Filter saved files">
+            <button type="button" aria-pressed={active === "all"} className={active === "all" ? "doc-chip doc-chip-on" : "doc-chip"} onClick={() => setFilter("all")}>
+              All {files.length}
+            </button>
+            {counts.map(({ c, n }) => (
+              <button key={c.id} type="button" aria-pressed={active === c.id} className={active === c.id ? "doc-chip doc-chip-on" : "doc-chip"} onClick={() => setFilter(c.id)}>
+                {c.title} {n}
+              </button>
+            ))}
+          </div>
+          <ul className="doc-list">
+            {shown.map((f) => (
+              <li key={f.id}>
+                <Thumb householdId={householdId} file={f} />
+                <div className="doc-meta">
+                  <strong>{f.label || f.name}</strong>
+                  <span>
+                    {titles[f.category] ?? f.category} · {f.visibility === "public" ? "Shared by link" : "Private"} · {sizeLabel(f.size)} ·{" "}
+                    {new Date(f.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
+                  </span>
+                </div>
+                <div className="doc-actions">
+                  <button className="ghost" type="button" onClick={() => void open(f)}>
+                    Open
+                  </button>
+                  <button className="ghost" type="button" onClick={() => void remove(f)}>
+                    Delete
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       {note ? (
-        <p className={failed ? "field-error" : "note"} role={failed ? "alert" : "status"}>
+        <p className="note" role="status">
           {note}
         </p>
       ) : null}
-
-      {files.length > 0 ? (
-        <ul className="doc-list">
-          {files.map((f) => (
-            <li key={f.id}>
-              <Thumb householdId={householdId} file={f} />
-              <div className="doc-meta">
-                <strong>{f.label || f.name}</strong>
-                <span>
-                  {f.visibility === "public" ? "Shared by link" : "Private"} · {sizeLabel(f.size)} ·{" "}
-                  {new Date(f.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
-                </span>
-              </div>
-              <div className="doc-actions">
-                <button className="ghost" type="button" onClick={() => void open(f)}>
-                  Open
-                </button>
-                <button className="ghost" type="button" onClick={() => void remove(f)}>
-                  Delete
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </section>
+    </div>
   );
 }
 
 // Photos and documents the family keeps so that a responder, or Saathi's family, can tell who this person is.
-// Each category has its own form. Files are stored in a locked bucket; a private file opens through a link that
-// stops working after 30 minutes.
+// Files are stored in a locked bucket; a private file opens through a link that stops working after 30 minutes.
 export function DocumentsCard({ householdId, name, demo, onChanged }: Props) {
   const who = name || "your parent";
   const [categories, setCategories] = useState<FileCategory[]>(FALLBACK_CATEGORIES);
@@ -281,52 +391,51 @@ export function DocumentsCard({ householdId, name, demo, onChanged }: Props) {
   }, [householdId]);
 
   useEffect(() => {
-    if (demo || !householdId) return;
+    if (!householdId) return;
     void refresh();
     fetchCategories()
       .then(setCategories)
       .catch(() => {
         // Keep the built-in list.
       });
-  }, [householdId, demo, refresh]);
+  }, [householdId, refresh]);
+
+  const afterChange = async () => {
+    await refresh();
+    changed.current?.();
+  };
 
   return (
     <section className="panel-wide documents" aria-labelledby="documents-title">
       <h2 id="documents-title">Photos and documents</h2>
       <p>
-        Keep what identifies {who} and what the family needs to find quickly. Pick a category, choose a file (JPEG, PNG,
-        WebP, or a PDF up to 8&nbsp;MB), and upload. Private files open through a link that stops working after 30
-        minutes.
+        Keep what identifies {who} and what the family needs to find quickly. Private files open through a link that
+        stops working after 30 minutes.
       </p>
       {demo ? (
-        <p className="note">Uploads are turned off in the demo household. Create an account to try them.</p>
-      ) : (
-        <>
-          {loadError ? (
-            <p className="field-error" role="alert">
-              {loadError}{" "}
-              <button className="text-link" type="button" onClick={() => void refresh()}>
-                Try again
-              </button>
-            </p>
-          ) : null}
-          <div className="doc-grid">
-            {categories.map((c) => (
-              <CategorySection
-                key={c.id}
-                category={c}
-                files={files.filter((f) => f.category === (c.id as FileCategoryId))}
-                householdId={householdId}
-                who={who}
-                onUploaded={async () => {
-                  await refresh();
-                  changed.current?.();
-                }}
-              />
-            ))}
-          </div>
-        </>
-      )}
+        <p className="note">
+          This is the shared demo account. Uploads work and are saved, but everyone trying the demo can see them. Please
+          use sample files, not real personal documents.
+        </p>
+      ) : null}
+      {loadError ? (
+        <p className="field-error" role="alert">
+          {loadError}{" "}
+          <button className="text-link" type="button" onClick={() => void refresh()}>
+            Try again
+          </button>
+        </p>
+      ) : null}
+      <div className="doc-layout">
+        <Uploader
+          categories={categories}
+          householdId={householdId}
+          who={who}
+          hasProfilePhoto={files.some((f) => f.category === "profile_photo")}
+          onUploaded={afterChange}
+        />
+        <Library categories={categories} files={files} householdId={householdId} onChanged={afterChange} />
+      </div>
     </section>
   );
 }

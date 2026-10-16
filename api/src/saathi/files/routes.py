@@ -158,16 +158,16 @@ def read_token(token: str, now: Optional[float] = None) -> dict:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "This link has expired or is not valid.")
 
 
+DEMO_MAX_FILES = 40
+
+
 def _guard(actor: ActorContext, household_id: str) -> None:
-    if is_demo_household(household_id):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Uploads are off in the demo household.")
+    """The shared demo household takes uploads like any account (it is open by design); ensure_household_access allows it."""
     ensure_household_access(actor, household_id)
 
 
 @router.get("", response_model=list[FileRecord])
 def list_files(household_id: str, actor: ActorContext = Depends(get_current_actor)) -> list[FileRecord]:
-    if is_demo_household(household_id):
-        return []
     ensure_household_access(actor, household_id)
     rows = get_repository().col_list(f"households/{household_id}/files", limit=MAX_FILES)
     records = [FileRecord(**r) for r in rows]
@@ -198,12 +198,14 @@ async def upload_file(
 
     repo = get_repository()
     existing = repo.col_list(f"households/{household_id}/files", limit=MAX_FILES + 1)
-    if len(existing) >= MAX_FILES:
+    # The demo is open to everyone, so it holds fewer files and never exposes one without a signed link.
+    demo = is_demo_household(household_id)
+    if len(existing) >= (DEMO_MAX_FILES if demo else MAX_FILES):
         raise HTTPException(status.HTTP_409_CONFLICT, "This household has reached its file limit.")
 
     file_id = uuid.uuid4().hex[:16]
     # Medical and identity files are never public. Anything else is private unless the family asks.
-    chosen: Visibility = "private" if category in ALWAYS_PRIVATE else visibility
+    chosen: Visibility = "private" if category in ALWAYS_PRIVATE or demo else visibility
     path = object_path(_owner_folder(actor), chosen, actor.uid, category, name, content_type)
     record = FileRecord(
         id=file_id,

@@ -128,7 +128,7 @@ export function AppShell() {
           This is all Kamla sees. Saathi speaks first, and there are four large buttons. Nothing to set up and no
           menus.
         </p>
-        <p className="stage-note">Synthetic household. Voice runs live with Gemini.</p>
+        <p className="stage-note">Shared demo account, no login. Changes are saved. Voice runs live with Gemini.</p>
         <div className="stage-links">
           <Link className="button" to="/care?demo=1">
             See Rahul&rsquo;s caretaker app
