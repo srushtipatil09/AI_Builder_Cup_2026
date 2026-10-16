@@ -123,9 +123,17 @@ export function CompanionChat({ demo, name }: Props) {
     if (socketRef.current) return;
     liveReadyRef.current = false;
     setStatus(early ? "idle" : "connecting");
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/api/v1/sessions/${sessionIdRef.current}/live`;
+    const apiUrl = import.meta.env.VITE_API_URL;
+    let wsUrl: string;
+    if (apiUrl) {
+      const wsProto = String(apiUrl).startsWith("https") ? "wss:" : "ws:";
+      const cleanHost = String(apiUrl).replace(/^https?:\/\//, "").replace(/\/+$/, "");
+      wsUrl = `${wsProto}//${cleanHost}/api/v1/sessions/${sessionIdRef.current}/live`;
+    } else {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const host = window.location.host;
+      wsUrl = `${protocol}//${host}/api/v1/sessions/${sessionIdRef.current}/live`;
+    }
 
     const ws = new WebSocket(wsUrl);
     socketRef.current = ws;

@@ -2,7 +2,8 @@ import { currentIdToken } from "./firebase";
 import type { Desk } from "../desk";
 import type { FamilyLink } from "../family";
 
-const BASE_URL = "/api/v1";
+const API_ORIGIN = import.meta.env.VITE_API_URL ? String(import.meta.env.VITE_API_URL).replace(/\/+$/, "") : "";
+const BASE_URL = `${API_ORIGIN}/api/v1`;
 
 async function getAuthHeaders(householdId?: string, role?: string): Promise<HeadersInit> {
   const headers: Record<string, string> = {
