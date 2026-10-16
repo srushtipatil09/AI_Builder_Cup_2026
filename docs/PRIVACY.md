@@ -12,15 +12,17 @@ This is a prototype policy. It is not a DPDP or HIPAA certification.
 | Push text | The phone lock screen | Generic. No name, quote, or medicine |
 | Account profile | Firestore `users/<uid>`, written by `GET` and `PUT /api/v1/me` | Until the account is deleted. Role, names, language, and family code |
 | Photos and documents | Cloud Storage, with metadata in Firestore `households/<id>/files` | Until deleted. Prescriptions, reports, bills, medicine strips, identity proofs, and insurance are always private |
-| Private file links | Signed by the API (`LINK_SIGNING_SECRET`) | 30 minutes. A tampered or expired link is refused |
+| Private file links | Signed by the API with `LINK_SIGNING_SECRET`, kept in Secret Manager (`saathi-link-signing`) | 30 minutes. A tampered or expired link is refused |
+| Consent | Firestore `users/<uid>.consentAt`, set when Create account is submitted with the agreement box ticked | Until the account is deleted |
+| Demo visitor counter | Firestore `_usage/<day>/demo_visitors/<hash>` | A daily, salted hash of the caller's address, not the address. Counts demo voice sessions (three a day) |
 
-The 7-day and 30-day rows above are a starting policy. This build does not yet delete transcripts or summaries on that clock.
+The worker's `/internal/retention` route applies the 7-day and 30-day rows: it clears the words from session records after 7 days (the measurements stay) and deletes observations, Firestore daily numbers, and BigQuery `daily_metrics` rows after 30 days. Cloud Scheduler job `saathi-retention` calls it daily at 21:30 UTC once `deployment/scripts/setup_cloud.ps1` has been run. Family episodes are verified facts and stay until deleted.
 
 The browser cannot read or write Firestore. Rules deny every client. The API checks household and role on each request. The storage bucket stays private. A shared photo is served by the API from a public folder path, not by a public bucket grant.
 
 BigQuery rows use a pseudonymous household id. They are still linkable to the household. They do not contain quotes, names, medicine labels, or transcripts.
 
-Caretaker memories and conversation corrections are both visible on the care desk. A caretaker memory shows the caretaker's name. A conversation correction shows `conversation`. Pausing or revoking consent is not implemented in this build.
+Caretaker memories and conversation corrections are both visible on the care desk. A caretaker memory shows the caretaker's name. A conversation correction shows `conversation`. Create account requires the agreement box. Pausing or revoking consent is not implemented in this build.
 
 Logs carry request ids and stage timing. They do not carry transcripts, names, quotes, medicine labels, or tokens.
 

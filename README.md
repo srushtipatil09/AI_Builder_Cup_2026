@@ -80,12 +80,47 @@ Copy `.env.example` to `.env` when a Google Cloud project id exists. Do not comm
 
 ## Status
 
-| Piece | State |
+Honesty table (master plan section 14). Kept true at submission time; [docs/PROGRESS.md](docs/PROGRESS.md) has the checks behind each row.
+
+| Item | State |
 | --- | --- |
-| Landing page, care desk, chat, accounts, family code | Built |
-| Gemini Live voice, post-call extraction, family episodes, drift, SafetyGuard, insight | Built, checked against real Vertex, Firestore, and BigQuery |
-| Cloud Tasks queue, worker service, Cloud Scheduler, public URL | Code ready; not recorded as created or verified |
-| FCM push on a real phone, real installed PWA | Not verified |
-| Nest speaker | Milestone M16, after submission |
+| Public URL | Site https://saathi-5afcf.web.app, API on Cloud Run (`saathi-api`), private worker (`saathi-worker`) |
+| Hindi Live conversation on Cloud Run | Built. Model `gemini-live-2.5-flash-native-audio`, voice Aoede. Checked against Vertex from a local API; a turn on the public URL from a second browser is not yet recorded |
+| Proactive greeting from an awake tab | Built. Due check-ins need the `saathi-tick` Scheduler job |
+| Memory across sessions | Built. A caretaker memory feeds the next greeting |
+| Family episodes and Firestore vector search | Built. Embeddings `text-multilingual-embedding-002` |
+| In-session distress check | Voice keywords and labeled impact clips (Flash labels the clip). Door clip does not alert |
+| Browser speech timing | Built, quality-flagged. Speaking rate is not measured by the live chat |
+| Flash extraction | Built. Eval: 30/30 labeled cases on `gemini-2.5-flash` (`make eval`, `eval/report.json`) |
+| BigQuery SQL drift | Built. Seeded stable, changing, and fasting histories disagree as expected |
+| ARIMA_PLUS | Not built. Not the decision engine |
+| ADK tools | Three tools. ADK is an optional install; without it the same tools run in a fixed order |
+| SafetyGuard | Built, covered by pytest (`make check SCENARIO=safety`) |
+| Voice reminder create and confirm | Built. Saved only after the parent's own yes |
+| FCM | Code and service worker in place. A push on a real phone is not yet verified; the in-app banner always works |
+| Landing page, care desk, mobile chat | Built. The account role chooses the front: caretaker `/care`, parent `/app` |
+| PWA install | Chrome install sheet and iPhone instructions built. A real install on a phone is not yet verified |
+| Retention | Worker job: transcripts 7 days, summaries and daily numbers 30 days |
+| Background wake word | Not possible in a PWA. A check-in is a notification, then speech in the open app |
+| Nest / Google Home | Not built. Milestone M16 |
+| Pill identification, gas, glass | Not built. Later work |
+| Vertex AI Vector Search endpoint | Not used. Firestore vector search is the index that shipped |
+| WhatsApp ingestion | Not built. Family contact comes from what the parent tells Saathi |
+| Marathi | Not enabled |
+| Clinical validation | Not claimed |
+
+### Not in this prototype
+
+Weekday recurrence edge cases, voice edit of every reminder field, Marathi, Sutra as a full mode, Nest and Google Home (M16), pill recognition, gas and glass detection, a Vertex AI Vector Search endpoint, Agent Engine hosting, Terraform, Maps, SMS, WhatsApp, a composite health score, a background wake word, continuous room listening.
+
+## Deploy
+
+```bash
+powershell -File deployment/scripts/setup_cloud.ps1
+powershell -File deployment/scripts/deploy.ps1
+python scripts/smoke_cloud.py --invoke
+```
+
+`setup_cloud.ps1` runs once: the signing secret, the service-account grants, and the two Scheduler jobs. `deploy.ps1` builds one image for both Cloud Run services and deploys Hosting.
 
 Owners: Vibhuti Singh and Srushti Patil. Theme: Sustainability and Social Impact.

@@ -14,11 +14,15 @@ Fill this file when a command actually succeeds. Do not invent a project id or a
 | Extract and insight model | `gemini-2.5-flash` |
 | Embedding model | `text-multilingual-embedding-002` |
 | Uploads bucket | `UPLOADS_BUCKET`, or `{project}-media` when empty. Progress records `saathi-511717-media`. The earlier `saathi-511717-private` bucket is unused |
-| API URL | `http://127.0.0.1:8080` (local FastAPI). A public Cloud Run URL is not recorded as verified |
-| Web URL | `http://127.0.0.1:5173` (local Vite). A public Hosting URL is not recorded as verified. `VITE_API_URL` is for a build that is not behind the Vite proxy |
-| Git revision | `dev` at `4776be2`. 75 tests collected on 16 Oct 2026. The last recorded green run in PROGRESS is 71 passed. This docs pass did not re-run the suite |
+| API URL | https://saathi-api-ikr6m7lina-uc.a.run.app (Cloud Run `saathi-api`, us-central1). `/health` returned 200 on 16 Oct 2026 |
+| Web URL | https://saathi-5afcf.web.app (Firebase Hosting). Built with `VITE_API_URL` set to the API URL. The caretaker demo loaded and called the API on 16 Oct 2026 |
+| Git revision | Deployed API revision `saathi-api-00003` predates the 16 Oct evening commits on `dev`; redeploy with `deploy.ps1` |
 | Billing shape | Request-based Cloud Run CPU, min instances 0, session cap 240 seconds, max bytes billed 100 MiB |
-| Household auth | Code default `REQUIRE_HOUSEHOLD_AUTH` is false. `.env.example` sets it true. Demo households stay open either way |
-| Post-call worker | `TASK_QUEUE` default `saathi-pipeline`. Empty `WORKER_URL` runs the pipeline in the API process. Progress records that the Cloud Tasks queue, worker service, and Scheduler job were not created |
+| Household auth | `REQUIRE_HOUSEHOLD_AUTH=true` on Cloud Run. Code default is false for local runs. Demo households stay open |
+| Post-call worker | https://saathi-worker-ikr6m7lina-uc.a.run.app, private (anonymous calls get 403). Queue `saathi-pipeline` RUNNING. On 16 Oct 2026 every enqueue failed (`iam.serviceAccounts.actAs` missing for `backend-dev@`) and the API ran the pipeline in-process; the worker also lacked `TASK_INVOKER_EMAIL` and `WORKER_URL`. `setup_cloud.ps1` and the updated `deploy.ps1` fix both; not yet run |
+| Runtime service account | `backend-dev@saathi-511717.iam.gserviceaccount.com` for both services, and the Tasks and Scheduler OIDC identity |
+| Signing secret | Secret Manager `saathi-link-signing`, mounted as `LINK_SIGNING_SECRET`. Created by `setup_cloud.ps1`; until it runs, the API still holds a plain environment value |
+| Scheduler | `saathi-tick` every minute UTC and `saathi-retention` 21:30 UTC, both created by `setup_cloud.ps1`. None existed on 16 Oct 2026 |
+| Extraction eval | 30/30 labeled cases on `gemini-2.5-flash`, 16 Oct 2026 (`eval/report.json`) |
 
-Names for `.env` are listed in `.env.example`, including `LIVE_VOICE`, `UPLOADS_BUCKET`, `LINK_SIGNING_SECRET`, `REQUIRE_HOUSEHOLD_AUTH`, `TASK_QUEUE`, and `WORKER_URL`. Do not copy secret values into this file. `.env.example` still lists the older candidate ids `gemini-3.8-live` and `gemini-3.8-flash`. An unset model variable uses the 2.5 defaults in `config.py`.
+Names for `.env` are listed in `.env.example`. Do not copy secret values into this file. `LINK_SIGNING_SECRET` in a local `.env` is for local runs only; production reads Secret Manager.

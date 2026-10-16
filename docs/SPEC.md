@@ -43,7 +43,7 @@ A desktop page with a header and a footer.
 
 Separate pages. Each asks for email and password, and offers Google sign-in.
 
-Create account first asks who the account is for: **I'm caring for someone** (caretaker) or **It's for me** (the older adult). The caretaker path asks for their name, the parent's preferred name, and the language. The parent path asks what Saathi should call them and the language. The role is stored with the account, so Log in asks only for email and password.
+Create account first asks who the account is for: **I'm caring for someone** (caretaker) or **It's for me** (the older adult). The caretaker path asks for their name, the parent's preferred name, and the language. The parent path asks what Saathi should call them and the language. Both paths end with an agreement box about what Saathi keeps (words for 7 days, summaries for 30); the account is not created until it is ticked. The role is stored with the account, so Log in asks only for email and password.
 
 ### Family code
 
@@ -79,7 +79,7 @@ A caretaker memory stores the caretaker's name in `author` (or "You" when the na
 
 ### Companion chat
 
-Talk, Stop, Pause, and Contact family. Captions are optional. The chat Demo panel has three controls: a labeled distress clip, an ordinary door clip, and a seeded session. The care desk Routine tab seeds labeled histories, runs a seeded session, and simulates an unanswered invitation versus a device that is unavailable. Advancing the logical clock is `POST /api/v1/demo/advance`, not a chat button.
+Talk, Stop, Pause, and Contact family. Captions are optional. The chat Demo panel has four controls: Simulate morning inactivity (labeled "Simulated. This build does not read a Nest sensor."; it starts the same invitation the scheduler sends), a labeled distress clip, an ordinary door clip, and a seeded session. A demo visitor gets three voice sessions a day; the seeded session still works after that. The care desk Routine tab seeds labeled histories, runs a seeded session, and simulates an unanswered invitation versus a device that is unavailable. Advancing the logical clock is `POST /api/v1/demo/advance`, not a chat button.
 
 ## A day with Saathi
 
