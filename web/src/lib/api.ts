@@ -3,7 +3,8 @@ import type { Desk } from "../desk";
 import type { FamilyLink } from "../family";
 import { readSession } from "../session";
 
-const BASE_URL = "/api/v1";
+const API_ORIGIN = import.meta.env.VITE_API_URL ? String(import.meta.env.VITE_API_URL).replace(/\/+$/, "") : "";
+const BASE_URL = `${API_ORIGIN}/api/v1`;
 
 // The API speaks snake_case; the web app's FamilyLink is camelCase.
 function toLink(raw: Record<string, string | null>): FamilyLink {

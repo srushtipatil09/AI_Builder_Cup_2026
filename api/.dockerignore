@@ -4,4 +4,3 @@ tests
 .git
 .env
 .env.*
-*.md
