@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { SiteFrame } from "./SiteFrame";
+import { LANGUAGES } from "../lib/languages";
 
 const promises = [
   {
@@ -35,16 +36,14 @@ export function LandingPage() {
     <SiteFrame home>
       <section className="hero" aria-labelledby="hero-title">
         <div className="hero-copy">
-          <p className="eyebrow">A Hindi voice companion</p>
+          <p className="eyebrow">A voice companion in ten Indian languages</p>
           <h1 id="hero-title" className="hero-title">
-            <span className="display-name" lang="hi">
-              साथी
-            </span>
+            <img className="display-name brand-logo" src="/brand/saathi-logo.png" width="648" height="422" alt="Saathi" />
             <span className="stack-line">The call comes to her.</span>
           </h1>
           <p className="lede">
-            For a parent whose family lives somewhere else. Saathi speaks first, in Hindi, so the day starts with a
-            conversation instead of a form.
+            For a parent whose family lives somewhere else. Saathi speaks first, in the parent&rsquo;s own language, so
+            the day starts with a conversation instead of a form.
           </p>
           <div className="actions">
             <Link className="button button-lg" to="/app?demo=1">
@@ -85,6 +84,35 @@ export function LandingPage() {
             <p>{item.body}</p>
           </article>
         ))}
+      </section>
+
+      <section id="languages" className="languages" aria-labelledby="languages-title">
+        <header className="languages-head">
+          <p className="eyebrow">New: more languages</p>
+          <h2 id="languages-title" className="section-title">
+            Saathi speaks her language
+          </h2>
+          <p>
+            The family picks the language once, for each parent. Saathi greets, listens, and reads reminders back in it,
+            and the buttons on her phone change with it. If she slips into Hindi or English, Saathi follows.
+          </p>
+          <p className="languages-note">
+            Hindi is what the demo was tested with. The other languages are new and still need a check by native speakers.
+          </p>
+        </header>
+        <ul className="language-grid">
+          {LANGUAGES.map((l) => (
+            <li key={l.name} className="language-card">
+              <span className="language-native" lang={l.code.slice(0, 2)}>
+                {l.native}
+              </span>
+              <span className="language-name">{l.name}</span>
+              <span className="language-hello" lang={l.code.slice(0, 2)}>
+                {l.words.hello}
+              </span>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section id="day" className="offers" aria-labelledby="day-title">

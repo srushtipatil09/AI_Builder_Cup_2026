@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { blankDesk, demoDesk, formatClock, formatQuiet, today, useDesk, type Desk } from "../desk";
 import { useFamilyLink } from "../family";
-import { useHealth } from "../health";
+import { useHealth, useMedia } from "../health";
 import { activeHouseholdId, readSession, writeSession, type HouseholdSession } from "../session";
-import { addFamilyMember, fetchFamilyMembers, type FamilyMember } from "../lib/api";
+import { addFamilyMember, type FamilyMember } from "../lib/api";
+import { useAppDispatch, useAppSelector } from "../store";
+import { loadMembers as loadMembersThunk, memberAdded } from "../store/reads";
 import { useAccountPhoto } from "../lib/firebase";
 import { FamilySwitcher, PersonAvatar } from "./desk/FamilySwitcher";
 import { RoutineTab } from "./desk/RoutineTab";
@@ -17,6 +19,7 @@ import { MedicineTab } from "./desk/MedicineTab";
 import { ProfileTab } from "./desk/ProfileTab";
 import { TellSaathiTab } from "./desk/TellSaathiTab";
 import { UndoContext } from "./desk/undo";
+import { InstallSheet } from "./InstallSheet";
 
 type Props = {
   demo: boolean;
@@ -108,25 +111,32 @@ const DEMO_MEMBERS: FamilyMember[] = [
   { id: "demo-kamla-sharma", parentName: "Kamla", language: "Hindi", city: "Varanasi", primary: true, phoneConnected: false, openAlerts: 0, urgentAlerts: 0, photo: DEMO_PHOTO },
 ];
 
+const NO_MEMBERS: FamilyMember[] = [];
+
 // The caretaker app. One caretaker may look after several family members; each has its own desk, so the desk
 // below remounts (fresh state, fresh polling) whenever the caretaker switches to another person.
 export function CareApp({ demo, onLeave }: Props) {
   const [session, setSession] = useState(readSession);
   const accountPhoto = useAccountPhoto();
-  const [members, setMembers] = useState<FamilyMember[]>([]);
+  const dispatch = useAppDispatch();
+  const members = useAppSelector((state) => state.reads.members?.value) ?? NO_MEMBERS;
   const [membersError, setMembersError] = useState("");
   const [open, setOpen] = useState(false);
   const activeId = demo ? "demo-kamla-sharma" : activeHouseholdId(session);
 
-  const loadMembers = useCallback(async () => {
-    if (demo) return;
-    try {
-      setMembers(await fetchFamilyMembers());
-      setMembersError("");
-    } catch {
-      setMembersError("Could not load the full list just now. Check the connection.");
-    }
-  }, [demo]);
+  // The list (with each member's alert counts) is kept for 10 minutes; opening the switcher accepts one a minute old.
+  const loadMembers = useCallback(
+    async (maxAgeMs?: number) => {
+      if (demo) return;
+      try {
+        await dispatch(loadMembersThunk({ maxAgeMs })).unwrap();
+        setMembersError("");
+      } catch (err) {
+        if ((err as { name?: string })?.name !== "ConditionError") setMembersError("Could not load the full list just now. Check the connection.");
+      }
+    },
+    [demo, dispatch],
+  );
 
   useEffect(() => {
     void loadMembers();
@@ -149,7 +159,8 @@ export function CareApp({ demo, onLeave }: Props) {
 
   async function add(name: string, language: string) {
     const member = await addFamilyMember(name, language);
-    setMembers((prev) => [...(prev.length ? prev : fallback), member]);
+    if (!members.length) fallback.forEach((m) => dispatch(memberAdded(m)));
+    dispatch(memberAdded(member));
     switchTo(member.id);
   }
 
@@ -168,7 +179,7 @@ export function CareApp({ demo, onLeave }: Props) {
         accountPhoto={demo ? null : accountPhoto}
         onOpenMembers={() => {
           setOpen(true);
-          void loadMembers();
+          void loadMembers(60_000);
         }}
       />
       {open ? (
@@ -203,8 +214,7 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
   const author = caretaker || "You";
   const family = useFamilyLink(demo ? "demo" : householdId, name, caretaker, !demo && Boolean(householdId));
   const state = useUpdates(householdId, Boolean(householdId));
-  const [photoVersion, setPhotoVersion] = useState(0);
-  const photoUrl = useProfilePhoto(householdId, true, photoVersion) ?? (demo ? DEMO_PHOTO : null);
+  const photoUrl = useProfilePhoto(householdId, true) ?? (demo ? DEMO_PHOTO : null);
   const switchHint = memberCount > 1 ? `Switch · ${memberCount} family members` : "Family members";
   const urgentAlerts = (state.updates?.alerts ?? []).filter((a) => a.tier >= 2);
   const conversationMemories = desk.memories.filter((m) => m.author === "conversation").map((m) => m.text);
@@ -266,6 +276,7 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
   const steps = setupSteps(desk, Boolean(family.link?.joinedAt), who);
   const doneCount = steps.filter((s) => s.done).length;
   const healthClass = health.tone === "ok" ? "pill pill-ok" : health.tone === "wait" ? "pill pill-wait" : "pill";
+  const phone = useMedia("(max-width: 1023px)");
 
   // A delete keeps the desk as it was for a few seconds, so "Undo" can put it back.
   const [undo, setUndo] = useState<{ label: string; before: Desk } | null>(null);
@@ -283,8 +294,8 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
     <div className={`care care-tab-${active}`}>
       <aside className="care-side">
         <div className="care-brand">
-          <Link className="brand" to="/" lang="hi">
-            साथी
+          <Link className="brand" to="/">
+            <img className="brand-logo" src="/brand/saathi-logo.png" width="648" height="422" alt="Saathi" />
           </Link>
           <span className="care-badge">Caretaker</span>
         </div>
@@ -353,6 +364,7 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
       </header>
 
       <main id="care-panel" className="care-main" role="tabpanel" aria-labelledby={`tab-${active}`}>
+        {phone ? <InstallSheet /> : null}
         <header className="care-head">
           <p className="care-greet">
             {!demo && session ? <PersonAvatar name={caretaker || session.email} src={accountPhoto} className="avatar avatar-xs" /> : null}
@@ -431,7 +443,6 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
               householdId={householdId}
               name={name}
               demo={demo}
-              onChanged={() => setPhotoVersion((v) => v + 1)}
             />
           </>
         ) : null}

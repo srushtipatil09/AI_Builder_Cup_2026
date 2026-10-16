@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { LiveAudio, toBase64 } from "../lib/liveAudio";
 import { currentIdToken } from "../lib/firebase";
-import { completeSession, contactFamily, invitationEvent, nextInvitation, sendHeartbeat, simulateInactivity, textTurn } from "../lib/api";
+import { nextDelay } from "../lib/activity";
+import { completeSession, contactFamily, invitationEvent, nextInvitation, pausedForMs, sendHeartbeat, simulateInactivity, textTurn } from "../lib/api";
 import { enableParentPush, pushMessage } from "../lib/push";
 import { readSession } from "../session";
+import { languageFor } from "../lib/languages";
+import { useAppDispatch } from "../store";
+import { nearbyForget, nearbyFound } from "../store/reads";
 import { InstallSheet } from "./InstallSheet";
 import { NearbyPanel, type NearbyCard } from "./NearbyPanel";
 import { telHref } from "./NearbyList";
@@ -14,6 +18,7 @@ type Props = { demo: boolean; name?: string; householdId?: string };
 type Message = { id: string; role: "parent" | "assistant"; text: string };
 
 export function CompanionChat({ demo, name, householdId }: Props) {
+  const dispatch = useAppDispatch();
   const [status, setStatus] = useState<"idle" | "connecting" | "listening" | "thinking" | "speaking" | "paused">("idle");
   const [messages, setMessages] = useState<Message[]>([]);
   const [alertNote, setAlertNote] = useState<string>("");
@@ -43,6 +48,10 @@ export function CompanionChat({ demo, name, householdId }: Props) {
   const [callOffer, setCallOffer] = useState<{ name: string; phone: string } | null>(null);
   const [locationNote, setLocationNote] = useState("");
   const [locationAsked, setLocationAsked] = useState(() => locationChoice(householdId ?? ""));
+  // The household's language: from the account first, then from the server once the line is open.
+  const [language, setLanguage] = useState(() => languageFor(demo ? "Hindi" : readSession()?.language));
+  const langRef = useRef(language);
+  langRef.current = language;
 
   useEffect(() => {
     // Open the line while the page loads, so the greeting starts right after Talk is tapped.
@@ -93,7 +102,7 @@ export function CompanionChat({ demo, name, householdId }: Props) {
     if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "hi-IN";
+      utterance.lang = langRef.current.code;
       utterance.rate = 0.95;
       utterance.onstart = () => setStatus("speaking");
       utterance.onend = () => {
@@ -110,7 +119,7 @@ export function CompanionChat({ demo, name, householdId }: Props) {
     if (SpeechRecognition && !recognitionRef.current) {
       try {
         const recognition = new SpeechRecognition();
-        recognition.lang = "hi-IN";
+        recognition.lang = langRef.current.code;
         recognition.continuous = false;
         recognition.interimResults = false;
         recognition.onresult = (event: any) => {
@@ -138,11 +147,13 @@ export function CompanionChat({ demo, name, householdId }: Props) {
     // After 9 pm and before 5 am the hello is calm: no chai, no questions about the day.
     const hour = new Date().getHours();
     const late = hour >= 21 || hour < 5;
+    const words = langRef.current.words;
+    const n = name ? ` ${name}` : "";
     const greeting = late
-      ? `Namaste${name ? ` ${name}` : ""}, raat ho gayi hai. Sab theek hai na?`
-      : demo
+      ? words.late(n)
+      : demo && langRef.current.name === "Hindi"
         ? "Namaste Kamla ji, chai ho gayi? Aaj kaisa lag raha hai?"
-        : `Namaste${name ? ` ${name}` : ""}, aaj aapka din kaisa raha?`;
+        : words.greet(n);
     setMessages([{ id: "init", role: "assistant", text: greeting }]);
     speakText(greeting);
   }
@@ -213,6 +224,7 @@ export function CompanionChat({ demo, name, householdId }: Props) {
         const data = JSON.parse(event.data);
         if (data.type === "ready") {
           audioOkRef.current = !!data.audio;
+          if (data.language) setLanguage(languageFor(String(data.language)));
         } else if (data.type === "live_ready") {
           liveReadyRef.current = true;
           if (wantTalkRef.current) void beginTalking();
@@ -245,6 +257,8 @@ export function CompanionChat({ demo, name, householdId }: Props) {
           );
         } else if (data.type === "nearby") {
           setNearbyCard({ kind: data.kind, items: data.items ?? [], positionShared: !!data.positionShared });
+          // The same list fills the sheet, so opening it does not look the places up again.
+          dispatch(nearbyFound({ householdId: hhRef.current, kind: String(data.kind), items: data.items ?? [], positionShared: !!data.positionShared }));
           setNearbyOpen(true);
         } else if (data.type === "call_offer") {
           setCallOffer({ name: String(data.name ?? ""), phone: String(data.phone ?? "") });
@@ -330,7 +344,7 @@ export function CompanionChat({ demo, name, householdId }: Props) {
 
   function contactFamilyNow() {
     setConfirmFamily(false);
-    const text = "Main parivaar ko alert bhej rahi hoon ki aap baat karna chahte hain.";
+    const text = langRef.current.words.telling;
     setMessages((prev) => [...prev, { id: Math.random().toString(), role: "assistant", text }]);
     speakText(text);
     contactFamily(hhRef.current)
@@ -375,20 +389,37 @@ export function CompanionChat({ demo, name, householdId }: Props) {
       wantTalkRef.current = true;
       if (!socketRef.current) connectLive();
       else if (liveReadyRef.current) void beginTalking();
+      pollFailures.current = 0;
     } catch {
-      // The invitation is tried again on the next poll.
+      // The invitation is tried again on the next poll, later each time the API keeps failing.
+      pollFailures.current += 1;
     }
   }
+  const pollFailures = useRef(0);
   const pollRef = useRef(startFromInvite);
   pollRef.current = startFromInvite;
 
   useEffect(() => {
-    const id = window.setInterval(() => {
-      if (document.visibilityState !== "visible" || !hhRef.current) return;
-      void sendHeartbeat(hhRef.current).catch(() => {});
-      void pollRef.current();
-    }, 5000);
-    return () => window.clearInterval(id);
+    let timer = 0;
+    let stopped = false;
+    let lastBeat = 0;
+    const tick = () => {
+      if (stopped) return;
+      if (document.visibilityState === "visible" && hhRef.current && pausedForMs() === 0) {
+        // Ready-signal every 30 seconds; the invitation check every 10 so a check-in starts within about 10 seconds.
+        if (Date.now() - lastBeat > 30_000) {
+          lastBeat = Date.now();
+          void sendHeartbeat(hhRef.current).catch(() => {});
+        }
+        void pollRef.current();
+      }
+      timer = window.setTimeout(tick, nextDelay(10_000, pollFailures.current, pausedForMs(), false));
+    };
+    timer = window.setTimeout(tick, 10_000);
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
   }, []);
 
   function snoozeInvite() {
@@ -436,14 +467,24 @@ export function CompanionChat({ demo, name, householdId }: Props) {
     setStatus("paused");
   }
 
+  // Each label shows the parent's language on top and English below; for English only the English line.
+  const w = language.words;
+  const lang = language.code.slice(0, 2);
+  const twoLines = language.name !== "English";
   const headline: Record<typeof status, { hi: string; en: string }> = {
-    idle: { hi: "बात करने के लिए दबाएँ", en: "Tap the green button to talk to Saathi" },
-    connecting: { hi: "जुड़ रहा है…", en: "Connecting to Saathi" },
-    listening: { hi: "सुन रहा हूँ", en: "Listening. Speak in Hindi or English." },
-    thinking: { hi: "सोच रहा हूँ…", en: "Saathi is thinking" },
-    speaking: { hi: "साथी बोल रहा है", en: "Saathi is speaking" },
-    paused: { hi: "रुका हुआ है", en: "Paused. Saathi is not listening." },
+    idle: { hi: w.idle, en: "Tap the green button to talk to Saathi" },
+    connecting: { hi: w.connecting, en: "Connecting to Saathi" },
+    listening: { hi: w.listening, en: twoLines ? `Listening. Speak in ${language.name} or English.` : "Listening. Speak in English or Hindi." },
+    thinking: { hi: w.thinking, en: "Saathi is thinking" },
+    speaking: { hi: w.speaking, en: "Saathi is speaking" },
+    paused: { hi: w.paused, en: "Paused. Saathi is not listening." },
   };
+  const said = (native: string) =>
+    twoLines ? (
+      <span lang={lang} className="control-hi">
+        {native}
+      </span>
+    ) : null;
   const busy = status === "connecting" || status === "thinking";
   const live = status !== "idle";
   const talkDisabled = busy || status === "listening" || status === "speaking";
@@ -473,10 +514,16 @@ export function CompanionChat({ demo, name, householdId }: Props) {
           </span>
         </button>
         <p className="companion-line">
-          {demo ? <span lang="hi">नमस्ते कमला जी</span> : `Namaste${name ? `, ${name} ji` : ""}`}
+          {demo && language.name === "Hindi" ? (
+            <span lang="hi">नमस्ते कमला जी</span>
+          ) : language.name === "Hindi" || !twoLines ? (
+            `Namaste${name ? `, ${name} ji` : ""}`
+          ) : (
+            <span lang={lang}>{`${w.hello}${name ? `, ${name}` : ""}`}</span>
+          )}
         </p>
         <h1 id="chat-title" aria-live="polite">
-          <span lang="hi">{headline[status].hi}</span>
+          {twoLines ? <span lang={lang}>{headline[status].hi}</span> : null}
           <span className="companion-state">{headline[status].en}</span>
         </h1>
         {invite ? (
@@ -552,19 +599,19 @@ export function CompanionChat({ demo, name, householdId }: Props) {
       {callOffer ? (
         <div className="call-offer" role="alert">
           <p>
-            <span lang="hi">कॉल करें:</span> <strong>{callOffer.name}</strong>
+            {twoLines ? <span lang={lang}>{w.call}:</span> : null} <strong>{callOffer.name}</strong>
           </p>
           <a className="primary call-offer-button" href={telHref(callOffer.phone)}>
-            <span lang="hi">कॉल करें</span> <span className="control-en">Call {callOffer.name}</span>
+            {twoLines ? <span lang={lang}>{w.call}</span> : null} <span className="control-en">Call {callOffer.name}</span>
           </a>
           <button className="text-link" type="button" onClick={() => setCallOffer(null)}>
-            <span lang="hi">नहीं</span> <span className="control-en">Not now</span>
+            {twoLines ? <span lang={lang}>{w.no}</span> : null} <span className="control-en">Not now</span>
           </button>
         </div>
       ) : null}
 
       <button className="ghost nearby-open" type="button" onClick={() => { setNearbyCard(null); setNearbyOpen(true); }}>
-        <span lang="hi" className="control-hi">आस-पास मदद</span>
+        {said(w.nearby)}
         <span className="control-en">Nearby help: hospital, park, people, food</span>
       </button>
       {!demo && hhRef.current && !locationAsked ? (
@@ -574,6 +621,7 @@ export function CompanionChat({ demo, name, householdId }: Props) {
             type="button"
             onClick={() =>
               void shareLocationOnce(hhRef.current).then((r) => {
+                if (r === "saved") dispatch(nearbyForget(hhRef.current));
                 setLocationNote(locationMessage(r));
                 setLocationAsked(locationChoice(hhRef.current));
               })
@@ -584,7 +632,7 @@ export function CompanionChat({ demo, name, householdId }: Props) {
           {locationNote ? <span> {locationNote}</span> : null}
         </p>
       ) : null}
-      {nearbyOpen ? <NearbyPanel householdId={hhRef.current} demo={demo} card={nearbyCard} onClose={() => setNearbyOpen(false)} /> : null}
+      {nearbyOpen ? <NearbyPanel householdId={hhRef.current} demo={demo} card={nearbyCard} language={language} onClose={() => setNearbyOpen(false)} /> : null}
 
       {hhRef.current ? (
         <p className="push-opt">
@@ -605,16 +653,16 @@ export function CompanionChat({ demo, name, householdId }: Props) {
         {confirmFamily ? (
           <div className="family-confirm" role="alertdialog" aria-labelledby="family-confirm-title">
             <p id="family-confirm-title">
-              <span lang="hi">परिवार को बताएँ कि आप बात करना चाहते हैं?</span>
+              {twoLines ? <span lang={lang}>{w.askFamily}</span> : null}
               <span>Tell your family you want to talk?</span>
             </p>
             <div className="family-confirm-actions">
               <button className="primary" type="button" onClick={contactFamilyNow} autoFocus>
-                <span lang="hi" className="control-hi">हाँ, बताएँ</span>
+                {said(w.yesTell)}
                 <span className="control-en">Yes, tell them</span>
               </button>
               <button className="ghost" type="button" onClick={() => setConfirmFamily(false)}>
-                <span lang="hi" className="control-hi">नहीं</span>
+                {said(w.no)}
                 <span className="control-en">No</span>
               </button>
             </div>
@@ -622,29 +670,21 @@ export function CompanionChat({ demo, name, householdId }: Props) {
         ) : (
           <>
             <button className={`primary control-talk ${live && !busy ? "active" : ""}`} type="button" onClick={talk} disabled={talkDisabled}>
-              <span lang="hi" className="control-hi">
-                {status === "paused" ? "फिर शुरू करें" : status === "idle" ? "बात करें" : busy ? "एक पल…" : "सुन रहा हूँ…"}
-              </span>
+              {said(status === "paused" ? w.resume : status === "idle" ? w.talk : busy ? w.moment : `${w.listening}…`)}
               <span className="control-en">
                 {status === "paused" ? "Resume" : status === "idle" ? "Talk" : busy ? "One moment" : "Listening"}
               </span>
             </button>
             <button className="ghost" type="button" onClick={stopSession} disabled={!live}>
-              <span lang="hi" className="control-hi">
-                बंद करें
-              </span>
+              {said(w.stop)}
               <span className="control-en">Stop</span>
             </button>
             <button className="ghost" type="button" onClick={togglePause} disabled={!live || busy}>
-              <span lang="hi" className="control-hi">
-                {status === "paused" ? "चालू करें" : "रुकें"}
-              </span>
+              {said(status === "paused" ? w.resume : w.pause)}
               <span className="control-en">{status === "paused" ? "Resume" : "Pause"}</span>
             </button>
             <button className="ghost control-family" type="button" onClick={() => setConfirmFamily(true)}>
-              <span lang="hi" className="control-hi">
-                परिवार
-              </span>
+              {said(w.family)}
               <span className="control-en">Contact family</span>
             </button>
           </>

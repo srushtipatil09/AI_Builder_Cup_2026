@@ -41,7 +41,7 @@ export function AuthLayout({ eyebrow, title, lede, children, aside, demoLinks = 
           <p className="m-auth-brand" lang="hi">
             साथी
           </p>
-          <p className="m-auth-tag">A Hindi companion that speaks first.</p>
+          <p className="m-auth-tag">A companion that speaks first, in your language.</p>
         </header>
         <main id="main" className="m-auth-sheet" aria-labelledby="auth-title">
           <h1 id="auth-title">{title}</h1>

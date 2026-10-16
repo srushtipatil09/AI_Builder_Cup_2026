@@ -190,7 +190,14 @@ export function EmergencyTab({ desk, setDesk, name, householdId }: Props) {
         </form>
       </section>
 
-      {householdId ? <NearbyCard householdId={householdId} name={name} /> : null}
+      {householdId ? (
+        <NearbyCard
+          householdId={householdId}
+          name={name}
+          city={desk.profile.city}
+          contactsKey={desk.contacts.map((c) => `${c.name}|${c.phone}|${c.local ? 1 : 0}`).join(";")}
+        />
+      ) : null}
 
       <section className="panel panel-wide" aria-labelledby="helpline">
         <h2 id="helpline">Someone to talk to</h2>

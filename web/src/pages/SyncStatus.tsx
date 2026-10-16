@@ -19,7 +19,7 @@ function ago(at: number | null, now: number): string {
 }
 
 // Says whether what is on screen matches Firestore. A failure is shown in words, with a way to try again.
-export function SyncStatus({ sync, syncedAt, onRetry, demo }: Props) {
+export function SyncStatus({ sync, syncedAt, error, onRetry, demo }: Props) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 5000);
@@ -27,10 +27,17 @@ export function SyncStatus({ sync, syncedAt, onRetry, demo }: Props) {
   }, []);
 
   if (sync === "offline") {
+    const paused = (error ?? "").includes("paused");
     return (
       <div className="sync sync-bad" role="alert">
         <span>
-          <strong>Changes are not saved yet.</strong> They are kept on this device and will retry.
+          {paused ? (
+            <strong>Saving is paused for a moment, your changes are kept on this device.</strong>
+          ) : (
+            <>
+              <strong>Changes are not saved yet.</strong> They are kept on this device and will retry.
+            </>
+          )}
         </span>
         <button className="ghost" type="button" onClick={onRetry}>
           Try now

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useUndoable } from "./undo";
 import { TimePicker } from "./Pickers";
 import { newId, parseQuiet, type Desk, type Profile } from "../../desk";
+import { LanguageOptions } from "../../lib/languages";
 
 type Props = {
   desk: Desk;
@@ -113,8 +114,7 @@ export function ProfileTab({ desk, setDesk, author, photo }: Props) {
           <label className="field">
             Language
             <select name="language" defaultValue={p.language}>
-              <option value="Hindi">Hindi, spoken</option>
-              <option value="English">English, text fallback</option>
+              <LanguageOptions />
             </select>
           </label>
           <label className="field">

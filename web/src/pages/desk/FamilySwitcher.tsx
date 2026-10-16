@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { FamilyMember } from "../../lib/api";
+import { LanguageOptions } from "../../lib/languages";
 
 type Props = {
   members: FamilyMember[];
@@ -133,8 +134,7 @@ export function FamilySwitcher({ members, activeId, demo, loadError, onSwitch, o
             <label className="field" htmlFor="member-language">
               Language
               <select id="member-language" name="member-language" defaultValue="Hindi">
-                <option value="Hindi">Hindi, spoken</option>
-                <option value="English">English, text fallback</option>
+                <LanguageOptions />
               </select>
             </label>
             {error ? (

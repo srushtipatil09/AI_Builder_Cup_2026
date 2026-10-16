@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import secrets
 import time
 from datetime import datetime, timezone
@@ -18,6 +19,25 @@ from saathi.contracts.identity import FamilyLinkRecord, HouseholdRecord
 logger = logging.getLogger(__name__)
 
 DESK_CACHE_SECONDS = 120
+# The shared demo desk is edited from several browsers and served by several instances, so it is always read fresh: a
+# copy kept on another instance would show an edit as undone. It costs one read per open page per poll, which is small.
+DEMO_DESK_CACHE_SECONDS = 0
+
+# One small document lists every household's check-in and reminder times, so the minute tick reads one document
+# instead of one desk per household. save_desk keeps it current.
+SCHEDULE_INDEX = "_schedule/index"
+
+
+def schedule_key(household_id: str) -> str:
+    return "h_" + re.sub(r"[^A-Za-z0-9_-]", "_", household_id)
+
+
+def schedule_entry(household_id: str, desk: Desk) -> dict:
+    return {
+        "id": household_id,
+        "checkIn": desk.profile.checkIn or "",
+        "times": sorted({m.time for m in desk.medicines if m.time}),
+    }
 
 # Code alphabet avoiding lookalikes (0/O, 1/I/L)
 ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
@@ -43,6 +63,22 @@ def _check_path(path: str) -> None:
         raise ValueError(f"Malformed Firestore path: {path!r}")
 
 
+def _matches(have, op: str, want) -> bool:
+    if have is None:
+        return False
+    if op == "in":
+        return have in want
+    if op == "<":
+        return have < want
+    if op == "<=":
+        return have <= want
+    if op == ">":
+        return have > want
+    if op == ">=":
+        return have >= want
+    return have == want
+
+
 class FirestoreRepository:
     def __init__(self, client: Optional[firestore.Client] = None):
         self._settings = load_settings()
@@ -57,6 +93,7 @@ class FirestoreRepository:
         self._use_fallback = False
         # Desks are read on every call start; keep them in memory for a short time.
         self._desk_cache: dict[str, tuple[float, Desk]] = {}
+        self._schedule_seen: dict[str, dict] = {}
 
     def _fall_back(self, exc: Exception) -> None:
         """Local runs switch to the in-memory store. On Cloud Run the error surfaces instead: one bad call must not
@@ -105,10 +142,11 @@ class FirestoreRepository:
         self._fallback_store["households"][household.id] = household.model_dump()
 
     # Desk methods
-    def get_desk(self, household_id: str) -> Optional[Desk]:
-        hit = self._desk_cache.get(household_id)
-        # The shared demo accounts are edited by many people on several instances; always read the stored copy.
-        if hit and not household_id.startswith("demo-") and time.monotonic() - hit[0] < DESK_CACHE_SECONDS:
+    def get_desk(self, household_id: str, fresh: bool = False) -> Optional[Desk]:
+        hit = None if fresh else self._desk_cache.get(household_id)
+        # The shared demo accounts are edited by many people on several instances: keep their copy only briefly.
+        ttl = DEMO_DESK_CACHE_SECONDS if household_id.startswith("demo-") else DESK_CACHE_SECONDS
+        if hit and time.monotonic() - hit[0] < ttl:
             return hit[1]
         desk = self._load_desk(household_id)
         if desk:
@@ -134,11 +172,26 @@ class FirestoreRepository:
         if client and not self._use_fallback:
             try:
                 client.collection("households").document(household_id).collection("desk").document("current").set(desk.model_dump())
+                self.note_schedule(household_id, desk)
                 return
             except GoogleAPICallError as exc:
                 logger.error("Firestore save_desk error: %s; falling back to in-memory", exc)
                 self._fall_back(exc)
         self._fallback_store["desks"][household_id] = desk.model_dump()
+        self.note_schedule(household_id, desk)
+
+    def note_schedule(self, household_id: str, desk: Desk, known: Optional[dict] = None) -> None:
+        """Keep this household's times in the schedule index. Writes only when they changed, and never fails a save."""
+        entry = schedule_entry(household_id, desk)
+        if (known if known is not None else self._schedule_seen.get(household_id)) == entry:
+            self._schedule_seen[household_id] = entry
+            return
+        try:
+            self.doc_set(SCHEDULE_INDEX, {schedule_key(household_id): entry})
+            self._schedule_seen[household_id] = entry
+        except Exception as exc:
+            self._schedule_seen.pop(household_id, None)
+            logger.warning("Schedule index not updated for %s (%s); the hourly check repairs it", household_id, exc)
 
     # Family pairing codes
     def create_family_code(self, household_id: str, caretaker_name: str = "", parent_name: str = "") -> FamilyLinkRecord:
@@ -283,6 +336,72 @@ class FirestoreRepository:
                 rows.append({**value, "_id": key[len(prefix):]})
         return rows[:limit]
 
+    def col_query(
+        self,
+        path: str,
+        field: Optional[str] = None,
+        op: str = "==",
+        value=None,
+        order_by: Optional[str] = None,
+        descending: bool = False,
+        limit: int = 100,
+    ) -> list[dict]:
+        """One filter (== or in) and/or one ordering, so a read costs only the documents it returns.
+
+        Firestore bills a read for every document returned. A list of the whole collection, repeated every few
+        seconds by an open page, is what used up the free daily quota. Each row carries its id under "_id".
+        """
+        _check_path(path)
+        client = self.client
+        if client and not self._use_fallback:
+            try:
+                query = client.collection(path)
+                if field:
+                    query = query.where(filter=FieldFilter(field, op, value))
+                if order_by:
+                    query = query.order_by(
+                        order_by, direction=firestore.Query.DESCENDING if descending else firestore.Query.ASCENDING
+                    )
+                rows = []
+                for doc in query.limit(limit).stream():
+                    row = doc.to_dict() or {}
+                    row["_id"] = doc.id
+                    rows.append(row)
+                return rows
+            except GoogleAPICallError as exc:
+                logger.error("Firestore col_query %s: %s; falling back to in-memory", path, exc)
+                self._fall_back(exc)
+        rows = self._memory_rows(path)
+        if field:
+            rows = [r for r in rows if _matches(r.get(field), op, value)]
+        if order_by:
+            rows = sorted((r for r in rows if r.get(order_by) is not None), key=lambda r: r[order_by], reverse=descending)
+        return rows[:limit]
+
+    def col_count(self, path: str, order_by: Optional[str] = None) -> int:
+        """How many documents a collection holds (only those that have `order_by`, when given). Billed as one read
+        per thousand entries, not per document."""
+        _check_path(path)
+        client = self.client
+        if client and not self._use_fallback:
+            try:
+                query = client.collection(path)
+                if order_by:
+                    query = query.order_by(order_by)
+                return int(query.count().get()[0][0].value)
+            except GoogleAPICallError as exc:
+                logger.error("Firestore col_count %s: %s; falling back to in-memory", path, exc)
+                self._fall_back(exc)
+        return len([r for r in self._memory_rows(path) if not order_by or r.get(order_by) is not None])
+
+    def _memory_rows(self, path: str) -> list[dict]:
+        prefix = path.rstrip("/") + "/"
+        return [
+            {**value, "_id": key[len(prefix):]}
+            for key, value in self._docs.items()
+            if key.startswith(prefix) and "/" not in key[len(prefix):]
+        ]
+
     def list_doc_ids(self, path: str) -> list[str]:
         """Ids of every document in a collection, including ones that only have subcollections."""
         client = self.client
@@ -298,13 +417,12 @@ class FirestoreRepository:
         return sorted(ids)
 
     def increment(self, path: str, field: str, amount: float) -> float:
-        """Add to a numeric field and return the new total."""
+        """Add to a numeric field. One write; the new total is not read back (nothing used it, and a read costs quota)."""
         client = self.client
         if client and not self._use_fallback:
             try:
-                ref = client.document(path)
-                ref.set({field: firestore.Increment(amount)}, merge=True)
-                return float((ref.get().to_dict() or {}).get(field, amount))
+                client.document(path).set({field: firestore.Increment(amount)}, merge=True)
+                return amount
             except GoogleAPICallError as exc:
                 logger.error("Firestore increment %s: %s; falling back to in-memory", path, exc)
                 self._fall_back(exc)

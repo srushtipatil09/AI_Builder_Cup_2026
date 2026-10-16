@@ -6,6 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
+from saathi import cache
 from saathi.asks import service as asks
 from saathi.auth.firebase import ensure_household_access, get_current_actor, is_demo_household
 from saathi.contracts.desk import Desk
@@ -29,41 +30,92 @@ def _clean(row: dict) -> dict:
     return {k: v for k, v in row.items() if k != "_id" and k != "embedding"}
 
 
-@router.get("/updates")
-def get_updates(household_id: str, actor: ActorContext = Depends(get_current_actor)) -> dict:
-    """Latest insight, family card, open alerts, drift status, and the last three conversation summaries."""
-    _access(actor, household_id)
+# The care desk asks for these every half minute, from every open tab. Firestore bills a read for each document
+# returned, so the answer is kept for a short time and built from queries that return only what is shown.
+# - open alerts and the two documents that say "something new was processed": 20 seconds
+# - the slower parts (drift, last conversation summaries, counts): 60 seconds, rebuilt early when the newest insight or
+#   family card changed
+# - the daily numbers: 2 minutes. A page that just acted on something passes fresh=true to see the result at once.
+ALERTS_CACHE_SECONDS = 20
+SLOW_CACHE_SECONDS = 60
+METRICS_CACHE_SECONDS = 120
+
+
+def _alerts(household_id: str) -> list[dict]:
+    rows = get_repository().col_query(f"households/{household_id}/alerts", "status", "==", "open", limit=20)
+    rows = [_clean({**a, "id": a.get("id") or a["_id"]}) for a in rows]
+    return sorted(rows, key=lambda a: a.get("created_at", ""), reverse=True)
+
+
+def _slow_parts(household_id: str) -> dict:
+    """Drift, the last three summaries, and how many conversations were processed (a count, not a list of transcripts)."""
     repo = get_repository()
     base = f"households/{household_id}"
-    alerts = [_clean({**a, "id": a.get("id") or a["_id"]}) for a in repo.col_list(f"{base}/alerts", 50)]
-    alerts = sorted([a for a in alerts if a.get("status") == "open"], key=lambda a: a.get("created_at", ""), reverse=True)
-    observations = sorted(repo.col_list(f"{base}/observations", 60), key=lambda o: o.get("created_at", ""), reverse=True)
-    sessions = repo.col_list(f"{base}/sessions", 60)
-    processed = sorted([s.get("processed_at", "") for s in sessions if s.get("processed_at")], reverse=True)
+    observations = repo.col_query(f"{base}/observations", order_by="created_at", descending=True, limit=5)
+    last = repo.col_query(f"{base}/sessions", order_by="processed_at", descending=True, limit=1)
     return {
-        "insight": repo.doc_get(f"{base}/insights/latest"),
-        "familyCard": repo.doc_get(f"{base}/familyCard/latest"),
         "drift": repo.doc_get(f"{base}/driftResults/latest"),
-        "alerts": alerts,
         "summaries": [
             {"date": o.get("local_date"), "text": o["summary"], "session_id": o.get("session_id")}
             for o in observations if o.get("summary")
         ][:3],
-        "sessionsProcessed": len(processed),
-        "lastProcessedAt": processed[0] if processed else None,
+        "sessionsProcessed": repo.col_count(f"{base}/sessions", order_by="processed_at"),
+        "lastProcessedAt": last[0].get("processed_at") if last else None,
+    }
+
+
+_slow_stamp: dict[str, str] = {}
+
+
+def _stamp(doc: Optional[dict]) -> str:
+    return str((doc or {}).get("updated_at") or (doc or {}).get("created_at") or "")
+
+
+@router.get("/updates")
+def get_updates(household_id: str, fresh: bool = False, actor: ActorContext = Depends(get_current_actor)) -> dict:
+    """Latest insight, family card, open alerts, drift status, and the last three conversation summaries."""
+    _access(actor, household_id)
+    return cache.cached(f"updates:{household_id}", ALERTS_CACHE_SECONDS, lambda: _build_updates(household_id), fresh=fresh)
+
+
+def _build_updates(household_id: str) -> dict:
+    repo = get_repository()
+    base = f"households/{household_id}"
+    insight = repo.doc_get(f"{base}/insights/latest")
+    card = repo.doc_get(f"{base}/familyCard/latest")
+    stamp = _stamp(insight) + "|" + _stamp(card)
+    slow_key = f"updates-slow:{household_id}"
+    # A new insight or family card means a conversation was just processed: rebuild the slow parts now, not in a minute.
+    changed = _slow_stamp.get(household_id, stamp) != stamp
+    slow = cache.cached(slow_key, SLOW_CACHE_SECONDS, lambda: _slow_parts(household_id), fresh=changed)
+    _slow_stamp[household_id] = stamp
+    return {
+        "insight": insight,
+        "familyCard": card,
+        "alerts": _alerts(household_id),
+        "drift": slow["drift"],
+        "summaries": slow["summaries"],
+        "sessionsProcessed": slow["sessionsProcessed"],
+        "lastProcessedAt": slow["lastProcessedAt"],
         "synthetic": is_demo_household(household_id),
         "serverTime": datetime.now(timezone.utc).isoformat(),
     }
 
 
 @router.get("/metrics")
-def get_metrics(household_id: str, days: int = 14, actor: ActorContext = Depends(get_current_actor)) -> dict:
+def get_metrics(household_id: str, days: int = 14, fresh: bool = False, actor: ActorContext = Depends(get_current_actor)) -> dict:
     """The last N local days of daily metrics. Missing days are absent, not zero."""
     _access(actor, household_id)
-    rows = get_repository().col_list(f"households/{household_id}/dailyMetrics", 120)
-    rows = sorted([_clean(r) for r in rows], key=lambda r: r.get("local_date", ""))[-max(1, min(days, 60)):]
-    drift = get_repository().doc_get(f"households/{household_id}/driftResults/latest")
-    return {"days": rows, "drift": drift, "synthetic": any(r.get("synthetic") for r in rows)}
+    count = max(1, min(days, 60))
+
+    def build() -> dict:
+        repo = get_repository()
+        newest = repo.col_query(f"households/{household_id}/dailyMetrics", order_by="local_date", descending=True, limit=count)
+        rows = sorted([_clean(r) for r in newest], key=lambda r: r.get("local_date", ""))
+        drift = repo.doc_get(f"households/{household_id}/driftResults/latest")
+        return {"days": rows, "drift": drift, "synthetic": any(r.get("synthetic") for r in rows)}
+
+    return cache.cached(f"metrics:{household_id}:{count}", METRICS_CACHE_SECONDS, build, fresh=fresh)
 
 
 @router.post("/alerts/{alert_id}/ack")
@@ -73,6 +125,7 @@ def ack_alert(household_id: str, alert_id: str, actor: ActorContext = Depends(ge
         f"households/{household_id}/alerts/{alert_id}",
         {"status": "acknowledged", "acknowledged_at": datetime.now(timezone.utc).isoformat(), "acknowledged_by": actor.name or actor.email or actor.uid},
     )
+    cache.forget(f"updates:{household_id}")
     return {"status": "acknowledged", "alertId": alert_id}
 
 

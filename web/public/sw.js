@@ -1,5 +1,5 @@
 /* App shell cache. Check-ins are notifications, not a background microphone. */
-const CACHE = "saathi-shell-v1";
+const CACHE = "saathi-shell-v2";
 const DEV = new URL(self.location.href).searchParams.get("mode") === "dev";
 const SHELL = ["/app", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 

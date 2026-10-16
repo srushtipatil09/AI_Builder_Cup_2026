@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
-import { deleteLocation, fetchNearby, type Nearby, type NearbyKind } from "../../lib/api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { deleteLocation, type NearbyKind } from "../../lib/api";
+import { useAppDispatch, useAppSelector } from "../../store";
+import { loadNearby, nearbyAllFromCache, nearbyForget, nearbyFromCache } from "../../store/reads";
 import { NearbyList } from "../NearbyList";
 
 const sections: { id: NearbyKind; title: string }[] = [
@@ -9,34 +11,56 @@ const sections: { id: NearbyKind; title: string }[] = [
   { id: "restaurant", title: "Food" },
 ];
 
-type Props = { householdId: string; name: string };
+// city and contacts come from the desk on this page: when the caretaker changes them, only that part is read again.
+type Props = { householdId: string; name: string; city?: string; contactsKey?: string };
 
 // What Saathi can offer when the parent asks for help nearby, so the family can see it and check it is sensible.
-export function NearbyCard({ householdId, name }: Props) {
+export function NearbyCard({ householdId, name, city: deskCity = "", contactsKey = "" }: Props) {
   const who = name || "your parent";
-  const [data, setData] = useState<Nearby | null>(null);
+  const dispatch = useAppDispatch();
+  const record = useAppSelector((state) => state.reads.nearby[householdId]);
+  // Places stay on screen while only the people list is being read again.
+  const data = nearbyAllFromCache(record) ?? nearbyFromCache(record, "people");
   const [error, setError] = useState(false);
   const [open, setOpen] = useState<NearbyKind>("hospital");
   const [note, setNote] = useState("");
 
-  const load = useCallback(async () => {
-    setError(false);
-    try {
-      setData(await fetchNearby(householdId, "all"));
-    } catch {
-      setError(true);
-    }
-  }, [householdId]);
+  const load = useCallback(
+    (tab: "all" | "people" = "all", force = false) => {
+      setError(false);
+      dispatch(loadNearby({ householdId, tab, force }))
+        .unwrap()
+        .catch((err: { name?: string }) => {
+          if (err?.name !== "ConditionError") setError(true);
+        });
+    },
+    [dispatch, householdId],
+  );
 
   useEffect(() => {
-    if (householdId) void load();
+    if (householdId) load();
   }, [householdId, load]);
+
+  // A new city (with no shared position) means new places; a changed contact list only means new people.
+  const seen = useRef({ city: deskCity, contactsKey });
+  useEffect(() => {
+    const before = seen.current;
+    seen.current = { city: deskCity, contactsKey };
+    if (!householdId) return;
+    if (before.city !== deskCity && !record?.location?.set) {
+      dispatch(nearbyForget(householdId));
+      load("all", true);
+    } else if (before.contactsKey !== contactsKey) {
+      load("people", true);
+    }
+  }, [deskCity, contactsKey, householdId, record?.location?.set, dispatch, load]);
 
   async function forget() {
     try {
       await deleteLocation(householdId);
       setNote("The saved position is deleted.");
-      await load();
+      dispatch(nearbyForget(householdId));
+      load("all", true);
     } catch {
       setNote("Could not delete it. Try again.");
     }
@@ -72,7 +96,7 @@ export function NearbyCard({ householdId, name }: Props) {
       {error ? (
         <p className="field-error" role="alert">
           Could not load this.{" "}
-          <button className="text-link" type="button" onClick={() => void load()}>
+          <button className="text-link" type="button" onClick={() => load("all", true)}>
             Try again
           </button>
         </p>

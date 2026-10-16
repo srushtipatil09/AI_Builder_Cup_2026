@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { afterSignIn, readSession, writeSession } from "../session";
 import { AuthLayout } from "./AuthLayout";
+import { LanguageOptions } from "../lib/languages";
 
 // Shown once after a Google sign-up. Google gives a name and an email; Saathi also needs who it will talk with,
 // their language, and the city, so that nearby help works before a phone shares its position.
@@ -80,8 +81,7 @@ export function DetailsPage() {
         <label className="field">
           {parent ? "Language Saathi speaks with you" : "Language"}
           <select name="language" defaultValue={session.language || "Hindi"}>
-            <option value="Hindi">Hindi, spoken</option>
-            <option value="English">English, text fallback</option>
+            <LanguageOptions />
           </select>
         </label>
         <label className="field">

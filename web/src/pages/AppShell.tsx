@@ -119,8 +119,8 @@ export function AppShell() {
   return (
     <div className="stage">
       <div className="stage-copy">
-        <Link className="brand" to="/" lang="hi">
-          साथी
+        <Link className="brand" to="/">
+          <img className="brand-logo" src="/brand/saathi-logo.png" width="648" height="422" alt="Saathi" />
         </Link>
         <p className="eyebrow">Parent demo</p>
         <h1>Kamla&rsquo;s phone</h1>

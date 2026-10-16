@@ -4,8 +4,10 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from google.api_core import exceptions as gexc
 
 from saathi import __version__
 from saathi.config import cors_origins, load_settings
@@ -40,6 +42,26 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Saathi API", version=__version__, lifespan=lifespan)
+
+QUOTA_PAUSE_SECONDS = 60
+
+
+@app.exception_handler(gexc.ResourceExhausted)
+@app.exception_handler(gexc.TooManyRequests)
+async def database_quota_exhausted(_: Request, exc: Exception) -> JSONResponse:
+    """Firestore said "429 Quota exceeded" (the free plan allows 50,000 reads and 20,000 writes a day).
+
+    A clear 503 with Retry-After tells the web app to pause and keep the person's changes on the device, instead of
+    an anonymous 500 that makes every open page retry at once.
+    """
+    logger.error("Firestore quota exceeded: %s", exc)
+    return JSONResponse(
+        status_code=503,
+        headers={"Retry-After": str(QUOTA_PAUSE_SECONDS)},
+        content={"detail": "Saving is paused for a moment. Your changes are kept on this device.", "code": "quota_paused"},
+    )
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins(settings),

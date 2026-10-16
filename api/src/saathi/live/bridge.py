@@ -11,11 +11,12 @@ from fastapi import WebSocket, WebSocketDisconnect
 from google import genai
 from google.genai import types
 
+from saathi import languages
 from saathi.config import load_settings
 from saathi.cost import SESSION_CAP_SECONDS
 from saathi.contracts.desk import Desk
 from saathi.live.context import LiveContext
-from saathi.live.distress import check_distress_keywords, classify_impact_audio, has_explicit_help
+from saathi.live.distress import _has, check_distress_keywords, classify_impact_audio, has_explicit_help
 from saathi.live.prompts import build_system_instruction, opening_line
 from saathi.asks import service as asks
 from saathi.notify import raise_alert
@@ -102,16 +103,14 @@ TOOL_DECLARATIONS = [
     ),
 ]
 
-YES_WORDS = ["haan", "han", "ha", "ji", "theek hai", "thik hai", "yes", "yeah", "kar do", "save", "sahi hai", "bilkul", "ok", "okay"]
-NO_WORDS = ["nahi", "mat", "no", "cancel", "ruko", "rehne do"]
+YES_WORDS = ["haan", "han", "ha", "ji", "theek hai", "thik hai", "yes", "yeah", "kar do", "save", "sahi hai", "bilkul", "ok", "okay",
+             *languages.all_words("yes")]
+NO_WORDS = ["nahi", "mat", "no", "cancel", "ruko", "rehne do", *languages.all_words("no")]
 
 
 def is_yes(text: str) -> bool:
-    import re
-
     lowered = text.lower()
-    has = lambda words: any(re.search(r"(?<!\w)" + re.escape(w) + r"(?!\w)", lowered) for w in words)
-    return has(YES_WORDS) and not has(NO_WORDS)
+    return _has(lowered, YES_WORDS) and not _has(lowered, NO_WORDS)
 
 
 class TextModeRequested(Exception):
@@ -158,6 +157,7 @@ class LiveBridgeSession:
             "type": "ready",
             "sessionId": self.session_id,
             "persona": self.desk.profile.persona,
+            "language": languages.normalize(self.desk.profile.language),
             "sessionCapSeconds": SESSION_CAP_SECONDS,
             "audio": client is not None,
         })
@@ -389,7 +389,7 @@ class LiveBridgeSession:
                 return {
                     "status": "read_back_needed",
                     "read_back": proposal.readback,
-                    "instruction": "Read this back in Hindi and ask whether to save it. Do not call confirm_reminder until the parent says yes.",
+                    "instruction": f"Read this back in {languages.normalize(self.desk.profile.language)} and ask whether to save it. Do not call confirm_reminder until the parent says yes.",
                 }
             if name == "confirm_reminder":
                 if not self._pending:
@@ -496,8 +496,8 @@ class LiveBridgeSession:
         """Ask "Kya hua?" and, if nobody answers within the listen window, alert in observed wording."""
         await live.send_client_content(
             turns=types.Content(role="user", parts=[types.Part(text=(
-                f"[{what} was heard. Ask gently, in one short sentence, whether they are okay "
-                "(Kya hua? Gir gaye kya? Main yahin hoon). Do not diagnose.]"
+                f"[{what} was heard. Ask gently, in one short sentence in {languages.normalize(self.desk.profile.language)}, "
+                "whether they are okay (in Hindi: Kya hua? Gir gaye kya? Main yahin hoon). Do not diagnose.]"
             ))]),
             turn_complete=True,
         )
@@ -551,7 +551,25 @@ class LiveBridgeSession:
         )
         await self.ws.send_json({"type": "impact_label", "category": label.category, "confidence": label.confidence})
         if label.trigger_spoken_check:
-            await self._spoken_check(live, "a loud impact")
+            if live is None:
+                await self._text_spoken_check()
+            else:
+                await self._spoken_check(live, "a loud impact")
+
+    async def _text_spoken_check(self) -> None:
+        """Text mode: the browser speaks the fixed question, and no reply within the window raises the alert."""
+        asked_at = time.monotonic()
+        if self._watch and not self._watch.done():
+            self._watch.cancel()
+        self._watch = asyncio.create_task(self._no_reply_watch(asked_at))
+        reply_text = languages.get(self.desk.profile.language).fall_check
+        self.utterances.append({
+            "speaker": "assistant", "text": reply_text,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        await self.ws.send_json({
+            "type": "transcript", "role": "assistant", "text": reply_text, "distress": True,
+        })
 
     async def _run_text_fallback(self, client: Optional[genai.Client], system_instruction: str) -> None:
         """Browser speech recognition sends transcripts; replies come back as text."""
@@ -603,18 +621,10 @@ class LiveBridgeSession:
                         evidence=[self.session_id],
                     )
                 elif msg_type == "distress_signal":
-                    asked_at = time.monotonic()
-                    if self._watch and not self._watch.done():
-                        self._watch.cancel()
-                    self._watch = asyncio.create_task(self._no_reply_watch(asked_at))
-                    reply_text = "Kya hua? Gir gaye kya? Main yahin hoon."
-                    self.utterances.append({
-                        "speaker": "assistant", "text": reply_text,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    })
-                    await self.ws.send_json({
-                        "type": "transcript", "role": "assistant", "text": reply_text, "distress": True,
-                    })
+                    await self._text_spoken_check()
+                elif msg_type in ("impact_audio", "demo_clip"):
+                    # The same labeling as the voice path; only a possible impact asks the question.
+                    await self._classify_clip(None, data.get("audio", ""), description=str(data.get("clip", "")))
                 elif msg_type == "end":
                     break
 
@@ -642,7 +652,10 @@ class LiveBridgeSession:
             except Exception as exc:
                 logger.warning("Gemini generation call failed (%s); using conversational fallback", exc)
 
-        # Conversational fallback matching prompt rules
+        # Conversational fallback matching prompt rules. The keyword replies are Hindi only.
+        lang = languages.get(self.desk.profile.language)
+        if lang.name != "Hindi":
+            return lang.listening
         lowered = user_text.lower()
         if any(w in lowered for w in ["khana", "lunch", "dinner", "breakfast", "roti", "chai"]):
             return "Achha laga sunkar. Aapne dawai li ya abhi baaki hai?"
@@ -650,7 +663,7 @@ class LiveBridgeSession:
             return "Rahul se kab baat hui thi? Kahan hain woh aaj kal?"
         if any(w in lowered for w in ["ouch", "gir", "chot", "dard"]):
             return "Kya hua? Gir gaye kya? Main yahin hoon."
-        return f"Ji, main sun rahi hoon. Aaj aapka din kaisa raha?"
+        return lang.listening
 
     def _save_session(self) -> None:
         """Persist the session with its transcript. The post-call pipeline starts from /complete."""

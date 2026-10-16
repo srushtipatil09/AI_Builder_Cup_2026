@@ -1,5 +1,6 @@
 """Firebase Auth verification, actor context, and household access checks."""
 
+import time
 import logging
 from typing import Optional
 
@@ -111,7 +112,34 @@ def get_current_actor(
     return actor_from_token(token, x_household_id, x_role, x_family_code)
 
 
+# Every API call checks access, and for a real household that reads the owner document (and the family code). The same
+# phone or browser asks every few seconds, so a "yes" is remembered for a minute. A "no" is never remembered.
+ACCESS_CACHE_SECONDS = 60
+_access_cache: dict[tuple, tuple[float, str]] = {}
+
+
+def forget_access(household_id: str) -> None:
+    """Drop remembered decisions for a household (its members or family codes changed)."""
+    for key in [k for k in _access_cache if k[2] == household_id]:
+        _access_cache.pop(key, None)
+
+
 def has_household_access(
+    actor: ActorContext, household_id: str, allow_family_code: bool = False
+) -> tuple[bool, str]:
+    if is_demo_household(household_id):
+        return True, "demo"
+    key = (actor.uid, (actor.email or "").lower(), household_id, bool(actor.verified), allow_family_code, actor.family_code or "")
+    hit = _access_cache.get(key)
+    if hit and time.monotonic() - hit[0] < ACCESS_CACHE_SECONDS:
+        return True, hit[1]
+    allowed, reason = _decide_access(actor, household_id, allow_family_code)
+    if allowed and reason not in ("claimed", "legacy_unauthenticated"):
+        _access_cache[key] = (time.monotonic(), reason)
+    return allowed, reason
+
+
+def _decide_access(
     actor: ActorContext, household_id: str, allow_family_code: bool = False
 ) -> tuple[bool, str]:
     """Decide whether this actor may touch this household. Returns (allowed, reason).
@@ -175,4 +203,6 @@ def add_member(household_id: str, uid: str) -> None:
     repo = get_repository()
     owner = repo.doc_get(f"households/{household_id}/access/owner") or {}
     members = list(dict.fromkeys([*(owner.get("members") or []), uid]))
-    repo.doc_set(f"households/{household_id}/access/owner", {"members": members})
+    if members != list(owner.get("members") or []):
+        repo.doc_set(f"households/{household_id}/access/owner", {"members": members})
+    forget_access(household_id)

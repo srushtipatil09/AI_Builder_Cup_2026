@@ -6,6 +6,7 @@
   --marigold-deep: #8f5d0c;
   --teal: #0c4f49;
   --teal-deep: #083e39;
+  --logo-green: #174926;
   --teal-soft: #e3efec;
   --ink: #1d2a2c;
   --muted: #4f5d5f;
@@ -241,8 +242,17 @@ h2 {
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
   font-size: 2rem;
   line-height: 1;
+}
+
+/* The official logo. Height sets the size; width follows the image. */
+.brand-logo {
+  display: block;
+  width: auto;
+  height: 52px;
 }
 
 .site-nav {
@@ -348,6 +358,10 @@ h2 {
 .footer-name {
   font-size: 1.8rem;
   margin: 0 0 8px;
+}
+
+.footer-name.brand-logo {
+  height: 72px;
 }
 
 .site-foot ul {
@@ -1381,7 +1395,7 @@ input[aria-invalid="true"] {
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #ffe0a3, var(--marigold) 55%, #d99a2b);
   box-shadow: 0 0 0 10px rgb(242 196 107 / 0.22), 0 0 0 22px rgb(242 196 107 / 0.1);
-  color: var(--teal-deep);
+  color: var(--logo-green);
   font-family: "Tiro Devanagari Hindi", "Nirmala UI", serif;
   font-size: 2.1rem;
 }
@@ -1669,6 +1683,7 @@ input[aria-invalid="true"] {
 
 .hero,
 .promises,
+.languages,
 .offers,
 .day-band,
 .demos {
@@ -1709,6 +1724,12 @@ input[aria-invalid="true"] {
 
 .hero .display-name {
   color: var(--marigold-deep);
+}
+
+.hero .display-name.brand-logo {
+  width: auto;
+  height: clamp(120px, 15vw, 180px);
+  margin-bottom: 12px;
 }
 
 .stack-line {
@@ -1829,6 +1850,90 @@ input[aria-invalid="true"] {
 .promise p {
   margin: 0;
   color: var(--muted);
+}
+
+/* Languages: the head on top, then one card per language in two even rows. */
+.languages {
+  display: grid;
+  gap: 32px;
+  margin-top: 112px;
+  scroll-margin-top: 96px;
+}
+
+.languages-head {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 48px;
+  align-items: end;
+}
+
+.languages-head .eyebrow,
+.languages-head h2 {
+  grid-column: 1;
+}
+
+.languages-head > p:not(.eyebrow) {
+  grid-column: 2;
+}
+
+.languages-head > p:nth-of-type(2) {
+  grid-row: 1 / span 2;
+  align-self: end;
+}
+
+.languages-head > p:not(.eyebrow) {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.languages-head .languages-note {
+  padding-left: 12px;
+  border-left: 3px solid var(--marigold);
+  font-size: 0.95rem;
+}
+
+.language-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.language-card {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 18px 18px 16px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+}
+
+.language-native {
+  color: var(--logo-green);
+  font-family: "Tiro Devanagari Hindi", "Nirmala UI", serif;
+  font-size: clamp(1.3rem, 2.2vw, 1.6rem);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.language-native:lang(en) {
+  font-family: Mukta, "Nirmala UI", "Segoe UI", sans-serif;
+  font-weight: 600;
+}
+
+.language-name {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.language-hello {
+  margin-top: 8px;
+  color: var(--marigold-deep);
+  font-size: 0.95rem;
 }
 
 .offers {
@@ -2162,8 +2267,27 @@ button,
     right: -12px;
   }
 
-  .promises {
+  .promises,
+  .languages {
     grid-template-columns: 1fr;
+  }
+
+  .languages {
+    gap: 28px;
+  }
+
+  .languages-head {
+    grid-template-columns: 1fr;
+  }
+
+  .languages-head > p:not(.eyebrow),
+  .languages-head > p:nth-of-type(2) {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .language-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .offer {
@@ -2191,6 +2315,10 @@ button,
 
   .brand {
     font-size: 1.7rem;
+  }
+
+  .brand-logo {
+    height: 44px;
   }
 
   .site-nav {
@@ -2371,7 +2499,7 @@ button,
   position: sticky;
   bottom: 0;
   z-index: 1;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin: auto -16px 0;
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
@@ -2516,6 +2644,10 @@ button,
   align-items: center;
   gap: 12px;
   padding: 0 8px;
+}
+
+.care-brand .brand-logo {
+  height: 44px;
 }
 
 .care-badge {
@@ -2757,6 +2889,10 @@ button,
 .stage-copy .brand {
   display: inline-block;
   margin-bottom: 40px;
+}
+
+.stage-copy .brand-logo {
+  height: 88px;
 }
 
 .stage-copy h1 {
@@ -3026,6 +3162,10 @@ button,
 
   /* Curved tab bar. The active tab's icon rises into a floating circle, cradled by a bump in the bar,
      and both slide to the tab you choose. */
+  .care .install-sheet {
+    z-index: 30;
+  }
+
   .care-tabbar {
     --tab: 0;
     --bar: var(--paper);
@@ -3604,7 +3744,7 @@ button,
   height: 42px;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #ffe0a3, var(--marigold) 60%, #d99a2b);
-  color: var(--teal-deep);
+  color: var(--logo-green);
   font-family: "Tiro Devanagari Hindi", "Nirmala UI", serif;
   font-size: 1.1rem;
 }
@@ -5017,6 +5157,7 @@ textarea:focus {
 
 /* Parent phone: the orb is the Talk button and shows what Saathi is doing. */
 button.orb {
+  position: relative;
   padding: 0;
   border: 0;
   cursor: pointer;
@@ -5035,8 +5176,33 @@ button.orb:disabled {
   animation: orb-listen 1.6s ease-in-out infinite;
 }
 
+/* While Saathi talks, the सा mark moves like speech and rings spread from the orb. */
+.orb > span {
+  display: inline-block;
+  transform-origin: 50% 85%;
+}
+
 .orb-speaking {
-  animation: orb-speak 0.9s ease-in-out infinite;
+  animation: orb-speak 1.8s ease-in-out infinite;
+}
+
+.orb-speaking > span {
+  animation: sa-talk 1.1s ease-in-out infinite;
+}
+
+.orb-speaking::before,
+.orb-speaking::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgb(217 154 43 / 0.6);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: orb-ripple 1.8s ease-out infinite;
+}
+
+.orb-speaking::after {
+  animation-delay: 0.9s;
 }
 
 .orb-thinking {
@@ -5054,7 +5220,24 @@ button.orb:disabled {
 
 @keyframes orb-speak {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.06); }
+  50% { transform: scale(1.03); }
+}
+
+/* Uneven beats so it reads as syllables, not a metronome. */
+@keyframes sa-talk {
+  0%, 100% { transform: scale(1, 1); }
+  12% { transform: scale(1.04, 1.14) translateY(-3%); }
+  24% { transform: scale(1, 1.02); }
+  40% { transform: scale(1.06, 1.18) translateY(-4%); }
+  52% { transform: scale(0.99, 0.97); }
+  66% { transform: scale(1.03, 1.1) translateY(-2%); }
+  80% { transform: scale(1, 1.01); }
+  90% { transform: scale(1.05, 1.15) translateY(-3%); }
+}
+
+@keyframes orb-ripple {
+  from { transform: scale(1); opacity: 0.9; }
+  to { transform: scale(1.45); opacity: 0; }
 }
 
 @keyframes orb-think {
@@ -5065,8 +5248,14 @@ button.orb:disabled {
 @media (prefers-reduced-motion: reduce) {
   .orb-listening,
   .orb-speaking,
+  .orb-speaking > span,
   .orb-thinking {
     animation: none;
+  }
+
+  .orb-speaking::before,
+  .orb-speaking::after {
+    display: none;
   }
 }
 
@@ -5106,11 +5295,13 @@ button.orb:disabled {
   text-align: center;
 }
 
-/* Bilingual control labels: Hindi first, English under it. */
+/* Bilingual control labels: the parent's language first, English under it. Long words wrap inside the button. */
 .controls .control-hi {
   display: block;
+  max-width: 100%;
   font-weight: 700;
   line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
 .controls .control-en {
@@ -6212,17 +6403,21 @@ button.orb:disabled {
 .nearby-large .nearby-call, .nearby-large .nearby-go { min-height: 52px; padding: 8px 22px; font-size: 1.05rem; }
 
 .nearby-sheet { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; background: rgb(30 22 10 / 0.45); }
-.nearby-card { width: min(100%, 560px); max-height: 88vh; overflow-y: auto; display: grid; gap: 14px; padding: 18px 18px calc(18px + env(safe-area-inset-bottom)); background: var(--paper); border-radius: 22px 22px 0 0; box-shadow: 0 -20px 50px -20px rgb(30 22 10 / 0.5); }
+.nearby-card { width: min(100%, 560px); max-height: 88vh; overflow-y: auto; display: grid; gap: 14px; padding: 10px 18px calc(18px + env(safe-area-inset-bottom)); background: var(--paper); border-radius: 22px 22px 0 0; box-shadow: 0 -20px 50px -20px rgb(30 22 10 / 0.5); }
+.nearby-grip { justify-self: center; width: 44px; height: 5px; border-radius: 999px; background: var(--line); }
 @media (min-width: 700px) { .nearby-sheet { align-items: center; } .nearby-card { border-radius: 22px; } }
 .nearby-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.nearby-head h2 { margin: 0; display: grid; font-size: 1.4rem; }
+.nearby-head h2 { margin: 0; display: grid; gap: 2px; font-size: 1.4rem; line-height: 1.2; }
 .nearby-head h2 small { color: var(--muted); font-size: 0.85rem; font-weight: 500; }
-.nearby-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
-.nearby-tab { flex: none; display: grid; gap: 0; min-height: 52px; padding: 6px 16px; border: 1px solid var(--field); border-radius: 14px; background: var(--paper); color: var(--ink); text-align: center; cursor: pointer; }
+/* All six kinds stay in view as a 3 by 2 grid: no sideways scrolling to find Helplines. */
+.nearby-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.nearby-tab { display: grid; align-content: center; gap: 2px; min-width: 0; min-height: 60px; padding: 8px 6px; border: 1px solid var(--field); border-radius: 14px; background: var(--paper); color: var(--ink); font-size: 1rem; font-weight: 700; line-height: 1.2; text-align: center; overflow-wrap: anywhere; cursor: pointer; }
+.nearby-tab:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
 .nearby-tab small { color: var(--muted); font-size: 0.75rem; }
 .nearby-tab-on { background: var(--teal); border-color: var(--teal); color: #f4fbfa; }
 .nearby-tab-on small { color: #d5ece9; }
-.nearby-emergency { margin: 0; padding: 10px 14px; border-radius: 12px; background: #fbe9e7; border-left: 5px solid var(--danger); font-size: 0.95rem; }
+.nearby-emergency { display: grid; gap: 2px; margin: 0; padding: 10px 14px; border-radius: 12px; background: #fbe9e7; border-left: 5px solid var(--danger); font-size: 0.95rem; }
+.nearby-emergency > span:first-child[lang] { font-weight: 700; }
 .nearby-emergency a { font-weight: 800; }
 .nearby-ask { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-radius: 12px; background: var(--sand); }
 .nearby-ask p { margin: 0; font-size: 0.92rem; }
@@ -6237,4 +6432,5 @@ button.orb:disabled {
 .nearby-source { margin: 0; color: var(--muted); font-size: 0.92rem; }
 .nearby-two { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); }
 .nearby-two h3 { font-size: 1rem; margin-bottom: 8px; }
-.nearby-close { display: grid; min-height: 48px; padding: 6px 16px; text-align: center; }
+.nearby-close { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 48px; padding: 6px 16px 6px 12px; border-radius: 999px; font-weight: 700; white-space: nowrap; }
+.nearby-close > span[aria-hidden] { font-size: 1.6rem; line-height: 1; }

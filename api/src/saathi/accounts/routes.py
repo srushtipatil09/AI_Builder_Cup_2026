@@ -13,6 +13,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
+from saathi import languages
 from saathi.auth.firebase import get_current_actor
 from saathi.contracts.identity import ActorContext
 from saathi.contracts.desk import Desk
@@ -101,7 +102,7 @@ class HouseholdSummary(BaseModel):
 def _summary(household_id: str, fallback_name: str, fallback_language: str, primary: bool) -> HouseholdSummary:
     repo = get_repository()
     desk = repo.get_desk(household_id)
-    alerts = [a for a in repo.col_list(f"households/{household_id}/alerts", 50) if a.get("status") == "open"]
+    alerts = repo.col_query(f"households/{household_id}/alerts", "status", "==", "open", limit=20)
     codes = repo.household_family_codes(household_id)
     return HouseholdSummary(
         id=household_id,
@@ -149,7 +150,7 @@ def add_household(body: AddHouseholdRequest, actor: ActorContext = Depends(get_c
     households = [HouseholdRef(**h) for h in data.get("households") or []]
     if len(households) + 1 >= MAX_HOUSEHOLDS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"One account can look after {MAX_HOUSEHOLDS} family members.")
-    language = body.language if body.language in ("Hindi", "English") else "Hindi"
+    language = languages.normalize(body.language)
     repo = get_repository()
     now = datetime.now(timezone.utc).isoformat()
     household_id = f"hh-{uuid.uuid4().hex[:12]}"

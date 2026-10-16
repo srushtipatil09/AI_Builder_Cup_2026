@@ -167,9 +167,18 @@ def _guard(actor: ActorContext, household_id: str) -> None:
 
 
 @router.get("", response_model=list[FileRecord])
-def list_files(household_id: str, actor: ActorContext = Depends(get_current_actor)) -> list[FileRecord]:
+def list_files(
+    household_id: str,
+    category: Optional[str] = Query(None, max_length=40),
+    actor: ActorContext = Depends(get_current_actor),
+) -> list[FileRecord]:
     ensure_household_access(actor, household_id)
-    rows = get_repository().col_list(f"households/{household_id}/files", limit=MAX_FILES)
+    repo = get_repository()
+    if category:
+        # The profile photo hook only needs one category; reading all of them for it would cost up to 60 reads.
+        rows = repo.col_query(f"households/{household_id}/files", "category", "==", category, limit=MAX_FILES)
+    else:
+        rows = repo.col_list(f"households/{household_id}/files", limit=MAX_FILES)
     records = [FileRecord(**r) for r in rows]
     return sorted(records, key=lambda r: r.createdAt, reverse=True)
 
@@ -197,10 +206,11 @@ async def upload_file(
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Files can be up to 8 MB.")
 
     repo = get_repository()
-    existing = repo.col_list(f"households/{household_id}/files", limit=MAX_FILES + 1)
+    # A count is billed as one read; listing the files to count them cost one read per file.
+    existing_count = repo.col_count(f"households/{household_id}/files")
     # The demo is open to everyone, so it holds fewer files and never exposes one without a signed link.
     demo = is_demo_household(household_id)
-    if len(existing) >= (DEMO_MAX_FILES if demo else MAX_FILES):
+    if existing_count >= (DEMO_MAX_FILES if demo else MAX_FILES):
         raise HTTPException(status.HTTP_409_CONFLICT, "This household has reached its file limit.")
 
     file_id = uuid.uuid4().hex[:16]
@@ -228,9 +238,8 @@ async def upload_file(
 
     # One profile photo at a time: the previous one is removed.
     if CATEGORIES[category].get("single"):
-        for old in existing:
-            if old.get("category") == category:
-                _remove(household_id, old["id"])
+        for old in repo.col_query(f"households/{household_id}/files", "category", "==", category, limit=5):
+            _remove(household_id, old.get("id") or old["_id"])
     repo.doc_set(f"households/{household_id}/files/{file_id}", record.model_dump(), merge=False)
     return record
 

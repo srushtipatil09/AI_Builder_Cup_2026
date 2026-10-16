@@ -52,8 +52,8 @@ def gather_facts(household_id: str, days: int, now: datetime | None = None) -> t
     name = (desk.profile.preferredName if desk and desk.profile.preferredName else "the parent")
     lines = [f"Parent: {name}. Window: {dates[-1]} to {dates[0]} (India dates)."]
 
-    observations = [o for o in repo.col_list(f"{base}/observations", 400) if o.get("local_date") in dates]
-    metrics = {r.get("local_date"): r for r in repo.col_list(f"{base}/dailyMetrics", 120) if r.get("local_date") in dates}
+    observations = repo.col_query(f"{base}/observations", "local_date", "in", dates[:30], limit=200)
+    metrics = {r.get("local_date"): r for r in repo.col_query(f"{base}/dailyMetrics", "local_date", "in", dates[:30], limit=60)}
     for date in reversed(dates):
         day_obs = sorted((o for o in observations if o.get("local_date") == date), key=lambda o: o.get("created_at", ""))
         m = metrics.get(date)
@@ -72,7 +72,10 @@ def gather_facts(household_id: str, days: int, now: datetime | None = None) -> t
             parts.append(f"meals reported {m.get('meals_reported')}, meals skipped {m.get('meals_skipped')}, family contact {m.get('family_contact')}")
         lines.append(f"{date}: " + "; ".join(str(p) for p in parts))
 
-    alerts = [a for a in repo.col_list(f"{base}/alerts", 100) if _local_day(a.get("created_at") or "") >= dates[-1]]
+    alerts = [
+        a for a in repo.col_query(f"{base}/alerts", order_by="created_at", descending=True, limit=60)
+        if _local_day(a.get("created_at") or "") >= dates[-1]
+    ]
     for a in sorted(alerts, key=lambda a: a.get("created_at", "")):
         lines.append(f"Alert {_local_day(a.get('created_at', ''))} (level {a.get('tier')}, {a.get('status')}): {a.get('message')}")
 

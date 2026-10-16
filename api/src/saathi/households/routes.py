@@ -7,7 +7,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from saathi.auth.firebase import add_member, ensure_household_access, get_current_actor, is_demo_household
+from saathi import languages
+from saathi.auth.firebase import add_member, ensure_household_access, forget_access, get_current_actor, is_demo_household
 from saathi.contracts.desk import Desk, create_demo_desk
 from saathi.contracts.identity import ActorContext, FamilyLinkRecord, HouseholdRecord
 from saathi.providers.firestore import get_repository
@@ -39,14 +40,14 @@ def create_household(
         creator_uid=actor.uid,
         caretaker_name=body.caretaker_name,
         parent_name=body.parent_name,
-        language=body.language,
+        language=languages.normalize(body.language),
     )
     repo.save_household(record)
 
     # Initialize desk
     desk = Desk()
     desk.profile.preferredName = body.parent_name
-    desk.profile.language = body.language
+    desk.profile.language = languages.normalize(body.language)
     repo.save_desk(household_id, desk)
     return record
 
@@ -101,6 +102,7 @@ def create_pairing_link(
         parent_name=parent_name,
     )
     repo.revoke_family_codes(household_id, keep=record.code)
+    forget_access(household_id)
     return record
 
 

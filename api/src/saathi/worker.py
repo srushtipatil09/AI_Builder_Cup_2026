@@ -4,7 +4,9 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi.responses import JSONResponse
+from google.api_core import exceptions as gexc
 from pydantic import BaseModel
 
 from saathi import __version__
@@ -16,6 +18,14 @@ from saathi.scheduling.service import run_scheduler_tick
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Saathi Worker", version=__version__)
+
+
+@app.exception_handler(gexc.ResourceExhausted)
+@app.exception_handler(gexc.TooManyRequests)
+async def database_quota_exhausted(_: Request, exc: Exception) -> JSONResponse:
+    """The database quota is used up: answer 503 so Cloud Tasks retries later and the scheduler's next tick tries again."""
+    logger.error("Firestore quota exceeded: %s", exc)
+    return JSONResponse(status_code=503, headers={"Retry-After": "300"}, content={"detail": "database quota paused"})
 
 
 def require_invoker(authorization: Optional[str] = Header(None)) -> None:

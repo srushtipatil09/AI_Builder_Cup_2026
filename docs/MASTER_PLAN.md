@@ -40,7 +40,7 @@ flowchart LR
 | Phone check-in | A notification, then speech in the open app. No background microphone |
 | Nest | Milestone M16, after submission |
 | Alerts | Firebase Cloud Messaging. Check-in text and caretaker text stay generic |
-| Language | Hindi for the demo. English for the submission. Marathi only if a real call passes a speaker check |
+| Language | Hindi for the demo. English for the submission. Bengali, Marathi, Gujarati, Punjabi, Tamil, Telugu, Kannada and Malayalam can be picked per parent; the voice follows the prompt, and none of them has passed a speaker check yet |
 | Research numbers | Holt-Lunstad 2015, WHO 2025, and LASI, each labeled as someone else's research |
 
 ## What the public URL must show

@@ -70,10 +70,8 @@ def build_live_context(household_id: str, desk: Desk) -> LiveContext:
         return ctx
     repo = get_repository()
     try:
-        observations = sorted(
-            repo.col_list(f"households/{household_id}/observations", 60),
-            key=lambda o: o.get("created_at", ""),
-            reverse=True,
+        observations = repo.col_query(
+            f"households/{household_id}/observations", order_by="created_at", descending=True, limit=8
         )
         ctx.summaries = [o["summary"] for o in observations if o.get("summary")][:3]
         declined: list[str] = []

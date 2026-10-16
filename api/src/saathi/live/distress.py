@@ -9,6 +9,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel
 from google.genai import types
 
+from saathi import languages
 from saathi.config import load_settings
 from saathi.providers.gemini import get_genai_client
 
@@ -26,22 +27,29 @@ class ImpactClassification(BaseModel):
 DISTRESS_KEYWORDS_HI = [
     "ouch", "oh god", "bachao", "gir gayi", "gir gaya", "gir gaye", "chot lagi", "chot lag gayi",
     "dard ho raha hai", "help", "madad", "giri", "gira", "i fell", "fell down", "i am hurt",
+    *languages.all_words("help"),
 ]
 
 # Words that mean "I need help now" when the parent says them. These go straight to Level 3.
 EXPLICIT_HELP = [
     "bachao", "madad", "help me", "help", "gir gayi", "gir gaya", "gir gaye", "i fell", "fell down",
     "chot lagi", "chot lag gayi", "i am hurt",
+    *languages.all_words("help"),
 ]
 
 NEGATION_KEYWORDS_HI = [
     "gir nahi gayi", "gir nahi gaya", "giri nahi", "gira nahi", "theek hoon", "theek hun", "kuchh nahi hua",
     "kuch nahi hua", "i did not fall", "i didn't fall", "i am fine", "i'm fine", "main theek",
+    *languages.all_words("fine"),
 ]
 
 
+# Letters and vowel signs of the Indian scripts (Devanagari to Malayalam) count as part of a word; the danda does not.
+_WORD = r"[\w\u0900-\u0963\u0966-\u0DFF]"
+
+
 def _has(text: str, phrases: list[str]) -> bool:
-    return any(re.search(r"(?<!\w)" + re.escape(p) + r"(?!\w)", text) for p in phrases)
+    return any(re.search(f"(?<!{_WORD})" + re.escape(p) + f"(?!{_WORD})", text) for p in phrases)
 
 
 def check_distress_keywords(transcript: str) -> tuple[bool, bool]:

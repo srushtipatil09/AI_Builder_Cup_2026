@@ -188,158 +188,64 @@ export function blankDesk(preferredName: string, language: string, city = ""): D
   };
 }
 
-function read(key: string, seed: Desk): Desk {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return seed;
-    return { ...seed, ...(JSON.parse(raw) as Partial<Desk>) };
-  } catch {
-    return seed;
-  }
-}
-
-import { fetchDesk, saveDesk } from "./lib/api";
-import { clearSession } from "./session";
+import { deskEdited, loadCareSnapshot, saveCareDesk } from "./store/care";
+import { useAppDispatch, useAppSelector } from "./store";
+import { DEMO_HOUSEHOLD_ID } from "./store/storage";
 
 export type SyncState = "loading" | "synced" | "saving" | "offline";
 
 const SAVE_DELAY_MS = 600;
 const RETRY_MS = 10_000;
-const REFRESH_MS = 20_000;
 
-// The care desk, kept in sync with Firestore through the API.
-// - Nothing is sent to the server until its copy has been loaded, so a new device cannot overwrite it with a blank desk.
-// - Edits are saved after a short pause. A failed save is kept and retried; the status says so.
-// - With no unsaved edits, the desk refreshes every 20 seconds, when the tab regains focus, and when the network returns.
+// The care desk for this browser. localStorage is the copy Redux starts from, so opening the page
+// does not read Firestore again while that copy is still fresh. An edit is saved once, after a short pause.
 export function useDesk(key: string, seed: () => Desk) {
-  const [desk, setDeskState] = useState<Desk>(() => read(key, seed()));
-  const [sync, setSync] = useState<SyncState>("loading");
-  const [syncedAt, setSyncedAt] = useState<number | null>(null);
-  const [syncError, setSyncError] = useState("");
-  const dirty = useRef(false);
-  const loaded = useRef(false);
-  const saving = useRef(false);
-  const latest = useRef(desk);
-  latest.current = desk;
-  const isDemo = key.includes("demo");
-  const hhId = key.replace("saathi.desk.", "");
+  const demo = key.includes("demo");
+  const householdId = demo ? DEMO_HOUSEHOLD_ID : key.replace("saathi.desk.", "");
+  const dispatch = useAppDispatch();
+  const row = useAppSelector((state) => state.care.byId[householdId]);
+  const fallback = useState(seed)[0];
+  const seedRef = useRef(seed);
+  seedRef.current = seed;
+  const desk = row?.desk ?? fallback;
 
-  const remember = useCallback(
-    (next: Desk) => {
-      try {
-        localStorage.setItem(key, JSON.stringify(next));
-      } catch {
-        // Private mode: edits last until the tab closes.
-      }
+  const setDesk: React.Dispatch<React.SetStateAction<Desk>> = useCallback(
+    (update) => {
+      const next = typeof update === "function" ? (update as (current: Desk) => Desk)(desk) : update;
+      dispatch(deskEdited({ householdId, desk: next }));
     },
-    [key],
+    [desk, dispatch, householdId],
   );
 
-  const setDesk: React.Dispatch<React.SetStateAction<Desk>> = useCallback((update) => {
-    dirty.current = true;
-    setDeskState((prev) => (typeof update === "function" ? (update as (d: Desk) => Desk)(prev) : update));
-  }, []);
-
-  const load = useCallback(async () => {
-    if (saving.current) return;
-    try {
-      const server = await fetchDesk(hhId, isDemo);
-      loaded.current = true;
-      setSyncError("");
-      if (dirty.current) {
-        // Unsaved local edits win; they are saved next.
-        setSyncedAt(Date.now());
-        return;
-      }
-      const base = seed();
-      // A brand-new server desk is empty; keep the names entered at signup and save them.
-      const profile = { ...base.profile };
-      for (const [k, v] of Object.entries(server.profile ?? {})) {
-        if (v !== "" && v !== undefined && v !== null) (profile as Record<string, unknown>)[k] = v;
-      }
-      // An API older than reminder kinds drops the field. Keep the kind this browser already knows for that reminder.
-      const known = new Map([...base.medicines, ...latest.current.medicines].map((m) => [m.id, m.kind]));
-      const medicines = (server.medicines ?? base.medicines).map((m) => (m.kind ? m : { ...m, kind: known.get(m.id) }));
-      const next = { ...base, ...server, profile, medicines };
-      remember(next);
-      setDeskState(next);
-      if (!server.profile?.preferredName && profile.preferredName) dirty.current = true;
-      setSync("synced");
-      setSyncedAt(Date.now());
-    } catch (err) {
-      if (!isDemo && (err as { status?: number }).status === 401) {
-        // The sign-in on this device has expired. Retrying will not help; log in again.
-        clearSession();
-        window.location.assign("/login?next=/care");
-        return;
-      }
-      setSync("offline");
-      setSyncError(err instanceof Error ? err.message : "Could not reach the server.");
-    }
-  }, [hhId, isDemo, remember]);
-
-  const flush = useCallback(async () => {
-    if (!loaded.current || !dirty.current || saving.current) return;
-    saving.current = true;
-    setSync("saving");
-    const sending = latest.current;
-    dirty.current = false;
-    try {
-      await saveDesk(hhId, sending, isDemo);
-      remember(sending);
-      setSync(dirty.current ? "saving" : "synced");
-      setSyncedAt(Date.now());
-      setSyncError("");
-    } catch (err) {
-      dirty.current = true;
-      setSync("offline");
-      setSyncError(err instanceof Error ? err.message : "Could not save.");
-    } finally {
-      saving.current = false;
-    }
-  }, [hhId, isDemo, remember]);
-
-  // First load, then keep fresh.
   useEffect(() => {
-    loaded.current = false;
-    dirty.current = false;
-    setSync("loading");
-    void load();
-    const refresh = () => {
-      if (document.visibilityState !== "visible") return;
-      if (dirty.current) void flush();
-      else void load();
-    };
-    const id = window.setInterval(refresh, REFRESH_MS);
-    document.addEventListener("visibilitychange", refresh);
-    window.addEventListener("online", refresh);
-    return () => {
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", refresh);
-      window.removeEventListener("online", refresh);
-    };
-  }, [load, flush]);
+    void dispatch(loadCareSnapshot({ householdId, demo, seed: seedRef.current() }));
+  }, [demo, dispatch, householdId]);
 
-  // Save after edits, and retry while offline.
   useEffect(() => {
-    if (!dirty.current) return;
-    remember(desk);
-    const wait = sync === "offline" ? RETRY_MS : SAVE_DELAY_MS;
+    if (!row?.dirty || !row.loaded) return;
+    const wait = row.sync === "offline" ? RETRY_MS : SAVE_DELAY_MS;
     const id = window.setTimeout(() => {
-      if (!loaded.current) void load().then(() => flush());
-      else void flush();
+      void dispatch(saveCareDesk({ householdId, demo }));
     }, wait);
     return () => window.clearTimeout(id);
-  }, [desk, sync, flush, load, remember]);
-
-  function reset() {
-    setDesk(seed());
-  }
+  }, [demo, dispatch, householdId, row?.desk, row?.dirty, row?.loaded, row?.sync]);
 
   const retry = useCallback(() => {
-    if (dirty.current) void flush();
-    else void load();
-  }, [flush, load]);
+    if (row?.dirty) void dispatch(saveCareDesk({ householdId, demo }));
+    else void dispatch(loadCareSnapshot({ householdId, demo, seed: seedRef.current(), force: true }));
+  }, [demo, dispatch, householdId, row?.dirty]);
 
-  return { desk, setDesk, reset, sync, syncedAt, syncError, retry };
+  function reset() {
+    setDesk(seedRef.current());
+  }
+
+  return {
+    desk,
+    setDesk,
+    reset,
+    sync: row?.sync ?? "loading",
+    syncedAt: row?.syncedAt ?? null,
+    syncError: row?.error ?? "",
+    retry,
+  };
 }

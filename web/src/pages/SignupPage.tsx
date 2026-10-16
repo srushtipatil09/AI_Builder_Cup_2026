@@ -7,6 +7,7 @@ import { afterSignIn, fromProfile, emailError, passwordError, writeSession, type
 import { authMessage, signInWithGoogle, signUpWithEmail } from "../lib/firebase";
 import { Field } from "./Field";
 import { AuthLayout } from "./AuthLayout";
+import { LanguageOptions } from "../lib/languages";
 
 const CONSENT_ERROR = "Tick the box to agree to what Saathi keeps.";
 
@@ -224,8 +225,7 @@ export function SignupPage() {
           <label className="field" htmlFor="language">
             {role === "parent" ? "Language Saathi speaks with you" : "Language"}
             <select id="language" name="language" defaultValue="Hindi">
-              <option value="Hindi">Hindi, spoken</option>
-              <option value="English">English, text fallback</option>
+              <LanguageOptions />
             </select>
           </label>
           <Field label="Email" name="email" type="email" autoComplete="email" error={errors.email} />

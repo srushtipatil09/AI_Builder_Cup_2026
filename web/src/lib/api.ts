@@ -6,6 +6,36 @@ import { readSession } from "../session";
 const API_ORIGIN = import.meta.env.VITE_API_URL ? String(import.meta.env.VITE_API_URL).replace(/\/+$/, "") : "";
 const BASE_URL = `${API_ORIGIN}/api/v1`;
 
+// Firestore's free plan has a daily limit. When it is reached the API answers 503 with Retry-After. Every call then
+// waits that long instead of hammering the API, and the pages say that saving is paused (edits stay on this device).
+export const PAUSED_MESSAGE = "Saving is paused for a moment, your changes are kept on this device.";
+export class ApiPausedError extends Error {
+  retryAfterMs: number;
+  constructor(retryAfterMs: number) {
+    super(PAUSED_MESSAGE);
+    this.name = "ApiPausedError";
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+export const isPaused = (err: unknown): boolean => err instanceof ApiPausedError;
+
+let pausedUntil = 0;
+/** Milliseconds left of a pause the API asked for (0 when calls may go out). */
+export const pausedForMs = (): number => Math.max(0, pausedUntil - Date.now());
+
+async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
+  const wait = pausedForMs();
+  if (wait > 0) throw new ApiPausedError(wait);
+  const res = await fetch(input, init);
+  // Only 503: the API's own 429 (a daily model limit) is an answer for that one request, not a reason to stop calling.
+  if (res.status === 503) {
+    const seconds = Number(res.headers.get("Retry-After")) || 30;
+    pausedUntil = Date.now() + Math.min(Math.max(seconds, 5), 300) * 1000;
+    throw new ApiPausedError(pausedForMs());
+  }
+  return res;
+}
+
 // The API speaks snake_case; the web app's FamilyLink is camelCase.
 function toLink(raw: Record<string, string | null>): FamilyLink {
   return {
@@ -43,7 +73,7 @@ async function getAuthHeaders(householdId?: string, role?: string): Promise<Head
 
 export async function fetchDesk(householdId: string, isDemo = false): Promise<Desk> {
   const url = isDemo ? `${BASE_URL}/demo/desk` : `${BASE_URL}/households/${householdId}/desk`;
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     headers: await getAuthHeaders(householdId),
   });
   if (!res.ok) {
@@ -54,7 +84,7 @@ export async function fetchDesk(householdId: string, isDemo = false): Promise<De
 
 export async function saveDesk(householdId: string, desk: Desk, isDemo = false): Promise<Desk> {
   const url = isDemo ? `${BASE_URL}/demo/desk` : `${BASE_URL}/households/${householdId}/desk`;
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     method: "PUT",
     headers: await getAuthHeaders(householdId),
     body: JSON.stringify(desk),
@@ -67,7 +97,7 @@ export async function saveDesk(householdId: string, desk: Desk, isDemo = false):
 
 export async function createPairingLink(householdId: string, caretakerName: string, parentName: string): Promise<FamilyLink> {
   const params = new URLSearchParams({ caretaker_name: caretakerName, parent_name: parentName });
-  const res = await fetch(`${BASE_URL}/households/${householdId}/pairing?${params}`, {
+  const res = await apiFetch(`${BASE_URL}/households/${householdId}/pairing?${params}`, {
     method: "POST",
     headers: await getAuthHeaders(householdId),
   });
@@ -95,7 +125,7 @@ export async function completeSession(sessionId: string, householdId: string, su
 
 // The household's current family code and whether the parent has joined, from the server.
 export async function fetchPairing(householdId: string): Promise<FamilyLink | null> {
-  const res = await fetch(`${BASE_URL}/households/${encodeURIComponent(householdId)}/pairing`, {
+  const res = await apiFetch(`${BASE_URL}/households/${encodeURIComponent(householdId)}/pairing`, {
     headers: await getAuthHeaders(householdId),
   });
   if (!res.ok) throw new Error(`Failed to load the family code: ${res.statusText}`);
@@ -104,7 +134,7 @@ export async function fetchPairing(householdId: string): Promise<FamilyLink | nu
 }
 
 export async function lookupFamilyCode(code: string): Promise<FamilyLink> {
-  const res = await fetch(`${BASE_URL}/pair/${encodeURIComponent(code)}`);
+  const res = await apiFetch(`${BASE_URL}/pair/${encodeURIComponent(code)}`);
   if (!res.ok) {
     throw new Error(`Code not found: ${res.statusText}`);
   }
@@ -112,7 +142,7 @@ export async function lookupFamilyCode(code: string): Promise<FamilyLink> {
 }
 
 export async function pairFamilyCode(code: string, parentName: string): Promise<FamilyLink> {
-  const res = await fetch(`${BASE_URL}/pair`, {
+  const res = await apiFetch(`${BASE_URL}/pair`, {
     method: "POST",
     // A signed-in parent is recorded as a member of the household; an anonymous one is not.
     headers: await getAuthHeaders(),
@@ -199,13 +229,13 @@ export type DailyRow = {
 export type Metrics = { days: DailyRow[]; drift: Drift | null; synthetic: boolean };
 
 async function getJson<T>(path: string, householdId: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, { headers: await getAuthHeaders(householdId) });
+  const res = await apiFetch(`${BASE_URL}${path}`, { headers: await getAuthHeaders(householdId) });
   if (!res.ok) throw new Error(`${path}: ${res.status}`);
   return res.json();
 }
 
 async function postJson<T>(path: string, householdId: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await apiFetch(`${BASE_URL}${path}`, {
     method: "POST",
     headers: await getAuthHeaders(householdId),
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -224,8 +254,10 @@ async function postJson<T>(path: string, householdId: string, body?: unknown): P
 
 const hh = (id: string) => `/households/${encodeURIComponent(id)}`;
 
-export const fetchUpdates = (id: string) => getJson<Updates>(`${hh(id)}/updates`, id);
-export const fetchMetrics = (id: string, days = 14) => getJson<Metrics>(`${hh(id)}/metrics?days=${days}`, id);
+// fresh=true asks the server to skip the short copy it keeps (after the person did something and wants to see the result).
+export const fetchUpdates = (id: string, fresh = false) => getJson<Updates>(`${hh(id)}/updates${fresh ? "?fresh=true" : ""}`, id);
+export const fetchMetrics = (id: string, days = 14, fresh = false) =>
+  getJson<Metrics>(`${hh(id)}/metrics?days=${days}${fresh ? "&fresh=true" : ""}`, id);
 export const ackAlert = (id: string, alertId: string) => postJson(`${hh(id)}/alerts/${encodeURIComponent(alertId)}/ack`, id);
 export const registerDevice = (id: string, token: string, role: "caretaker" | "parent") =>
   postJson(`${hh(id)}/devices`, id, { token, role });
@@ -284,7 +316,7 @@ export async function deleteLocation(id: string): Promise<void> {
 }
 
 async function postJsonMethod(method: string, path: string, householdId: string, body?: unknown): Promise<void> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await apiFetch(`${BASE_URL}${path}`, {
     method,
     headers: await getAuthHeaders(householdId),
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -344,13 +376,13 @@ export type FamilyMember = {
 };
 
 export async function fetchFamilyMembers(): Promise<FamilyMember[]> {
-  const res = await fetch(`${BASE_URL}/me/households`, { headers: await getAuthHeaders() });
+  const res = await apiFetch(`${BASE_URL}/me/households`, { headers: await getAuthHeaders() });
   if (!res.ok) throw new Error(`Could not load family members (${res.status}).`);
   return res.json();
 }
 
 export async function addFamilyMember(parentName: string, language: string): Promise<FamilyMember> {
-  const res = await fetch(`${BASE_URL}/me/households`, {
+  const res = await apiFetch(`${BASE_URL}/me/households`, {
     method: "POST",
     headers: await getAuthHeaders(),
     body: JSON.stringify({ parentName, language }),
@@ -363,14 +395,14 @@ export async function addFamilyMember(parentName: string, language: string): Pro
 }
 
 export async function fetchMe(): Promise<AccountProfile | null> {
-  const res = await fetch(`${BASE_URL}/me`, { headers: await getAuthHeaders() });
+  const res = await apiFetch(`${BASE_URL}/me`, { headers: await getAuthHeaders() });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Failed to load account: ${res.statusText}`);
   return res.json();
 }
 
 export async function putMe(profile: AccountProfile): Promise<void> {
-  const res = await fetch(`${BASE_URL}/me`, {
+  const res = await apiFetch(`${BASE_URL}/me`, {
     method: "PUT",
     headers: await getAuthHeaders(),
     body: JSON.stringify(profile),
@@ -406,13 +438,14 @@ export type StoredFile = {
 };
 
 export async function fetchCategories(): Promise<FileCategory[]> {
-  const res = await fetch(`${BASE_URL}/files/categories`);
+  const res = await apiFetch(`${BASE_URL}/files/categories`);
   if (!res.ok) throw new Error(`Failed to load categories: ${res.statusText}`);
   return res.json();
 }
 
-export async function listFiles(householdId: string): Promise<StoredFile[]> {
-  const res = await fetch(`${BASE_URL}/households/${encodeURIComponent(householdId)}/files`, {
+export async function listFiles(householdId: string, category?: string): Promise<StoredFile[]> {
+  const query = category ? `?category=${encodeURIComponent(category)}` : "";
+  const res = await apiFetch(`${BASE_URL}/households/${encodeURIComponent(householdId)}/files${query}`, {
     headers: await getAuthHeaders(householdId),
   });
   if (!res.ok) throw new Error(`Failed to list files: ${res.statusText}`);
@@ -429,7 +462,7 @@ export async function uploadFile(
   const headers = (await getAuthHeaders(householdId)) as Record<string, string>;
   headers["Content-Type"] = file.type;
   const query = new URLSearchParams({ category, name: file.name, label, visibility });
-  const res = await fetch(`${BASE_URL}/households/${encodeURIComponent(householdId)}/files?${query}`, {
+  const res = await apiFetch(`${BASE_URL}/households/${encodeURIComponent(householdId)}/files?${query}`, {
     method: "POST",
     headers,
     body: file,
@@ -445,7 +478,7 @@ export async function uploadFile(
 export type FileLink = { url: string; expiresAt?: string | null; expiresInSeconds?: number | null };
 
 export async function fileLink(householdId: string, fileId: string): Promise<FileLink> {
-  const res = await fetch(`${BASE_URL}/households/${encodeURIComponent(householdId)}/files/${fileId}/link`, {
+  const res = await apiFetch(`${BASE_URL}/households/${encodeURIComponent(householdId)}/files/${fileId}/link`, {
     headers: await getAuthHeaders(householdId),
   });
   if (!res.ok) throw new Error(`Failed to open file: ${res.statusText}`);
@@ -453,7 +486,7 @@ export async function fileLink(householdId: string, fileId: string): Promise<Fil
 }
 
 export async function deleteFile(householdId: string, fileId: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/households/${encodeURIComponent(householdId)}/files/${fileId}`, {
+  const res = await apiFetch(`${BASE_URL}/households/${encodeURIComponent(householdId)}/files/${fileId}`, {
     method: "DELETE",
     headers: await getAuthHeaders(householdId),
   });
@@ -462,7 +495,7 @@ export async function deleteFile(householdId: string, fileId: string): Promise<v
 
 // One typed turn over HTTP, used when the live socket is not open. Returns Saathi's reply.
 export async function textTurn(sessionId: string, householdId: string, text: string): Promise<string> {
-  const res = await fetch(`${BASE_URL}/sessions/${encodeURIComponent(sessionId)}/text`, {
+  const res = await apiFetch(`${BASE_URL}/sessions/${encodeURIComponent(sessionId)}/text`, {
     method: "POST",
     headers: await getAuthHeaders(householdId, "parent"),
     body: JSON.stringify({ text, household_id: householdId }),

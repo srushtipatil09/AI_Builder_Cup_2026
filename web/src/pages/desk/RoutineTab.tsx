@@ -68,8 +68,6 @@ export function RoutineTab(props: LiveProps) {
     try {
       await action();
       refresh();
-      window.setTimeout(refresh, 4000);
-      window.setTimeout(refresh, 9000);
     } catch (err) {
       setNote(err instanceof Error ? err.message : "That did not work.");
     } finally {
@@ -143,7 +141,7 @@ export function RoutineTab(props: LiveProps) {
             <p className="alert-meta">
               {insight.tier >= 2 ? "Suggested next step: " : ""}
               {insight.suggested_action}
-              {insight.evidence_ids.length
+              {insight.evidence_ids?.length
                 ? ` · based on ${insight.evidence_ids.length} stored record${insight.evidence_ids.length === 1 ? "" : "s"}`
                 : ""}
               {insight.created_at ? ` · ${ago(insight.created_at)}` : ""}
@@ -278,7 +276,7 @@ export function RoutineTab(props: LiveProps) {
 
       <section className="panel panel-wide" aria-labelledby="conv-memories">
         <h2 id="conv-memories">Memories from conversations</h2>
-        {updates?.summaries.length || conversationMemories.length ? (
+        {updates?.summaries?.length || conversationMemories.length ? (
           <ul className="rows">
             {conversationMemories.map((m) => (
               <li key={m}>

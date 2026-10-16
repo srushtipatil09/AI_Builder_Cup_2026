@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
-import {
-  deleteFile,
-  fetchCategories,
-  fileLink,
-  listFiles,
-  uploadFile,
-  type FileCategory,
-  type StoredFile,
-} from "../../lib/api";
+import { deleteFile, uploadFile, type FileCategory, type StoredFile } from "../../lib/api";
+import { useAppDispatch, useAppSelector } from "../../store";
+import { fileLinksForget, fileUrl, linkUsable, loadCategories, loadFileLink, loadFiles } from "../../store/reads";
 
 type Props = {
   householdId: string;
@@ -30,57 +24,44 @@ const FALLBACK_CATEGORIES: FileCategory[] = [
 ];
 
 const LINK_REFRESH_MS = 25 * 60 * 1000;
+const NO_FILES: StoredFile[] = [];
 
 function sizeLabel(bytes: number) {
   return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-// The profile photo of the parent. Its link expires after 30 minutes, so a fresh one is fetched every 25.
-export function useProfilePhoto(householdId: string, enabled: boolean, version = 0): string | null {
-  const [url, setUrl] = useState<string | null>(null);
+// A file's link from the store. Private links stop working after 30 minutes; the store renews one 5 minutes
+// before that, so the timer here only asks it to check.
+function useFileLink(householdId: string, fileId: string | undefined): string | null {
+  const dispatch = useAppDispatch();
+  const hit = useAppSelector((state) => (fileId ? state.reads.links[fileId] : undefined));
   useEffect(() => {
-    if (!enabled || !householdId) {
-      setUrl(null);
-      return;
-    }
-    let live = true;
-    const load = () =>
-      listFiles(householdId)
-        .then((files) => files.find((f) => f.category === "profile_photo"))
-        .then((photo) => (photo ? fileLink(householdId, photo.id).then((l) => l.url) : null))
-        .then((next) => {
-          if (live) setUrl(next);
-        })
-        .catch(() => {
-          if (live) setUrl(null);
-        });
-    void load();
-    const id = window.setInterval(() => void load(), LINK_REFRESH_MS);
-    return () => {
-      live = false;
-      window.clearInterval(id);
-    };
-  }, [householdId, enabled, version]);
-  return url;
+    if (!householdId || !fileId) return;
+    const load = () => void dispatch(loadFileLink({ householdId, fileId }));
+    load();
+    const id = window.setInterval(load, LINK_REFRESH_MS);
+    return () => window.clearInterval(id);
+  }, [dispatch, householdId, fileId]);
+  return hit && linkUsable(hit) ? hit.url : null;
+}
+
+// The newest profile photo, found in the household's file list. The documents card reads the same list again after
+// an upload or delete, so this hook sees the new photo without a read of its own.
+export function useProfilePhoto(householdId: string, enabled: boolean): string | null {
+  const dispatch = useAppDispatch();
+  const files = useAppSelector((state) => state.reads.files[householdId]?.value);
+  useEffect(() => {
+    if (enabled && householdId) void dispatch(loadFiles({ householdId }));
+  }, [dispatch, householdId, enabled]);
+  const photo = enabled
+    ? (files ?? []).filter((f) => f.category === "profile_photo").sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+    : undefined;
+  return useFileLink(householdId, photo?.id);
 }
 
 // A small preview of an image file. Private files use a link that expires, so it is renewed before then.
 function Thumb({ householdId, file }: { householdId: string; file: StoredFile }) {
-  const [src, setSrc] = useState("");
-  useEffect(() => {
-    if (!file.contentType.startsWith("image/")) return;
-    let live = true;
-    const load = () =>
-      fileLink(householdId, file.id)
-        .then((l) => live && setSrc(l.url))
-        .catch(() => live && setSrc(""));
-    void load();
-    const id = window.setInterval(() => void load(), LINK_REFRESH_MS);
-    return () => {
-      live = false;
-      window.clearInterval(id);
-    };
-  }, [householdId, file.id, file.contentType]);
+  const src = useFileLink(householdId, file.contentType.startsWith("image/") ? file.id : undefined) ?? "";
   if (!file.contentType.startsWith("image/")) {
     return (
       <span className="doc-thumb doc-thumb-pdf" aria-hidden="true">
@@ -289,6 +270,7 @@ type LibraryProps = {
 
 // Everything saved so far, in one list. A filter row narrows it to one kind of record.
 function Library({ categories, files, householdId, onChanged }: LibraryProps) {
+  const dispatch = useAppDispatch();
   const [filter, setFilter] = useState("all");
   const [note, setNote] = useState("");
   const titles = Object.fromEntries(categories.map((c) => [c.id, c.title]));
@@ -298,8 +280,8 @@ function Library({ categories, files, householdId, onChanged }: LibraryProps) {
 
   async function open(file: StoredFile) {
     try {
-      const link = await fileLink(householdId, file.id);
-      window.open(link.url, "_blank", "noopener");
+      const url = await dispatch(fileUrl(householdId, file.id));
+      window.open(url, "_blank", "noopener");
     } catch {
       setNote("Could not open that file. Try again.");
     }
@@ -309,6 +291,7 @@ function Library({ categories, files, householdId, onChanged }: LibraryProps) {
     if (!window.confirm(`Delete ${file.label || file.name}? This cannot be undone.`)) return;
     try {
       await deleteFile(householdId, file.id);
+      dispatch(fileLinksForget([file.id]));
       await onChanged();
       setNote("Deleted.");
     } catch {
@@ -373,32 +356,34 @@ function Library({ categories, files, householdId, onChanged }: LibraryProps) {
 // Files are stored in a locked bucket; a private file opens through a link that stops working after 30 minutes.
 export function DocumentsCard({ householdId, name, demo, onChanged }: Props) {
   const who = name || "your parent";
-  const [categories, setCategories] = useState<FileCategory[]>(FALLBACK_CATEGORIES);
-  const [files, setFiles] = useState<StoredFile[]>([]);
+  const dispatch = useAppDispatch();
+  const categories = useAppSelector((state) => state.reads.categories?.value) ?? FALLBACK_CATEGORIES;
+  const files = useAppSelector((state) => state.reads.files[householdId]?.value) ?? NO_FILES;
   const [loadError, setLoadError] = useState("");
 
   // The parent passes a new callback on every render, so keep the latest in a ref instead of a dependency.
   const changed = useRef(onChanged);
   changed.current = onChanged;
 
-  const refresh = useCallback(async () => {
-    try {
-      setFiles(await listFiles(householdId));
-      setLoadError("");
-    } catch {
-      setLoadError("Could not load saved files. Check the connection.");
-    }
-  }, [householdId]);
+  // force: after an upload or delete, and from "Try again". Otherwise a recent copy is used as it is.
+  const refresh = useCallback(
+    async (force = true) => {
+      try {
+        await dispatch(loadFiles({ householdId, force })).unwrap();
+        setLoadError("");
+      } catch (err) {
+        if ((err as { name?: string })?.name !== "ConditionError") setLoadError("Could not load saved files. Check the connection.");
+      }
+    },
+    [dispatch, householdId],
+  );
 
   useEffect(() => {
     if (!householdId) return;
-    void refresh();
-    fetchCategories()
-      .then(setCategories)
-      .catch(() => {
-        // Keep the built-in list.
-      });
-  }, [householdId, refresh]);
+    void refresh(false);
+    // The categories rarely change; the built-in list stays until the server's arrives.
+    void dispatch(loadCategories());
+  }, [dispatch, householdId, refresh]);
 
   const afterChange = async () => {
     await refresh();

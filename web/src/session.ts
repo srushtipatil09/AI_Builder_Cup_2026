@@ -91,8 +91,15 @@ export function writeSession(session: HouseholdSession) {
   }
 }
 
+// The store registers here, so logging out also drops the cached household data without session.ts importing it.
+const clearedListeners: Array<() => void> = [];
+export function onSessionCleared(listener: () => void) {
+  clearedListeners.push(listener);
+}
+
 export function clearSession() {
   localStorage.removeItem(KEY);
+  for (const listener of clearedListeners) listener();
   firebaseSignOut().catch(() => {});
 }
 

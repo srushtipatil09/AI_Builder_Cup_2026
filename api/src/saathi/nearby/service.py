@@ -38,7 +38,8 @@ KINDS: dict[str, dict] = {
     "restaurant": {"types": ["restaurant"], "label": "Food", "query": "restaurant"},
 }
 SEARCH_RADIUS_M = 5000
-CACHE_SECONDS = 10 * 60
+# Each lookup is a paid Places call. Places near a home rarely change; an hour keeps "open now" close to true.
+CACHE_SECONDS = 60 * 60
 MAX_RESULTS = 5
 
 # National numbers that do not depend on where the parent is. Elderline is a published line for older people;
