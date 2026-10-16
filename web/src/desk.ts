@@ -138,8 +138,24 @@ function read(key: string, seed: Desk): Desk {
   }
 }
 
+import { fetchDesk, saveDesk } from "./lib/api";
+
 export function useDesk(key: string, seed: () => Desk) {
   const [desk, setDesk] = useState<Desk>(() => read(key, seed()));
+
+  useEffect(() => {
+    const isDemo = key.includes("demo");
+    const hhId = key.replace("saathi.desk.", "");
+    fetchDesk(hhId, isDemo)
+      .then((serverDesk) => {
+        if (serverDesk) {
+          setDesk((prev) => ({ ...prev, ...serverDesk }));
+        }
+      })
+      .catch(() => {
+        // Keep local cache if offline or API unavailable
+      });
+  }, [key]);
 
   useEffect(() => {
     try {
@@ -147,6 +163,9 @@ export function useDesk(key: string, seed: () => Desk) {
     } catch {
       // Private mode: edits last until the tab closes.
     }
+    const isDemo = key.includes("demo");
+    const hhId = key.replace("saathi.desk.", "");
+    saveDesk(hhId, desk, isDemo).catch(() => {});
   }, [key, desk]);
 
   function reset() {
@@ -155,3 +174,4 @@ export function useDesk(key: string, seed: () => Desk) {
 
   return { desk, setDesk, reset };
 }
+

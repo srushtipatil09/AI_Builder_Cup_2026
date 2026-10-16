@@ -58,13 +58,17 @@ export function joinUrl(code: string): string {
   return `${window.location.origin}/join/${code}`;
 }
 
+import { createPairingLink, pairFamilyCode } from "./lib/api";
+
 export function findByCode(code: string): FamilyLink | null {
   return load()[normalizeCode(code)] ?? null;
 }
 
 export function markJoined(code: string, name: string) {
+  const norm = normalizeCode(code);
+  pairFamilyCode(norm, name).catch(() => {});
   const store = load();
-  const link = store[normalizeCode(code)];
+  const link = store[norm];
   if (!link) return;
   store[link.code] = { ...link, joinedAt: new Date().toISOString(), joinedName: name };
   save(store);
@@ -91,19 +95,31 @@ export function useFamilyLink(household: string, parentName: string, caretakerNa
   }, [household]);
 
   function create() {
-    const store = load();
-    for (const [code, l] of Object.entries(store)) if (l.household === household) delete store[code];
-    const next: FamilyLink = {
-      code: makeCode(),
-      household,
-      parentName,
-      caretakerName,
-      createdAt: new Date().toISOString(),
-    };
-    store[next.code] = next;
-    save(store);
-    setLink(next);
+    createPairingLink(household, caretakerName, parentName)
+      .then((remote) => {
+        const store = load();
+        for (const [code, l] of Object.entries(store)) if (l.household === household) delete store[code];
+        store[remote.code] = remote;
+        save(store);
+        setLink(remote);
+      })
+      .catch(() => {
+        // Fallback to local code if offline
+        const store = load();
+        for (const [code, l] of Object.entries(store)) if (l.household === household) delete store[code];
+        const next: FamilyLink = {
+          code: makeCode(),
+          household,
+          parentName,
+          caretakerName,
+          createdAt: new Date().toISOString(),
+        };
+        store[next.code] = next;
+        save(store);
+        setLink(next);
+      });
   }
 
   return { link, create };
 }
+

@@ -150,4 +150,57 @@ Ask Saathi and the Routine charts are read-only by design. Checked in the browse
 
 ## 15 Oct 2026 — Family button in the parent's app
 
-The parent's chat always shows a **Family** button (filled before joining, outlined after). `web/src/pages/FamilySheet.tsx` replaces the join-only sheet: before joining it shows the join form; after joining it shows the code, who looks after them, and the join date, with Change code (Cancel returns). The Kamla demo shows it with a Demo tag and a synthetic family (code KMR-4F7) held in memory, so trying Change code writes nothing. The demo's top bar uses the preferred name "Kamla" so the button and Leave fit at 360px. Checked at 360x760 for the demo and for a real parent: join, view, change, cancel. `npm run build` exit code 0.
+The parent's chat always shows a **Family** button (filled before joining, outlined after). `web/src/pages/FamilySheet.tsx` replaces the join-only sheet: before joining it shows the join form; after joining it shows the family code, who looks after them, and the join date, with Change code (Cancel returns). The Kamla demo shows it with a Demo tag and a synthetic family (code KMR-4F7) held in memory, so trying Change code writes nothing. The demo's top bar uses the preferred name "Kamla" so the button and Leave fit at 360px. Checked at 360x760 for the demo and for a real parent: join, view, change, cancel. `npm run build` exit code 0.
+
+## 16 Oct 2026 — Backend features end-to-end implementation
+
+Implemented all 8 core backend features matching the approved plan, architecture, and constraints:
+
+1. **Contracts & Firestore Data Layer (`saathi.contracts`, `saathi.providers.firestore`)**:
+   - Typed Pydantic schemas for `Identity`, `Profile`, `People`, `Memories`, `Medicines`, `Contacts`, `Desk`, `Reminders`.
+   - Firestore repository with Google Cloud Firestore client (`google-cloud-firestore`) and automated in-memory fallback for offline test isolation.
+   - Household pairing code generator (`KMR-4F7`) and join exchange.
+   - Web API client (`web/src/lib/api.ts`) wired to `/api/v1/households`, `/api/v1/desk`, `/api/v1/pair`.
+
+2. **Gemini 3.8 Live Voice Bridge (`saathi.live`)**:
+   - Bidirectional audio WebSocket bridge at `/api/v1/sessions/{session_id}/live` with authentication and 240-second cap.
+   - Persona prompts (Saathi / Rakshak) with local time, caretaker memories, and verified family episodes.
+   - Speech synthesis, speech recognition, and fallback text turns at `/api/v1/sessions/{session_id}/text`.
+
+3. **Post-Call Gemini Flash Extraction & Vector Memory (`saathi.memory`)**:
+   - Structured observation extraction (`gemini-3.8-flash` schema) for meals, mood, discomfort, family episodes, and memory corrections.
+   - Multilingual vector embeddings (`text-multilingual-embedding-002`) and Firestore Vector Search with cosine similarity.
+   - Deterministic Family Shift Rule comparing earlier and later episodes, generating non-diagnostic caregiver card linking Elderline 14567.
+
+4. **In-Session Distress & Loud Impact Audio Classification (`saathi.live.distress`)**:
+   - Keyword backstop in Hindi/English ("ouch", "bachao", "gir gayi") and negation handling ("I did not fall").
+   - Gemini Flash impact audio classifier distinguishing `possible_impact` vs `ordinary_noise` (doors, dropped spoons).
+   - Instant spoken check ("Kya hua? Gir gaye kya? Main yahin hoon.") and Level 3 escalation.
+
+5. **BigQuery Behavioral Drift Engine & ADK SafetyGuard (`saathi.analytics`, `saathi.insights`)**:
+   - SQL drift comparison (D-2..D vs D-13..D-3 baseline with variance floor 250ms).
+   - Intentional fasting detection excluding planned skipped meals from escalation.
+   - Pure Python **SafetyGuard** with 25+ test cases forbidding diagnoses (dementia, depression), dosage advice, and clinical orders.
+
+6. **Dual-Channel Reminders (`saathi.reminders.voice`)**:
+   - Verbal read-back and confirmation before committing reminders.
+   - Medicine uncertainty handling ("yaad nahi" -> `uncertain`, never suggests extra dose).
+
+7. **Proactive Check-in Scheduler & FCM (`saathi.scheduling.service`, `saathi.worker`)**:
+   - Worker `/internal/tick` for minute-by-minute check-ins.
+   - Unanswered check-in lifecycle (30s listen, 5m retry, 15m Level 2 welfare check; device offline -> `device_unavailable`).
+   - Generic lock-screen push notification formatting.
+
+8. **Demo Isolation & Testing Harness (`saathi.demo.routes`)**:
+   - Logical clock advance (`POST /api/v1/demo/advance`) scoped to demo household.
+   - Demo panel controls on CompanionChat (distress clip, door clip, seeded session).
+
+### Commands run:
+```bash
+make test
+# Result: 55 passed in 0.93s
+
+make web-build
+# Result: tsc --noEmit && vite build: 0 errors (built in 423ms)
+```
+

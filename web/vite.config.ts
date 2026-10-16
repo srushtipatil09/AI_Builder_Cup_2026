@@ -3,14 +3,21 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  envDir: "../",
   server: {
     port: 5173,
     allowedHosts: [
-      "installed-surrey-fighter-gone.trycloudflare.com",  // Extending the allowed hosts to include the Cloudflare domain. For proper multi-device testing.
+      "installed-surrey-fighter-gone.trycloudflare.com",
       ".trycloudflare.com",
     ],
     proxy: {
       "/health": "http://127.0.0.1:8080",
+      "/api": {
+        target: "http://127.0.0.1:8080",
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 });
+
