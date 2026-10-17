@@ -26,8 +26,9 @@ flowchart TD
 | Screen | Who | What they do |
 | --- | --- | --- |
 | Landing page, `/` | A new family, or a reviewer | Log in, create an account, or open either demo without an account |
-| Care desk, `/care` | The caretaker, on a phone or a computer | Store the person's name, people, memories, check-in time, and reminders; read Routine; make a family code |
-| Companion chat, `/app` | The older adult | Talk, stop, pause, or contact the family |
+| A few details, `/details` | Someone who just signed up with Google | Name, language, and city. Shown once, then the role's home |
+| Care desk, `/care` | The caretaker, on a phone or a computer | Store the person's name, people, memories, check-in time, and reminders; read Routine; make a family code; switch among the family members they look after (up to 10) |
+| Companion chat, `/app` | The older adult | Talk, stop, pause, contact the family, or ask for help nearby |
 
 ## How it runs
 
@@ -56,6 +57,9 @@ Read the pictures and the rules in the docs:
 | [docs/MASTER_PLAN.md](docs/MASTER_PLAN.md) | What is locked, what is Sunday, what is later? |
 | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Which milestone happens on which day? |
 | [docs/PROGRESS.md](docs/PROGRESS.md) | What is done right now? |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Why these choices? |
+| [docs/PRIVACY.md](docs/PRIVACY.md) | What is stored, and for how long? |
+| [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) | Which project ids and URLs were actually checked? |
 
 ## Run it locally
 
@@ -78,40 +82,54 @@ Open `http://localhost:5173`. The landing page links to both demos. A caretaker 
 
 Copy `.env.example` to `.env` when a Google Cloud project id exists. Do not commit `.env`.
 
-## Status
+## What is finished
 
-Honesty table (master plan section 14). Kept true at submission time; [docs/PROGRESS.md](docs/PROGRESS.md) has the checks behind each row.
+The product below is in the running app at https://saathi-5afcf.web.app. Open it with no account and try the Kamla Sharma phone or the caretaker demo. Both households are synthetic and labeled.
 
-| Item | State |
+Saathi already knows the household before the parent speaks. The Live prompt is filled with the preferred name, the language, the city, every person who matters, the memories the family saved and the corrections from earlier talks, every reminder, the last conversation summaries, topics the parent declined, and one family thread when a named person has gone quiet. That packet is ready when the greeting starts, so the reply does not wait for a database read in the middle of a sentence. Voice audio is a live stream, not a file uploaded after the parent stops. The line to Gemini Live opens as the chat page opens. Talk sends "start" on a connection that is already up, and the greeting begins then. Microphone audio is 16 kHz PCM sent as it is captured. Saathi's voice comes back as 24 kHz PCM and is played gapless. If the parent talks over Saathi, the queued audio is dropped. The browser's audio context asks for interactive latency. Extraction, embeddings, and the drift comparison run after the call ends, on the worker, and never sit on the voice path.
+
+| Capability | What a judge sees |
 | --- | --- |
-| Public URL | Site https://saathi-5afcf.web.app, API on Cloud Run (`saathi-api`), private worker (`saathi-worker`) |
-| Hindi Live conversation on Cloud Run | Built. Model `gemini-live-2.5-flash-native-audio`, voice Aoede. Checked against Vertex from a local API; a turn on the public URL from a second browser is not yet recorded |
-| Proactive greeting from an awake tab | Built. Due check-ins need the `saathi-tick` Scheduler job |
-| Memory across sessions | Built. A caretaker memory feeds the next greeting |
-| Family episodes and Firestore vector search | Built. Embeddings `text-multilingual-embedding-002` |
-| In-session distress check | Voice keywords and labeled impact clips (Flash labels the clip). Door clip does not alert |
-| Browser speech timing | Built, quality-flagged. Speaking rate is not measured by the live chat |
-| Flash extraction | Built. Eval: 30/30 labeled cases on `gemini-2.5-flash` (`make eval`, `eval/report.json`) |
-| BigQuery SQL drift | Built. Seeded stable, changing, and fasting histories disagree as expected |
-| ARIMA_PLUS | Not built. Not the decision engine |
-| ADK tools | Three tools. ADK is an optional install; without it the same tools run in a fixed order |
-| SafetyGuard | Built, covered by pytest (`make check SCENARIO=safety`) |
-| Voice reminder create and confirm | Built. Saved only after the parent's own yes |
-| FCM | Code and service worker in place. A push on a real phone is not yet verified; the in-app banner always works |
-| Landing page, care desk, mobile chat | Built. The account role chooses the front: caretaker `/care`, parent `/app` |
-| PWA install | Chrome install sheet and iPhone instructions built. A real install on a phone is not yet verified |
-| Retention | Worker job: transcripts 7 days, summaries and daily numbers 30 days |
-| Background wake word | Not possible in a PWA. A check-in is a notification, then speech in the open app |
-| Nest / Google Home | Not built. Milestone M16 |
-| Pill identification, gas, glass | Not built. Later work |
-| Vertex AI Vector Search endpoint | Not used. Firestore vector search is the index that shipped |
-| WhatsApp ingestion | Not built. Family contact comes from what the parent tells Saathi |
-| Marathi | Not enabled |
-| Clinical validation | Not claimed |
+| Public app | https://saathi-5afcf.web.app, API `saathi-api`, private worker `saathi-worker` |
+| Live conversation | Gemini Live `gemini-live-2.5-flash-native-audio`, voice Aoede, at most four minutes. Hindi in the Kamla demo. Nine more languages follow the profile: English, Bengali, Marathi, Gujarati, Punjabi, Tamil, Telugu, Kannada, Malayalam |
+| Full context on every turn | Name, people, memories, reminders, recent summaries, declined topics, and the family thread are in the system instruction before the first word |
+| Fast reply | Socket opened before Talk. PCM in and out with no upload step. Barge-in stops playback. Post-call work stays off this path |
+| Memory across sessions | A fact the caretaker saves is in the next greeting. A correction from a conversation is kept beside it |
+| Family episodes | Quotes stored with embeddings `text-multilingual-embedding-002` and found by Firestore vector search |
+| Distress during the call | Keywords in every supported language, plus a short clip labeled by Flash. A door does not alert. "I did not fall" does not alert |
+| Proactive check-in | At the saved time, a push says "Saathi wants to talk". An open chat greets without another tap. Later counts as a response. A blocked microphone is "device unavailable" |
+| Push notifications | Firebase Cloud Messaging. The parent and the caretaker each turn them on from the app. The service worker shows the notice, and if the app is already open it speaks the line. A tap opens the chat and then speaks. The lock screen never carries a name, a quote, or a dose |
+| Spoken "I have done it" | When a reminder is due and the parent agrees ("haan", "kar lunga", "ja raha hoon", "done"), that reminder is confirmed for today. A delivered push is only "seen". A bare "ji" is not agreement |
+| Voice reminders | The parent can create one by talking. Saathi reads it back and saves it only after their own yes. Kinds: medicine, exercise, call, meal, other. Once or daily |
+| Ask Saathi | The caretaker types or dictates a change. It is saved only after confirm. A question about how the parent has been is answered from stored facts and checked by SafetyGuard |
+| Drift | BigQuery compares this person with their own earlier days. A named fast is not a nutrition alert. Eval of extraction: 30/30 labeled cases on `gemini-2.5-flash` |
+| SafetyGuard | Every sentence the family sees is checked. A diagnosis, a dose, or an order to enter counselling is replaced by a sentence built from the stored facts |
+| Insight | Three tools, in a fixed order, or an optional ADK agent that can only word the notice. The code chooses the tier and the evidence |
+| Nearby help | Hospitals, medical shops, parks, and food, plus trusted people and 112, 108, and Elderline 14567. The parent taps Call |
+| Several family members | One caretaker, up to 10 people, each with a desk and a family code |
+| Phone that remembers | Redux holds the care desk and the slower reads. Both are written to versioned localStorage, shared across tabs of this browser, and cleared on log out. A reload opens on the saved copy. Private file links stay in memory only |
+| Accounts and files | Email, password, and Google. Family code joins the phone. Photos and documents in a private bucket, opened with a 30-minute link |
+| Installable phone app | Chrome install sheet. iPhone: Share, then Add to Home Screen. A closed app does not hold the microphone |
+| Retention and spend stops | Transcripts 7 days, summaries and daily numbers 30 days. 120 Live minutes and 500 extraction calls a day. Three demo voice sessions a visitor a day |
 
 ### Not in this prototype
 
-Weekday recurrence edge cases, voice edit of every reminder field, Marathi, Sutra as a full mode, Nest and Google Home (M16), pill recognition, gas and glass detection, a Vertex AI Vector Search endpoint, Agent Engine hosting, Terraform, Maps, SMS, WhatsApp, a composite health score, a background wake word, continuous room listening.
+Weekday recurrence (a reminder is once or daily), voice edit of every reminder field, Sutra as a full mode, Nest and Google Home, pill recognition, gas and glass detection, a Vertex AI Vector Search endpoint, Agent Engine hosting, Terraform, SMS, WhatsApp, a composite health score, a background wake word, and continuous room listening. The deck PDF and the three-minute video are the files that go with the form.
+
+## What the judges score
+
+The [AI Builder Cup 2026 criteria](https://aibuildercup.com/themes.html) are the same for every theme. Theme on the form: Sustainability and Social Impact. Category, if the form asks: Social Good. Submission materials are in English. The prototype must use Gemini or Gemma, or an agent platform, and must run on Cloud Run or Firebase. This build uses Gemini on Vertex, Cloud Run, and Firebase Hosting.
+
+Weights and the pieces of this repository that answer them:
+
+| Weight | Criterion | What is in this build |
+| --- | --- | --- |
+| 40% | Technical merit and Gen AI | Gemini Live holds the conversation, with the household already in the prompt and the socket open before Talk. Gemini Flash extracts observations, labels a short impact clip, drafts the family notice, and answers a caretaker's question from stored facts. Optional ADK `LlmAgent` words the notice; the fixed-order tools remain the fallback. Embeddings and Firestore vector search recall family episodes. BigQuery SQL compares this person with their own earlier days. Five Live tools act during the call. The public API and the private worker are one image on Cloud Run. Cloud Tasks, Cloud Scheduler, Firebase Auth, Firestore, Cloud Storage, FCM, and Secret Manager are in the running app. The API tests cover safety, drift, the live bridge, reminders, nearby help, family members, push registration, and quota |
+| 25% | Problem alignment and impact | An older adult living apart can talk without filling a form. The family sees what changed, in the parent's words, and a human next step. Check-ins, distress, unanswered invitations, and a shift in family contact each have a rule. Nearby help offers 112 first, then a place or a trusted person, and never a diagnosis or a dose. Research numbers on the slides are cited as other people's results. This prototype does not claim fewer deaths, hospital days, or insurance claims |
+| 25% | Innovation | The closed phone does not listen: a notification, then speech. The reply itself is a live audio stream with the memories and reminders already loaded, so Saathi does not pause to look the person up. The drift rule uses this person's own baseline and refuses a named fast. The family-episode card needs two quotes and a coded shift. A reminder is saved only after a spoken yes, and a later "I have done it" confirms it. A push is "seen". SafetyGuard replaces a diagnosis, a dose, or an order to enter counselling. Late at night the prompt drops memories and outings |
+| 10% | User experience | One app, two fronts chosen by role. The parent's screen is Talk, Stop, Pause, Contact family, and Nearby help, with optional captions. The care desk is five tabs on a phone and on a computer, and it opens on the copy already saved in the browser. A family code joins the phone. Chrome gets an install sheet; iPhone gets Add to Home Screen steps. Copy stays plain: "Not yet confirmed" until the parent says they have done it |
+
+Try it at https://saathi-5afcf.web.app. The Kamla Sharma phone and the caretaker demo need no account. Both are labeled synthetic.
 
 ## Deploy
 

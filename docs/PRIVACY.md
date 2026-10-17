@@ -13,7 +13,9 @@ This is a prototype policy. It is not a DPDP or HIPAA certification.
 | Account profile | Firestore `users/<uid>`, written by `GET` and `PUT /api/v1/me` | Until the account is deleted. Role, names, language, and family code |
 | Photos and documents | Cloud Storage, with metadata in Firestore `households/<id>/files` | Until deleted. Prescriptions, reports, bills, medicine strips, identity proofs, and insurance are always private |
 | Private file links | Signed by the API with `LINK_SIGNING_SECRET`, kept in Secret Manager (`saathi-link-signing`) | 30 minutes. A tampered or expired link is refused |
-| Parent's position | Firestore `households/<id>/place/current`, rounded to about 100 m, saved once after the parent taps Allow location; never saved for the shared demo | Until the family taps Forget the position, or it is replaced. Used only to find hospitals, parks, food and medical shops near the parent. The city on the care desk is the fallback |
+| Parent's position | Firestore `households/<id>/place/current`, rounded to about 100 m, saved once after the parent taps Allow location; never saved for the shared demo | Until the family taps Forget the position, or it is replaced. Sent to the Places API (New) only to search hospitals, parks, food, and medical shops within 5 km. The city on the care desk is the fallback and is not a GPS point |
+| Places results | The API process, for one hour | Not written to Firestore. A failed Places call returns no places; helplines and trusted people still return |
+| Extra family members | Firestore, on the caretaker's `users/<uid>` document, field `households`, plus a household record `hh-...` | Until removed. At most 10 households on one account. The list is written only by `POST /api/v1/me/households` |
 | Consent | Firestore `users/<uid>.consentAt`, set when Create account is submitted with the agreement box ticked | Until the account is deleted |
 | Demo visitor counter | Firestore `_usage/<day>/demo_visitors/<hash>` | A daily, salted hash of the caller's address, not the address. Counts demo voice sessions (three a day) |
 
