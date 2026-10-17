@@ -206,12 +206,24 @@ Google client libraries live in `providers`. Product rules stay in pure function
 
 ## Local run
 
+Using Makefile:
+```bash
+make setup     # Install dependencies
+make test      # Run all 100 pytest tests
+make api       # Run public API on port 8080
+make worker    # Run background worker on port 8081
+make web       # Run Vite dev server on port 5173
+```
+
+Or manually:
 ```bash
 python -m pip install -e "api[dev]"
 python -m pytest api/tests
 cd api && python -m uvicorn saathi.main:app --reload --port 8080 --app-dir src
 npm install --prefix web && npm run dev --prefix web
 ```
+
+For a comprehensive submission breakdown of the Google Cloud, Firebase, and Gemini stack, see [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md).
 
 The page reads `/health` through the Vite proxy. Live voice, Firestore, BigQuery, and Cloud Storage run when project credentials are present. Without `WORKER_URL`, post-call work stays in the API process. A build that is not behind the proxy can set `VITE_API_URL`. Optional ADK is `pip install -e "api[adk]"`.
 

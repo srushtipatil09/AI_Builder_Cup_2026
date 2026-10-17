@@ -2,7 +2,7 @@
 
 Decision record for the Sunday 18 Oct 2026 submission. Product detail is in [SPEC.md](SPEC.md). The system picture is in [ARCHITECTURE.md](ARCHITECTURE.md). The day-by-day order is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
-Owners: Vibhuti Singh and Srushti Patil. Theme: Sustainability and Social Impact. If the form also asks for a category, choose Social Good.
+Owners: Srushti Patil and Vibhuti Singh. Theme: Sustainability and Social Impact. If the form also asks for a category, choose Social Good.
 
 This file matches the locked choices in the planning notes. If an older note disagrees, follow this file for priority and claims, and follow SPEC.md for behavior.
 

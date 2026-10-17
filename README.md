@@ -52,6 +52,8 @@ Read the pictures and the rules in the docs:
 
 | Doc | Question it answers |
 | --- | --- |
+| [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md) | Executive summary, submission guide, and Google Cloud / Firebase integration breakdown |
+| [docs/CODEBASE_FACTS_OPTIMIZATIONS_AND_STACK.md](docs/CODEBASE_FACTS_OPTIMIZATIONS_AND_STACK.md) | Deep technical blueprint, Gen AI latency optimizations, and cost-saving architecture |
 | [docs/SPEC.md](docs/SPEC.md) | What are we building? |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How are we building it? |
 | [docs/MASTER_PLAN.md](docs/MASTER_PLAN.md) | What is locked, what is Sunday, what is later? |
@@ -63,8 +65,18 @@ Read the pictures and the rules in the docs:
 
 ## Run it locally
 
-Requires Python 3.12 and Node 22.
+Requires Python 3.12+ (or virtualenv) and Node 22+.
 
+Using Makefile:
+```bash
+make setup     # Install Python dev dependencies and web node modules
+make test      # Run all 100 unit and integration tests
+make api       # Start public API on port 8080
+make worker    # Start background worker on port 8081
+make web       # Start Vite dev server on port 5173
+```
+
+Or manually:
 ```bash
 python -m pip install -e "api[dev]"
 python -m pytest api/tests
@@ -141,4 +153,4 @@ python scripts/smoke_cloud.py --invoke
 
 `setup_cloud.ps1` runs once: the signing secret, the service-account grants, and the two Scheduler jobs. `deploy.ps1` builds one image for both Cloud Run services and deploys Hosting.
 
-Owners: Vibhuti Singh and Srushti Patil. Theme: Sustainability and Social Impact.
+Owners: Srushti Patil and Vibhuti Singh. Theme: Sustainability and Social Impact.

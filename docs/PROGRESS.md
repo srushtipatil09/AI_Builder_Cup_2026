@@ -372,10 +372,19 @@ Compared `docs/` and `README.md` with the source. The product docs now also desc
 Corrected in the same pass: the public URL, the worker, Cloud Tasks, and both Scheduler jobs are recorded as checked in `docs/ENVIRONMENT.md` (the architecture intro had still said they were not). The demo session cap is enforced. Marathi is one of the ten selectable languages; a speaker check for it is not recorded.
 
 ```text
-python -m pytest api/tests --collect-only -q
+.venv/bin/python -m pytest api/tests -q
 ```
 
-Result: 100 tests collected. The suite was not re-run, so the last recorded green result remains 80 passed on 16 Oct 2026.
+Result: 100 passed, 2 warnings in 29.60s on 17 Oct 2026. The full suite covering access control, safety guardrails, drift comparison, reminders, nearby help, accounts, and quota checks is green.
+
+Web TypeScript check:
+```text
+cd web && npx tsc --noEmit -p .
+```
+
+Result: exit code 0, 0 errors.
+
+Created `docs/PROJECT_OVERVIEW.md` as the unified project submission overview detailing the architecture and how Saathi leverages Firebase (Hosting, Auth, FCM), Firestore (NoSQL + serverless vector search), Cloud Run (API and Worker dual-service container), and Gemini (Live low-latency voice, Flash fact extraction/distress classification, Vertex multilingual embeddings). Aligned project lead naming across documentation (Srushti Patil and Vibhuti Singh).
 
 Still not recorded from a device: a Hindi turn on the public URL from a second browser, FCM on a real phone, a real PWA install, and a speaker check for any language other than the Hindi path used in development. The deck, the video, and the submission receipt are still the Sunday pack.
 
