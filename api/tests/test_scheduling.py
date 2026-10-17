@@ -77,9 +77,14 @@ def test_reminder_copy_speaks_the_family_line_and_hides_a_dose() -> None:
     assert not agrees("ji")
 
 
-def test_notification_link_is_https() -> None:
-    assert notification_link("/care").startswith("https://")
-    assert notification_link("/care").endswith("/care")
+def test_notification_link_is_https(monkeypatch) -> None:
+    """FCM rejects a relative or http link. The test sets the site, so it does not depend on a local .env."""
+    monkeypatch.setenv("WEB_ORIGIN", "https://saathi-5afcf.web.app")
+    assert notification_link("/care") == "https://saathi-5afcf.web.app/care"
+    # A local dev origin is not a link a phone can open. Hosting is used instead.
+    monkeypatch.setenv("WEB_ORIGIN", "http://localhost:5173")
+    monkeypatch.setenv("FIREBASE_PROJECT_ID", "saathi-5afcf")
+    assert notification_link("/app") == "https://saathi-5afcf.web.app/app"
 
 
 def test_worker_scheduler_tick() -> None:
