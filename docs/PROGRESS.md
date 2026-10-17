@@ -1,5 +1,11 @@
 # Progress
 
+The product a judge should read is [SPEC.md](SPEC.md), [ARCHITECTURE.md](ARCHITECTURE.md), and the README. Those describe the finished app.
+
+Finished and in the running system: Live voice with the household already in the prompt, a socket that opens before Talk, gapless playback and barge-in, memories and family episodes, BigQuery drift, SafetyGuard, proactive check-in, Firebase push, a spoken yes that confirms a due reminder, Ask Saathi, nearby help, ten languages, up to 10 family members, Redux with versioned localStorage, accounts, private files, and the installable phone app.
+
+The notes under this line are the build log. Where an older note says a feature was still open, the opening of this file replaces it.
+
 ## 15 Oct 2026 — repository scaffold
 
 Created the app layout from the master plan.
@@ -310,5 +316,66 @@ Compared the clean `dev` tree at `4776be2` with `docs/`. The product docs now ma
 - Accounts and family codes live in Firestore. Uploads live in Cloud Storage with 30-minute private links.
 - ADK is optional. Empty `WORKER_URL` keeps post-call work in the API process.
 - `python -m pytest api/tests --collect-only -q` collected 75 tests. The suite was not re-run, so the last recorded green result remains 71 passed.
-- A later check against the code corrected three product claims: a signed-in caretaker is sent from `/app` to `/care` at any width; the browser pause is the wait from the parent's last loud frame to the first reply audio, and the live chat does not send speaking rate; `DEMO_SESSIONS_PER_VISITOR` and the monthly budget alert are not enforced by the running app.
+- A later check against the code corrected three product claims: a signed-in caretaker is sent from `/app` to `/care` at any width; the browser pause is the wait from the parent's last loud frame to the first reply audio, and the live chat does not send speaking rate; the monthly budget alert is not created by the app. The same note said `DEMO_SESSIONS_PER_VISITOR` was not enforced; the entry below enforces it when Talk starts.
 - A public Hosting or Cloud Run URL is still not recorded as verified. Cloud Tasks, the worker service, and Cloud Scheduler are still not recorded as created.
+
+## 16 Oct 2026 — access gaps closed: family code scope, classify-impact, CORS
+
+- A joined family code (`X-Family-Code`, or `familyCode` on the WebSocket) now opens only what the parent's phone needs: the live session, text turn, session complete, heartbeat, invitation and its events, Contact family, and reading the desk. Files, private links, pairing, desk writes, updates, metrics, alerts, Ask Saathi, and devices need a verified member. `has_household_access(..., allow_family_code=True)` marks the phone routes. A parent who signed in with Firebase and joined is still a member and keeps full access. The web phone calls (`CompanionChat`: complete, text, heartbeat, invitation, contact-family; live WebSocket) all land on allowed routes; the parent's phone does not call desk writes or files.
+- `POST /api/v1/sessions/{id}/classify-impact` now needs household access and counts one call against the daily extraction limit (429 when spent). The web app does not call it; the live bridge classifies over the WebSocket.
+- CORS no longer allows any `https://` origin with credentials. Allowed: `WEB_ORIGIN`, `https://<project>.web.app`, `https://<project>.firebaseapp.com` (project from `FIREBASE_PROJECT_ID` or `GOOGLE_CLOUD_PROJECT`), comma-separated `CORS_EXTRA_ORIGINS`, and `http://localhost:<port>` / `127.0.0.1:<port>`. A deployed API must have one of those project variables or `WEB_ORIGIN` set, or the hosted web app is refused.
+- Checked: `python -m pytest api/tests` 77 passed, including `api/tests/test_access.py` (family code under strict mode: desk read, heartbeat, invitation 200; desk write, files, file link, pairing, updates, classify-impact 401; another household's desk 401; an unknown https origin gets no CORS header). Not deployed; not checked in a browser or against real Firestore.
+
+## 16 Oct 2026 — pending items from the master plan, and two production faults
+
+Checked the deployed services from outside: the site, `/health`, and the demo API answer; the worker refuses anonymous calls (403); CORS allows only `https://saathi-5afcf.web.app`.
+
+Two faults found in production logs and settings:
+
+- Cloud Tasks enqueue failed on every session: `backend-dev@` lacked `iam.serviceAccounts.actAs` on itself, so the API ran each pipeline in-process (request-billed CPU can stall that work after the response).
+- The worker had no `TASK_INVOKER_EMAIL` or `WORKER_URL`, so its own check would have refused every Tasks and Scheduler call with 403 even after the first fault was fixed.
+- No Cloud Scheduler job existed, so scheduled check-ins and reminders never fired. `LINK_SIGNING_SECRET` was a plain environment variable on both services.
+
+| Slice | What changed | Where |
+| --- | --- | --- |
+| Security merge | Family code limited to the phone's routes, `classify-impact` needs household access and counts against the extraction cap, CORS narrowed | merge of `claude/recursing-chatterjee-74a940` |
+| Retention | `/internal/retention`: transcripts cleared after 7 days (measurements kept); observations, Firestore daily numbers, and BigQuery rows deleted after 30 | `retention.py`, `worker.py` |
+| Demo limit | Three demo voice sessions per visitor a day, counted when Talk starts the session; `DEMO_SESSIONS_PER_VISITOR=0` turns it off for recording | `usage.py`, `live/routes.py`, `live/bridge.py` |
+| Inactivity simulation | Demo chat button, labeled simulated, creates the same invitation the scheduler sends | `demo/routes.py`, `CompanionChat.tsx` |
+| Consent | Create account requires an agreement box; `consentAt` stored at `users/<uid>` and kept on later saves | `SignupPage.tsx`, `accounts/routes.py` |
+| Expired sign-in | The care desk sends a 401 to Log in instead of retrying every 20 seconds | `desk.ts` |
+| Repo pack | Apache-2.0 `LICENSE`, CI (pytest and web build), `infra/create_bigquery.sql`, smoke and seed scripts, Make targets `lint`, `check`, `eval`, `seed-demo`, `smoke-cloud`, `deploy` | |
+| Eval | 30 labeled extraction cases. First run on `gemini-2.5-flash`: 30/30 | `eval/`, `scripts/eval_extraction.py` |
+| Deploy | `deploy.ps1` gives the worker its invoker settings and mounts the secret; `setup_cloud.ps1` creates the secret, the grants, and the two Scheduler jobs | `deployment/scripts/` |
+
+Checks: `python -m pytest api/tests` 80 passed. `tsc --noEmit` exit 0. Both PowerShell scripts parse and dry-run.
+
+Not done here: `setup_cloud.ps1` creates a secret and IAM grants, which this agent was not permitted to run; the redeploy waits on it. CI has not run on GitHub yet. Deck and video are not started. The cloud check that followed is recorded in [ENVIRONMENT.md](ENVIRONMENT.md): site, API, private worker, Tasks hand-off, and both Scheduler jobs answered on 16 Oct 2026.
+
+## 17 Oct 2026 — docs aligned to the tree
+
+Compared `docs/` and `README.md` with the source. The product docs now also describe what landed after the 16 Oct entries:
+
+| Area | What the code does | Where |
+| --- | --- | --- |
+| Nearby help | Hospitals, medical shops, parks, and food from the Places API (New), within 5 km, at most 5, cached one hour. Helplines 112, 108, and Elderline 14567, and trusted contacts, still return if Places fails. The parent taps Call. After 9 pm a park lookup is refused | `nearby/`, `live/bridge.py` `find_nearby` and `offer_call`, `NearbyPanel.tsx`, `NearbyCard.tsx` |
+| Position | One point rounded to three decimals, saved only after Allow location. The shared demo does not store it. The city on the desk is the fallback. The family can delete it | `PUT/DELETE .../location` |
+| Languages | Ten languages in the Live prompt and in the server's distress, listening, yes, no, help, and fine phrases. Hindi remains the demo language | `languages.py`, `live/prompts.py` |
+| Several family members | A caretaker adds up to 10 households. Each has a desk and a family code. A profile save cannot attach a household the account does not own | `accounts/routes.py`, `FamilySwitcher.tsx` |
+| Ask Saathi questions | A question is answered from stored summaries, daily numbers, and alerts (1 to 14 days), then SafetyGuard. A missing day stays missing | `asks/answer.py` |
+| Reminders | Kinds medicine, exercise, call, meal, other. A push sets `seenOn`. The parent's own agreement sets `confirmedOn`. The lock screen has no dose | `scheduling/notice.py`, `MedicineTab.tsx` |
+| Late night | From 9 pm to 5 am the prompt drops memories, family threads, and outings | `live/prompts.py` |
+| Quota | Short-lived read cache, slower polls when the tab is idle, HTTP 503 with `Retry-After` when Firestore quota is exhausted | `cache.py`, `web/src/lib/activity.ts`, `main.py`, `worker.py` |
+| Google sign-up | `/details` asks for the name, language, and city once | `DetailsPage.tsx` |
+| Demo cap | Three demo voice sessions a visitor a day, counted when Talk starts | `usage.py`, `live/routes.py` |
+
+Corrected in the same pass: the public URL, the worker, Cloud Tasks, and both Scheduler jobs are recorded as checked in `docs/ENVIRONMENT.md` (the architecture intro had still said they were not). The demo session cap is enforced. Marathi is one of the ten selectable languages; a speaker check for it is not recorded.
+
+```text
+python -m pytest api/tests --collect-only -q
+```
+
+Result: 100 tests collected. The suite was not re-run, so the last recorded green result remains 80 passed on 16 Oct 2026.
+
+Still not recorded from a device: a Hindi turn on the public URL from a second browser, FCM on a real phone, a real PWA install, and a speaker check for any language other than the Hindi path used in development. The deck, the video, and the submission receipt are still the Sunday pack.
+

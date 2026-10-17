@@ -106,6 +106,7 @@ export function ColumnChart({ title, values, max, ticks, unit, tipLabel = (d) =>
         </svg>
         <Tooltip tip={tip} height={H} />
       </div>
+      <p className="chart-x" aria-hidden="true">Day</p>
     </figure>
   );
 }
@@ -181,6 +182,7 @@ export function DotChart({ title, levels, values, emptyLabel, tipLabel = (d) => 
         </svg>
         <Tooltip tip={tip} height={H} />
       </div>
+      <p className="chart-x" aria-hidden="true">Day</p>
     </figure>
   );
 }

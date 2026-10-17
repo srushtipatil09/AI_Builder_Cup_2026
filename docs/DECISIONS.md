@@ -60,4 +60,30 @@ Uploads go to Cloud Storage through the API. The bucket name is `UPLOADS_BUCKET`
 
 ## D15. ADK is optional. SafetyGuard is not
 
-Caregiver sentences always pass `compose_family_insight`. The three insight tools run in a fixed order by default. An ADK `root_agent` words the notice only when `google-adk` is installed and `INSIGHT_USE_ADK` is left on. Any failure uses the fixed order. The model does not choose the household, the tier, or the evidence ids.
+Caregiver sentences always pass `compose_family_insight`. The three insight tools run in a fixed order by default. An ADK `root_agent` words the notice only when `google-adk` is installed and `INSIGHT_USE_ADK` is left on. Any failure uses the fixed order. The model does not choose the household, the tier, or the evidence ids. Tier 1 does not call the agent.
+
+## D16. Nearby help is a place and a button, not advice
+
+The parent asks. `find_nearby` uses the Places API (New) for a hospital, a medical shop, a park, or food, and returns trusted people and the helplines 112, 108, and 14567 from stored data. `offer_call` shows a Call button. The number is resolved on the server. The model does not dial and does not invent a number. The stored position is one point rounded to about 100 metres, and only after the parent allows it. The shared demo does not keep a position. After 9 pm a park is not offered.
+
+## D17. One caretaker, many households
+
+Signup cannot tell an older adult from a caretaker, so the role stays with the account. A caretaker may look after up to 10 people. Each added member is a new household (`hh-...`) with its own desk and family code. `POST /api/v1/me/households` is the only writer of that list.
+
+## D18. Seeing a reminder is not doing it
+
+The lock screen says the line the family wrote and never a dose. A phone that accepts the push sets `seenOn`. `confirmedOn` is set when the parent agrees in their own words. A bare "ji" is not agreement. A later desk save must not clear either field.
+
+## D19. The spoken language is a profile field
+
+Ten languages have a Live prompt line and server phrases for the distress check, listening fallback, and yes, no, help, and fine. Hindi is the default. The Kamla demo uses it. The same list is what the phone speaks when Gemini Live is not the voice.
+
+## D20. The reply does not wait for a lookup
+
+The Live socket opens when the chat page opens. Talk sends start on that connection. The household, memories, reminders, recent summaries, and the family thread are already in the system instruction. Microphone audio is forwarded as 16 kHz PCM. Reply audio is 24 kHz PCM, played gapless, and dropped if the parent talks over Saathi. Extraction and drift run after the socket closes.
+
+## D21. The phone keeps a copy. Firestore keeps the record
+
+Redux holds the desk and the slower reads. Both are written to versioned localStorage and shared across tabs of this browser. Log out deletes them. A private file link is never stored there. A push is "seen". The parent's own agreement is "confirmed".
+
+

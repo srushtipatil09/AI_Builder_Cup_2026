@@ -28,7 +28,10 @@ def get_recent_metrics(household_id: str) -> dict:
     """Tool 1: recent metrics and observations for the authorized household."""
     repo = get_repository()
     desk = repo.get_desk(household_id)
-    daily = sorted(repo.col_list(f"households/{household_id}/dailyMetrics", 60), key=lambda r: r.get("local_date", ""))[-14:]
+    daily = sorted(
+        repo.col_query(f"households/{household_id}/dailyMetrics", order_by="local_date", descending=True, limit=14),
+        key=lambda r: r.get("local_date", ""),
+    )
     drift = repo.doc_get(f"households/{household_id}/driftResults/latest") or {}
     return {
         "household_id": household_id,

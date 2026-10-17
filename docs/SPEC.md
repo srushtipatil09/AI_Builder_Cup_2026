@@ -43,7 +43,9 @@ A desktop page with a header and a footer.
 
 Separate pages. Each asks for email and password, and offers Google sign-in.
 
-Create account first asks who the account is for: **I'm caring for someone** (caretaker) or **It's for me** (the older adult). The caretaker path asks for their name, the parent's preferred name, and the language. The parent path asks what Saathi should call them and the language. The role is stored with the account, so Log in asks only for email and password.
+Create account first asks who the account is for: **I'm caring for someone** (caretaker) or **It's for me** (the older adult). The caretaker path asks for their name, the parent's preferred name, and the language. The parent path asks what Saathi should call them and the language. Both paths end with an agreement box about what Saathi keeps (words for 7 days, summaries for 30); the account is not created until it is ticked. The role is stored with the account, so Log in asks only for email and password.
+
+Google sign-up already has a name and an email. It continues once at `/details`, which asks who Saathi will talk with, the language, and the city. The city is what nearby help uses until a phone shares a position. After that, the role's home opens.
 
 ### Family code
 
@@ -57,6 +59,8 @@ Joining is a step after a parent signs in, not part of Log in:
 
 The desk shows "Waiting for … to join" until then, and "Joined" after. Connecting the phone is the first step of Finish setting up. A new code replaces the old one for that household. Family codes and account profiles are stored in Firestore through the API (`users/<uid>` and the household pairing routes). Join works across devices that use the same cloud project. The browser keeps a desk cache; it is not the source of truth.
 
+One caretaker account can look after up to 10 family members. The first household is named by the caretaker's email. Each person added later gets a household id `hh-...`, a desk, and a family code of their own. The care desk header opens a switcher: who is connected, who has an open notice, and **Add a family member** (name and language). The list of households is written only by `POST /api/v1/me/households`. A profile save cannot attach a household the account does not own. The Kamla demo is one synthetic household and does not add members.
+
 A phone browser, and the installed app, skip the landing page. With no session they open Log in. With a session, a parent opens the companion chat and a caretaker opens the care desk at `/care`. A parent account never sees the desk, and a caretaker account never lands on the parent's chat.
 
 ### Care desk
@@ -67,19 +71,23 @@ The desk is five tabs, one section at a time, in this order. On a phone they sit
 
 | Tab | What the caretaker does |
 | --- | --- |
-| Profile | Preferred name, language, city, persona, check-in time, quiet hours. People who matter (demo row: Rahul, son, Bengaluru). Memories you have added, each row showing who wrote it and when. Photos and documents, one form per category: profile photo, family photos, prescriptions, medical reports, medical bills, medicine strips, identity proofs, insurance, and other. Prescriptions, reports, bills, medicine strips, identity proofs, and insurance stay private. Profile photo, family photos, and other may be shared only when the caretaker opts in |
+| Profile | Preferred name, language (Hindi, English, Bengali, Marathi, Gujarati, Punjabi, Tamil, Telugu, Kannada, Malayalam), city, persona, check-in time, quiet hours. People who matter (demo row: Rahul, son, Bengaluru). Memories you have added, each row showing who wrote it and when. Photos and documents, one form per category: profile photo, family photos, prescriptions, medical reports, medical bills, medicine strips, identity proofs, insurance, and other. Prescriptions, reports, bills, medicine strips, identity proofs, and insurance stay private. Profile photo, family photos, and other may be shared only when the caretaker opts in |
 | Routine | At the very top, any urgent reminder: due within the next hour, or due in the last three hours and not yet confirmed. It says "Not yet confirmed", never "missed dose", and links to Reminders. Then meals mentioned, minutes talking, mood only when stated, family contact. Highlights, the family-episode card, and memories from conversations. A table view of the same days |
-| Ask Saathi | Type or speak a change in plain words. Saathi reads it back and saves it only after the caretaker confirms. It never suggests a dose |
-| Reminders | Medicine name and dose exactly as written, once or daily, a time, and the reported status |
-| Trusted Contacts | Local emergency services first (112 in India), trusted contacts and who lives nearby, Elderline 14567 |
+| Ask Saathi | Type or speak a change in plain words. Saathi reads it back and saves it only after the caretaker confirms. A question about how the parent has been is answered from stored summaries, daily numbers, reminder confirmations, and alerts for a window of 1 to 14 days (3 when the question does not say). The answer passes SafetyGuard. If the model is unreachable or the check fails, the same facts are returned as a plain list. It never suggests a dose and it never fills a day that has no record |
+| Reminders | A kind (medicine, a walk or other exercise, a call, a meal or water, or other), a name, a dose only when someone typed one, once or daily, a time, and a date when it is once. The lock-screen line is the family's own sentence and never includes a dose. **Seen** means a phone accepted the push. **Confirmed** means the parent said they will do it. A desk save from an open browser does not wipe a status the phone just recorded |
+| Trusted Contacts | Local emergency services first (112 in India), trusted contacts and who lives nearby, Elderline 14567, and a card of what is near the parent |
 
-There is no single health score and the screen does not say the parent is safe.
+There is no single health score and the screen does not say the parent is safe. Deleting a person, a memory, a reminder, or a contact shows "Deleted · Undo" for a few seconds.
 
 A caretaker memory stores the caretaker's name in `author` (or "You" when the name is missing). A correction from a conversation stores `author` `conversation`. Removing a memory takes it out of the next prompt. If the two disagree, both remain. The prompt lists caretaker memories first and conversation corrections after them.
 
 ### Companion chat
 
-Talk, Stop, Pause, and Contact family. Captions are optional. The chat Demo panel has three controls: a labeled distress clip, an ordinary door clip, and a seeded session. The care desk Routine tab seeds labeled histories, runs a seeded session, and simulates an unanswered invitation versus a device that is unavailable. Advancing the logical clock is `POST /api/v1/demo/advance`, not a chat button.
+Talk, Stop, Pause, Contact family, and Nearby help. Captions are optional. Nearby help opens a sheet for a hospital, a medical shop, a park, food, a trusted person, or a helpline. Each row can show a Call button and, for a place, a directions link. The parent taps. Saathi does not place the call.
+
+A signed-in parent sees **Allow location once** until they allow it or dismiss it. The point is rounded to about 100 metres and stored for that household. The shared demo never stores a position. Without one, nearby places use the city on the care desk. The family deletes the point from the Trusted Contacts card.
+
+The chat Demo panel has four controls: Simulate morning inactivity (labeled "Simulated. This build does not read a Nest sensor."; it starts the same invitation the scheduler sends), a labeled distress clip, an ordinary door clip, and a seeded session. A demo visitor gets three voice sessions a day, counted when Talk starts; the seeded session still works after that. `DEMO_SESSIONS_PER_VISITOR=0` turns that cap off. The care desk Routine tab seeds labeled histories, runs a seeded session, and simulates an unanswered invitation versus a device that is unavailable. Advancing the logical clock is `POST /api/v1/demo/advance`, not a chat button.
 
 ## A day with Saathi
 
@@ -98,9 +106,11 @@ sequenceDiagram
   Chat->>API: Parent answers
 ```
 
-If the chat is already open and the screen is on, the greeting plays without a new tap. If the app is closed, the notification is the tap. A closed app does not hold the microphone and does not run a wake word.
+If the chat is already open and the screen is on, the greeting plays without a new tap. If the app is closed, the notification is the tap. The service worker shows it. When the app is already open, the same push speaks the line out loud. A tap opens the chat, and then the phone speaks. A closed app does not hold the microphone and does not run a wake word.
 
-The first visit still needs one tap so the browser will allow the microphone and playback.
+The parent turns notifications on from the chat. The caretaker turns them on from Routine. Each device registers its own Firebase Cloud Messaging token. Check-in text is "Saathi wants to talk". A reminder push speaks the line the family wrote and never a dose. A notice for the caretaker says "New Saathi update".
+
+The first visit still needs one tap so the browser will allow the microphone and playback. The Live socket opens when the chat page opens, before that tap, so Talk does not wait for a new connection. Audio leaves the microphone as 16 kHz PCM and Saathi's voice returns as 24 kHz PCM, played one chunk after another with no gap. The browser asks the audio system for interactive latency.
 
 ## What the conversation does
 
@@ -113,7 +123,13 @@ Saathi uses two personas in this build.
 
 Sutra, a lifestyle mode, stays a named config and is not a third build.
 
-The model asks one question at a time. Some turns only acknowledge a story. It does not invent a shared past. It does not claim to be a family member. It follows the parent's topic. "Not now" ends the thread.
+The profile stores the English language name. Gemini Live takes the spoken language from the system instruction, so Hindi, English, Bengali, Marathi, Gujarati, Punjabi, Tamil, Telugu, Kannada, and Malayalam each have a prompt line. The server's own lines (the check after a loud sound, and the reply when the model is unreachable) and the yes, no, help, and fine word lists are in `api/src/saathi/languages.py`. The Kamla demo speaks Hindi. If the parent switches to Hindi or English, the prompt says to follow them.
+
+Before the first word, the server writes the household into the system instruction: the name, the language, the city, the persona, the people who matter, the memories (caretaker facts first, conversation corrections after them), every reminder with its kind and time, the last three conversation summaries, topics the parent has declined, whether a position is shared, and the trusted people who live nearby. One family thread is included only when a named person has gone quiet. The packet stays inside 6,000 characters; if it is longer, the oldest summaries go first. Late at night the memories and the family thread are left out on purpose.
+
+The model asks one question at a time. Some turns only acknowledge a story. It does not invent a shared past. It does not claim to be a family member. It follows the parent's topic. "Not now" ends the thread. If the parent starts speaking while Saathi is still talking, playback stops and the new turn is heard.
+
+From 9 pm to 5 am the opening is a short hello and a rest wish. Memories, earlier summaries, family threads, walks, exercise, and outings stay out of that prompt. A park lookup is refused. Food, if asked for, is a phone call to a restaurant rather than going out.
 
 ### Family questions
 
@@ -148,6 +164,8 @@ The parent can create a reminder by voice. The caretaker can create the same rem
 
 Medicine text is copied from what a person typed. "I don't remember if I took it" is stored as uncertain. Saathi never suggests another dose.
 
+A reminder can also be a walk, a call, a meal or water, or something else. When one is already due, Saathi says the family's line once and asks whether the parent is going to do it. The parent's own words confirm it. "Haan", "kar lunga", "ja raha hoon", "ho gaya", "done", and the same idea in the other supported languages mark that reminder confirmed for today, under the parent's name. If they name the reminder, that one is confirmed. If they do not, the latest one still open today is confirmed. "Nahi", "baad mein", "not now", and "yaad nahi" do not confirm. A bare "ji" does not. Hearing the notification, or the caretaker tapping the desk, records "seen" for today and leaves confirmed empty. The lock screen never includes a dose.
+
 ### Distress during an open call
 
 The microphone is open for the invitation and the conversation, then released.
@@ -166,6 +184,12 @@ flowchart TD
 ```
 
 The alert does not say a fall was confirmed unless the person said so. A door clip in the demo must not alert. Pill identification, gas, and breaking glass are not in this build.
+
+### Help nearby
+
+When the parent asks for a hospital, a medical shop, a park, somewhere to eat, a helpline, or a trusted person, the Live tool `find_nearby` looks it up. A card appears on the phone. `offer_call` shows a Call button for a number the server resolved from helplines, trusted contacts, or the places just found. The model does not invent a phone number and does not dial.
+
+In danger, Saathi says to call 112 first and offers that call. A hospital is a place and a number, not advice about what is wrong. Ordering food is helping them call a restaurant. If the position was not shared, Saathi says it is looking in the city's results and that the Allow location button is on the screen. Helplines still work when the Places API is off: 112, 108, and Elderline 14567. The care desk shows the same card under Trusted Contacts, and the family can delete the saved position.
 
 ## After the call
 

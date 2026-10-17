@@ -1,5 +1,6 @@
 """Firebase Auth verification, actor context, and household access checks."""
 
+import time
 import logging
 from typing import Optional
 
@@ -111,13 +112,44 @@ def get_current_actor(
     return actor_from_token(token, x_household_id, x_role, x_family_code)
 
 
-def has_household_access(actor: ActorContext, household_id: str) -> tuple[bool, str]:
+# Every API call checks access, and for a real household that reads the owner document (and the family code). The same
+# phone or browser asks every few seconds, so a "yes" is remembered for a minute. A "no" is never remembered.
+ACCESS_CACHE_SECONDS = 60
+_access_cache: dict[tuple, tuple[float, str]] = {}
+
+
+def forget_access(household_id: str) -> None:
+    """Drop remembered decisions for a household (its members or family codes changed)."""
+    for key in [k for k in _access_cache if k[2] == household_id]:
+        _access_cache.pop(key, None)
+
+
+def has_household_access(
+    actor: ActorContext, household_id: str, allow_family_code: bool = False
+) -> tuple[bool, str]:
+    if is_demo_household(household_id):
+        return True, "demo"
+    key = (actor.uid, (actor.email or "").lower(), household_id, bool(actor.verified), allow_family_code, actor.family_code or "")
+    hit = _access_cache.get(key)
+    if hit and time.monotonic() - hit[0] < ACCESS_CACHE_SECONDS:
+        return True, hit[1]
+    allowed, reason = _decide_access(actor, household_id, allow_family_code)
+    if allowed and reason not in ("claimed", "legacy_unauthenticated"):
+        _access_cache[key] = (time.monotonic(), reason)
+    return allowed, reason
+
+
+def _decide_access(
+    actor: ActorContext, household_id: str, allow_family_code: bool = False
+) -> tuple[bool, str]:
     """Decide whether this actor may touch this household. Returns (allowed, reason).
 
     - Demo households: open.
     - A verified Firebase identity: the verified email equals the household id, the uid owns or belongs to the
       household, or the household is unclaimed (first verified caller claims it).
-    - A joined family code that names this household: the parent's device.
+    - A joined family code that names this household: the parent's device, and only on routes that pass
+      allow_family_code (the live session, text turn, complete, heartbeat, invitation, contact family, desk read).
+      Anyone holding the join link has the code, so it never opens files, pairing, or desk writes.
     - Anything else is allowed only while REQUIRE_HOUSEHOLD_AUTH is off (local runs without Firebase).
     """
     if is_demo_household(household_id):
@@ -126,7 +158,7 @@ def has_household_access(actor: ActorContext, household_id: str) -> tuple[bool, 
     from saathi.providers.firestore import get_repository
 
     repo = get_repository()
-    if actor.family_code and _code_names_household(actor.family_code, household_id):
+    if allow_family_code and actor.family_code and _code_names_household(actor.family_code, household_id):
         return True, "family_code"
     if actor.verified:
         if actor.email and actor.email.lower() == household_id.lower():
@@ -157,8 +189,8 @@ def _code_names_household(code: str, household_id: str) -> bool:
     return bool(record and record.household_id == household_id and record.joined_at)
 
 
-def ensure_household_access(actor: ActorContext, household_id: str) -> None:
-    allowed, reason = has_household_access(actor, household_id)
+def ensure_household_access(actor: ActorContext, household_id: str, allow_family_code: bool = False) -> None:
+    allowed, reason = has_household_access(actor, household_id, allow_family_code)
     if not allowed:
         code = status.HTTP_401_UNAUTHORIZED if reason == "authentication_required" else status.HTTP_403_FORBIDDEN
         raise HTTPException(status_code=code, detail="You do not have access to this household.")
@@ -171,4 +203,6 @@ def add_member(household_id: str, uid: str) -> None:
     repo = get_repository()
     owner = repo.doc_get(f"households/{household_id}/access/owner") or {}
     members = list(dict.fromkeys([*(owner.get("members") or []), uid]))
-    repo.doc_set(f"households/{household_id}/access/owner", {"members": members})
+    if members != list(owner.get("members") or []):
+        repo.doc_set(f"households/{household_id}/access/owner", {"members": members})
+    forget_access(household_id)

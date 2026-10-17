@@ -1,7 +1,7 @@
 """Tests for scheduler tick, invitation lifecycle, and FCM dispatch."""
 
 from fastapi.testclient import TestClient
-from saathi.scheduling.service import evaluate_invitation_lifecycle, send_fcm_notification
+from saathi.scheduling.service import evaluate_invitation_lifecycle, notification_link, send_fcm_notification
 from saathi.worker import app as worker_app
 
 worker_client = TestClient(worker_app)
@@ -58,6 +58,33 @@ def test_invitation_lifecycle_states() -> None:
 def test_send_fcm_notification_mock() -> None:
     sent = send_fcm_notification("mock-token", "Saathi wants to talk", "Check-in invitation")
     assert sent is True
+
+
+def test_reminder_copy_speaks_the_family_line_and_hides_a_dose() -> None:
+    from saathi.contracts.desk import Medicine
+    from saathi.scheduling.notice import agrees, reminder_copy
+
+    title, body, speak = reminder_copy(Medicine(
+        id="1", kind="exercise", name="Yoga", dose="10 Mins", time="05:49", note="Yoga ka time ho gya",
+    ))
+    assert title == "Yoga" and body == speak == "Yoga ka time ho gya" and "10" not in body
+    pill_title, pill_body, _ = reminder_copy(Medicine(
+        id="2", kind="medicine", name="BP tablet", dose="5mg", time="08:30", note="after breakfast",
+    ))
+    assert pill_title == "Reminder" and pill_body == "after breakfast" and "5mg" not in pill_body
+    assert agrees("haan ja raha hoon, kar lunga")
+    assert not agrees("nahi, baad mein")
+    assert not agrees("ji")
+
+
+def test_notification_link_is_https(monkeypatch) -> None:
+    """FCM rejects a relative or http link. The test sets the site, so it does not depend on a local .env."""
+    monkeypatch.setenv("WEB_ORIGIN", "https://saathi-5afcf.web.app")
+    assert notification_link("/care") == "https://saathi-5afcf.web.app/care"
+    # A local dev origin is not a link a phone can open. Hosting is used instead.
+    monkeypatch.setenv("WEB_ORIGIN", "http://localhost:5173")
+    monkeypatch.setenv("FIREBASE_PROJECT_ID", "saathi-5afcf")
+    assert notification_link("/app") == "https://saathi-5afcf.web.app/app"
 
 
 def test_worker_scheduler_tick() -> None:

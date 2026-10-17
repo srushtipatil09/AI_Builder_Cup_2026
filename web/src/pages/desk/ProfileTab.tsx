@@ -1,10 +1,19 @@
 import { useState, type FormEvent } from "react";
+import { useUndoable } from "./undo";
+import { TimePicker } from "./Pickers";
 import { newId, parseQuiet, type Desk, type Profile } from "../../desk";
+import { LanguageOptions } from "../../lib/languages";
+import type { SyncState } from "../../desk";
+import { useToast } from "../../toast";
 
 type Props = {
   desk: Desk;
   setDesk: React.Dispatch<React.SetStateAction<Desk>>;
   author: string;
+  photo?: string | null;
+  // Where the desk's last change is: saving, saved to Firestore, or only on this device.
+  sync: SyncState;
+  syncError?: string;
 };
 
 function formatWhen(iso: string) {
@@ -15,8 +24,9 @@ function text(data: FormData, key: string) {
   return String(data.get(key) ?? "").trim();
 }
 
-export function ProfileTab({ desk, setDesk, author }: Props) {
-  const [saved, setSaved] = useState("");
+export function ProfileTab({ desk, setDesk, author, photo, sync, syncError }: Props) {
+  const undoable = useUndoable();
+  const toast = useToast();
   const [profileError, setProfileError] = useState("");
   const [editingPerson, setEditingPerson] = useState<string | null>(null);
   const [editingMemory, setEditingMemory] = useState<string | null>(null);
@@ -44,7 +54,16 @@ export function ProfileTab({ desk, setDesk, author }: Props) {
     };
     setDesk((d) => ({ ...d, profile }));
     setProfileError("");
-    setSaved("Saved in this browser.");
+    if (sync === "offline") {
+      toast(
+        (syncError ?? "").includes("paused")
+          ? "Not saved yet: saving is paused for a moment. The change is kept on this device."
+          : "Not saved yet. The change is kept on this device and will be sent again.",
+        "bad",
+      );
+    } else {
+      toast("Saved.", "ok");
+    }
   }
 
   function addPerson(event: FormEvent<HTMLFormElement>) {
@@ -96,7 +115,8 @@ export function ProfileTab({ desk, setDesk, author }: Props) {
       <section className="panel" aria-labelledby="person-title">
         <h2 id="person-title">This person</h2>
         <p className="panel-lede">How Saathi greets them, and when it checks in.</p>
-        <form className="form-grid" onSubmit={saveProfile} onChange={() => setSaved("")}>
+        {photo ? <img className="person-portrait" src={photo} alt={p.preferredName || "Profile photo"} width={864} height={1152} /> : null}
+        <form className="form-grid" onSubmit={saveProfile}>
           <label className="field">
             Preferred name
             <input name="preferredName" defaultValue={p.preferredName} required autoComplete="off" />
@@ -108,8 +128,7 @@ export function ProfileTab({ desk, setDesk, author }: Props) {
           <label className="field">
             Language
             <select name="language" defaultValue={p.language}>
-              <option value="Hindi">Hindi, spoken</option>
-              <option value="English">English, text fallback</option>
+              <LanguageOptions />
             </select>
           </label>
           <label className="field">
@@ -121,14 +140,14 @@ export function ProfileTab({ desk, setDesk, author }: Props) {
           </label>
           <label className="field">
             Daily check-in
-            <input name="checkIn" type="time" defaultValue={p.checkIn} />
+            <TimePicker name="checkIn" defaultValue={p.checkIn} label="Daily check-in" placeholder="Not set" />
           </label>
           <fieldset className="field quiet">
             <legend>Quiet hours</legend>
             <div className="quiet-row">
-              <input name="quietFrom" type="time" aria-label="Quiet hours start" defaultValue={quiet?.[0] ?? ""} />
+              <TimePicker name="quietFrom" label="Quiet hours start" defaultValue={quiet?.[0] ?? ""} placeholder="From" />
               <span aria-hidden="true">to</span>
-              <input name="quietTo" type="time" aria-label="Quiet hours end" defaultValue={quiet?.[1] ?? ""} />
+              <TimePicker name="quietTo" label="Quiet hours end" defaultValue={quiet?.[1] ?? ""} placeholder="To" />
             </div>
             {!quiet && p.quietHours ? <span className="hint">Currently: {p.quietHours}</span> : null}
           </fieldset>
@@ -141,9 +160,6 @@ export function ProfileTab({ desk, setDesk, author }: Props) {
             <button className="primary" type="submit">
               Save
             </button>
-            <span role="status" className="saved">
-              {saved}
-            </span>
           </div>
         </form>
       </section>
@@ -152,7 +168,7 @@ export function ProfileTab({ desk, setDesk, author }: Props) {
         <h2 id="people-title">People who matter</h2>
         <p className="panel-lede">Saathi may ask about one of them, like a friend would.</p>
         {desk.people.length ? (
-          <ul className="rows">
+          <ul className="rows card-list">
             {desk.people.map((person) =>
               editingPerson === person.id ? (
                 <li key={person.id} className="row-editing">
@@ -186,7 +202,10 @@ export function ProfileTab({ desk, setDesk, author }: Props) {
                     <button
                       className="text-link row-remove"
                       type="button"
-                      onClick={() => setDesk((d) => ({ ...d, people: d.people.filter((x) => x.id !== person.id) }))}
+                      onClick={() => {
+                        undoable(person.name);
+                        setDesk((d) => ({ ...d, people: d.people.filter((x) => x.id !== person.id) }));
+                      }}
                     >
                       Remove<span className="visually-hidden"> {person.name}</span>
                     </button>
@@ -221,7 +240,7 @@ export function ProfileTab({ desk, setDesk, author }: Props) {
           </button>
         </form>
         {desk.memories.length ? (
-          <ul className="rows">
+          <ul className="rows card-list">
             {desk.memories.map((memory) =>
               editingMemory === memory.id ? (
                 <li key={memory.id} className="row-editing">
@@ -253,7 +272,10 @@ export function ProfileTab({ desk, setDesk, author }: Props) {
                     <button
                       className="text-link row-remove"
                       type="button"
-                      onClick={() => setDesk((d) => ({ ...d, memories: d.memories.filter((x) => x.id !== memory.id) }))}
+                      onClick={() => {
+                        undoable("the memory");
+                        setDesk((d) => ({ ...d, memories: d.memories.filter((x) => x.id !== memory.id) }));
+                      }}
                     >
                       Delete<span className="visually-hidden"> memory</span>
                     </button>

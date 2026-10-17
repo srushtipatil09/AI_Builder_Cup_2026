@@ -48,8 +48,9 @@ def session_quality_ok(session: dict) -> bool:
 def build_daily_record(household_id: str, local_date: str) -> tuple[DailyMetricRecord, int]:
     """Recompute one day from the stored observations and sessions. Returns the record and the session count."""
     repo = get_repository()
-    observations = [o for o in repo.col_list(f"{_hh(household_id)}/observations", 400) if o.get("local_date") == local_date]
-    sessions = [s for s in repo.col_list(f"{_hh(household_id)}/sessions", 400) if s.get("local_date") == local_date]
+    # Only this day's documents are read (a read is billed per document, and a session holds its whole transcript).
+    observations = repo.col_query(f"{_hh(household_id)}/observations", "local_date", "==", local_date, limit=100)
+    sessions = repo.col_query(f"{_hh(household_id)}/sessions", "local_date", "==", local_date, limit=100)
 
     gaps = [
         float(s["response_gap_ms"]) for s in sessions
@@ -91,7 +92,8 @@ def build_daily_record(household_id: str, local_date: str) -> tuple[DailyMetricR
 def load_history(household_id: str) -> list[DailyMetricRecord]:
     repo = get_repository()
     out: list[DailyMetricRecord] = []
-    for row in repo.col_list(f"{_hh(household_id)}/dailyMetrics", 120):
+    # The drift rule looks back a few weeks; the newest 60 days are plenty.
+    for row in repo.col_query(f"{_hh(household_id)}/dailyMetrics", order_by="local_date", descending=True, limit=60):
         try:
             out.append(DailyMetricRecord(**{k: v for k, v in row.items() if k in DailyMetricRecord.model_fields}))
         except Exception:
@@ -174,8 +176,15 @@ def run_post_call(household_id: str, session_id: str, utterances: Optional[list[
     started_at = time.time()
     repo.doc_set(path, {"pipeline_status": "processing", "pipeline_started_epoch": started_at, "id": session_id})
     if not lines:
-        repo.doc_set(path, {"pipeline_status": "processed", "pipeline_note": "no_utterances"})
-        return {"status": "processed", "sessionId": session_id, "note": "no_utterances"}
+        # /complete can arrive before the live socket has written the transcript. Waiting, not "processed", lets
+        # the transcript save start the pipeline again instead of losing the conversation.
+        repo.doc_set(path, {"pipeline_status": "awaiting_transcript"})
+        return {"status": "awaiting_transcript", "sessionId": session_id}
+
+    if not any(line.get("speaker") == "parent" for line in lines):
+        # Saathi greeted and nobody answered: nothing to summarise, and no "the parent said nothing" card for the family.
+        repo.doc_set(path, {"pipeline_status": "processed", "pipeline_note": "no_parent_speech"})
+        return {"status": "processed", "sessionId": session_id, "note": "no_parent_speech"}
 
     # The session's own date, fixed the first time it is processed so a retry lands on the same day.
     local_date = session.get("local_date") or local_date_of()

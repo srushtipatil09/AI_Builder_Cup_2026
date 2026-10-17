@@ -117,6 +117,26 @@ def run_seeded_session(body: SeededSessionRequest):
     return {"status": "started", "sessionId": session_id, "handoff": enqueue_post_call(body.household, session_id)}
 
 
+class SimulateInactivity(BaseModel):
+    household: str = "demo-kamla-sharma"
+
+
+INACTIVITY_LABEL = "Simulated. This build does not read a Nest sensor."
+
+
+@router.post("/simulate-inactivity")
+def simulate_inactivity(body: SimulateInactivity):
+    """Sends the same kind of event the scheduler already understands: an invitation the open chat plays."""
+    from saathi.scheduling.service import _create_invitation
+
+    if not body.household.startswith("demo-"):
+        raise HTTPException(status_code=400, detail="Only demo households can simulate inactivity.")
+    now = datetime.now(timezone.utc)
+    key = f"demo-inactivity-{uuid.uuid4().hex[:6]}"
+    _create_invitation(body.household, key, "inactivity", now)
+    return {"label": INACTIVITY_LABEL, "invitation": key}
+
+
 class SimulateCheckin(BaseModel):
     household: str = "demo-kamla-sharma"
     outcome: str = "unanswered"  # or "device_unavailable"

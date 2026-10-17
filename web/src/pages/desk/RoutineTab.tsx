@@ -5,6 +5,7 @@ import type { UpdatesState } from "../../lib/useUpdates";
 import { StaticDemoRoutine, type Props } from "./DailyTab";
 import { ColumnChart, DotChart } from "./charts";
 import { UrgentReminders } from "./UrgentReminders";
+import { useToast } from "../../toast";
 
 type LiveProps = Props & {
   householdId: string;
@@ -34,11 +35,10 @@ const MOODS = ["Good", "Okay", "Low"];
 
 // The Routine tab: what the post-call pipeline wrote, read from the API. Nothing here is kept in this browser.
 export function RoutineTab(props: LiveProps) {
-  const { demo, name, medicines, onOpenReminders, onConfirmReminder, householdId, state, conversationMemories } = props;
+  const { demo, name, medicines, onOpenReminders, householdId, state, conversationMemories } = props;
   const { updates, metrics, error, loadedAt, refresh } = state;
   const [busy, setBusy] = useState("");
-  const [note, setNote] = useState("");
-  const [pushNote, setPushNote] = useState("");
+  const toast = useToast();
   const who = name || "the parent";
   const seeded = useRef(false);
 
@@ -64,14 +64,11 @@ export function RoutineTab(props: LiveProps) {
 
   async function run(label: string, action: () => Promise<unknown>) {
     setBusy(label);
-    setNote("");
     try {
       await action();
       refresh();
-      window.setTimeout(refresh, 4000);
-      window.setTimeout(refresh, 9000);
     } catch (err) {
-      setNote(err instanceof Error ? err.message : "That did not work.");
+      toast(err instanceof Error ? err.message : "That did not work.", "bad");
     } finally {
       setBusy("");
     }
@@ -85,17 +82,19 @@ export function RoutineTab(props: LiveProps) {
 
   return (
     <div className="tab-grid">
-      <UrgentReminders medicines={medicines} name={name} onOpen={onOpenReminders} onConfirm={onConfirmReminder} />
+      <UrgentReminders medicines={medicines} name={name} onOpen={onOpenReminders} />
 
-      {(updates?.alerts ?? []).map((a) => (
-        <section key={a.id} className={`panel panel-wide alert-card alert-tier-${a.tier}`} role="alert">
-          <h2>{a.tier >= 3 ? "Needs your attention now" : a.tier === 2 ? "New update" : "Note"}</h2>
-          <p>{a.message}</p>
-          <p className="alert-meta">
-            {ago(a.created_at)} · Suggested: {a.action}
-            {a.evidence_ids?.length ? ` · ${a.evidence_ids.length} record${a.evidence_ids.length === 1 ? "" : "s"}` : ""}
-          </p>
-          {a.tier >= 3 ? <p>If you cannot reach {who}, contact local emergency services.</p> : null}
+      {(updates?.alerts ?? []).filter((a) => a.tier >= 3 || !(insight || card)).map((a) => (
+        <section key={a.id} className={`panel panel-wide alert-card alert-compact alert-tier-${a.tier}`} role="alert">
+          <div className="alert-text">
+            <h2>{a.tier >= 3 ? "Needs your attention now" : a.tier === 2 ? "New update" : "Note"}</h2>
+            <p>{a.message}</p>
+            <p className="alert-meta">
+              {ago(a.created_at)} · Suggested: {a.action}
+              {a.evidence_ids?.length ? ` · ${a.evidence_ids.length} record${a.evidence_ids.length === 1 ? "" : "s"}` : ""}
+              {a.tier >= 3 ? ` · If you cannot reach ${who}, contact local emergency services.` : ""}
+            </p>
+          </div>
           <button className="ghost" type="button" onClick={() => void run("ack", () => ackAlert(householdId, a.id))}>
             Mark as seen
           </button>
@@ -108,8 +107,67 @@ export function RoutineTab(props: LiveProps) {
         </p>
       ) : null}
 
+      {insight || card ? (
+        <section className="panel panel-wide panel-accent insight-card" aria-labelledby="insight-title">
+          <h2 id="insight-title">{card ? `Mentions of ${card.person} changed` : insight?.headline}</h2>
+          {card ? (
+            <ol className="quotes">
+              <li>
+                <span className="quote-day">{dateLabel(card.earlier_date)}</span>
+                <q lang="hi-Latn">{card.earlier_quote}</q>
+              </li>
+              <li>
+                <span className="quote-day">{dateLabel(card.later_date)}</span>
+                <q lang="hi-Latn">{card.later_quote}</q>
+              </li>
+            </ol>
+          ) : (
+            <p>{insight?.body}</p>
+          )}
+          {card?.loneliness_quotes?.length ? (
+            <p>
+              In {who}&rsquo;s own words: {card.loneliness_quotes.map((q) => `“${q}”`).join(" ")}
+            </p>
+          ) : null}
+          {card ? (
+            <p>
+              A call with {card.person}, or time with a counsellor the family chooses, is a reasonable next step.{" "}
+              <a href="tel:14567">Elderline 14567</a> is a published India helpline for older people. Confirm it serves{" "}
+              {who}&rsquo;s state.
+            </p>
+          ) : null}
+          {insight ? (
+            <p className="alert-meta">
+              {insight.tier >= 2 ? "Suggested next step: " : ""}
+              {insight.suggested_action}
+              {insight.evidence_ids?.length
+                ? ` · based on ${insight.evidence_ids.length} stored record${insight.evidence_ids.length === 1 ? "" : "s"}`
+                : ""}
+              {insight.created_at ? ` · ${ago(insight.created_at)}` : ""}
+            </p>
+          ) : null}
+          {(updates?.alerts ?? [])
+            .filter((a) => a.tier < 3)
+            .slice(0, 1)
+            .map((a) => (
+              <button
+                key={a.id}
+                className="ghost"
+                type="button"
+                onClick={() =>
+                  void run("ack", async () => {
+                    for (const x of (updates?.alerts ?? []).filter((y) => y.tier < 3)) await ackAlert(householdId, x.id);
+                  })
+                }
+              >
+                Mark as seen
+              </button>
+            ))}
+        </section>
+      ) : null}
+
       <section className="panel panel-wide" aria-labelledby="routine-status">
-        <h2 id="routine-status">{drift?.status === "Evaluated" ? "Compared with their own usual days" : "Learning usual routine"}</h2>
+        <h2 id="routine-status">{drift?.status === "Evaluated" ? (insight || card ? "Everything else, compared with their usual days" : "Compared with their own usual days") : "Learning usual routine"}</h2>
         {drift ? (
           <p className="panel-lede">
             {drift.explanation}
@@ -127,61 +185,26 @@ export function RoutineTab(props: LiveProps) {
         <p className="alert-meta">
           {error ? "Could not refresh just now. " : ""}
           {loadedAt ? `Updated ${ago(new Date(loadedAt).toISOString())}` : "Loading"}
-          {updates ? ` · ${updates.sessionsProcessed} conversation${updates.sessionsProcessed === 1 ? "" : "s"} processed` : ""}
+          {updates
+            ? updates.sessionsProcessed === 0 && rows.some((d) => d.synthetic)
+              ? " · synthetic days, no real conversation processed yet"
+              : ` · ${updates.sessionsProcessed} conversation${updates.sessionsProcessed === 1 ? "" : "s"} processed`
+            : ""}
           {drift?.engine ? ` · compared by ${drift.engine === "bigquery" ? "BigQuery SQL" : "the service"}` : ""}
         </p>
         <p>
           <button
             className="ghost"
             type="button"
-            onClick={() => void enableCaretakerPush(householdId).then((r) => setPushNote(pushMessage(r)))}
+            onClick={() =>
+              void enableCaretakerPush(householdId).then((r) => toast(pushMessage(r), r === "on" ? "ok" : r === "error" ? "bad" : "info"))
+            }
           >
             Notify me on this device
           </button>{" "}
-          <span className="alert-meta">{pushNote || "Alerts always show here. A push says only “New Saathi update”."}</span>
+          <span className="alert-meta">Alerts always show here. A push says only “New Saathi update”.</span>
         </p>
       </section>
-
-      {insight ? (
-        <section className="panel panel-wide panel-accent" aria-labelledby="insight-title">
-          <h2 id="insight-title">{insight.headline}</h2>
-          <p>{insight.body}</p>
-          <p className="alert-meta">
-            {insight.tier >= 2 ? "Suggested next step: " : ""}
-            {insight.suggested_action}
-            {insight.evidence_ids.length
-              ? ` · based on ${insight.evidence_ids.length} stored record${insight.evidence_ids.length === 1 ? "" : "s"}`
-              : ""}
-            {insight.created_at ? ` · ${ago(insight.created_at)}` : ""}
-          </p>
-        </section>
-      ) : null}
-
-      {card ? (
-        <section className="panel panel-wide panel-accent" aria-labelledby="family-card">
-          <h2 id="family-card">Mentions of {card.person} changed</h2>
-          <ol className="quotes">
-            <li>
-              <span className="quote-day">{dateLabel(card.earlier_date)}</span>
-              <q lang="hi-Latn">{card.earlier_quote}</q>
-            </li>
-            <li>
-              <span className="quote-day">{dateLabel(card.later_date)}</span>
-              <q lang="hi-Latn">{card.later_quote}</q>
-            </li>
-          </ol>
-          {card.loneliness_quotes?.length ? (
-            <p>
-              In {who}&rsquo;s own words: {card.loneliness_quotes.map((q) => `“${q}”`).join(" ")}
-            </p>
-          ) : null}
-          <p>
-            A call with {card.person}, or time with a counsellor the family chooses, is a reasonable next step.{" "}
-            <a href="tel:14567">Elderline 14567</a> is a published India helpline for older people. Confirm it serves the
-            parent&rsquo;s state.
-          </p>
-        </section>
-      ) : null}
 
       {rows.length ? (
         <>
@@ -193,7 +216,7 @@ export function RoutineTab(props: LiveProps) {
               </span>
             </div>
             <div className="tile">
-              <span className="tile-label">Days with a processed conversation</span>
+              <span className="tile-label">{rows.some((d) => d.synthetic) ? "Days in the synthetic history" : "Days with a processed conversation"}</span>
               <span className="tile-value">
                 {rows.length} <small>of 14</small>
               </span>
@@ -217,11 +240,11 @@ export function RoutineTab(props: LiveProps) {
           <section className="panel">
             {gapRows.length ? (
               <ColumnChart
-                title="Pause before replying (ms), measured in the phone"
-                values={gapRows.map((d) => ({ day: dayNumber(d.local_date), value: Math.round(d.response_gap_ms ?? 0) }))}
-                max={gapMax}
-                ticks={[0, gapMax / 2, gapMax]}
-                unit={(v) => `${v} ms`}
+                title="Pause before replying, in seconds"
+                values={gapRows.map((d) => ({ day: dayNumber(d.local_date), value: Math.round((d.response_gap_ms ?? 0) / 100) / 10 }))}
+                max={gapMax / 1000}
+                ticks={[0, gapMax / 2000, gapMax / 1000]}
+                unit={(v) => `${v} s`}
                 tipLabel={tipLabel}
               />
             ) : (
@@ -252,9 +275,9 @@ export function RoutineTab(props: LiveProps) {
         </>
       ) : null}
 
-      <section className="panel" aria-labelledby="conv-memories">
+      <section className="panel panel-wide" aria-labelledby="conv-memories">
         <h2 id="conv-memories">Memories from conversations</h2>
-        {updates?.summaries.length || conversationMemories.length ? (
+        {updates?.summaries?.length || conversationMemories.length ? (
           <ul className="rows">
             {conversationMemories.map((m) => (
               <li key={m}>
@@ -286,7 +309,7 @@ export function RoutineTab(props: LiveProps) {
               <tr>
                 <th scope="col">Date</th>
                 <th scope="col">Meals</th>
-                <th scope="col">Pause (ms)</th>
+                <th scope="col">Pause (s)</th>
                 <th scope="col">Mood said</th>
                 <th scope="col">Family contact</th>
                 <th scope="col">Context</th>
@@ -297,7 +320,7 @@ export function RoutineTab(props: LiveProps) {
                 <tr key={d.local_date}>
                   <td>{dateLabel(d.local_date)}</td>
                   <td>{d.meals_reported}</td>
-                  <td>{d.response_gap_ms === null ? "-" : Math.round(d.response_gap_ms)}</td>
+                  <td>{d.response_gap_ms === null ? "-" : (d.response_gap_ms / 1000).toFixed(1)}</td>
                   <td>{d.mood ?? "Not said"}</td>
                   <td>{d.family_contact ? "Yes" : "No"}</td>
                   <td>{[d.is_fasting ? "Fasting" : "", d.is_ill ? "Unwell" : ""].filter(Boolean).join(", ") || "-"}</td>
@@ -353,7 +376,6 @@ export function RoutineTab(props: LiveProps) {
               </button>
             </li>
           </ul>
-          {note ? <p className="error">{note}</p> : null}
         </section>
       ) : null}
     </div>

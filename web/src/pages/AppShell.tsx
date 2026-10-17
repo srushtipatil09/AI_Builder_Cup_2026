@@ -43,13 +43,15 @@ export function AppShell() {
   }, [demo]);
 
   function leave() {
+    // Logging out by accident is hard to undo for a parent, so a real account asks first.
+    if (!demo && !window.confirm("Log out of Saathi on this phone?")) return;
     if (!demo) clearSession();
     navigate(isPhoneEntry() ? "/login" : "/");
   }
 
   const title = demo ? "Kamla" : session?.parentName || "Your household";
   const detail = demo
-    ? "Kamla Sharma, 78 · synthetic household"
+    ? "78 · Demo"
     : parent?.familyCode
       ? parent.caretakerName
         ? `With ${parent.caretakerName}’s family`
@@ -117,8 +119,8 @@ export function AppShell() {
   return (
     <div className="stage">
       <div className="stage-copy">
-        <Link className="brand" to="/" lang="hi">
-          साथी
+        <Link className="brand" to="/">
+          <img className="brand-logo" src="/brand/saathi-logo.png" width="648" height="422" alt="Saathi" />
         </Link>
         <p className="eyebrow">Parent demo</p>
         <h1>Kamla&rsquo;s phone</h1>
@@ -126,7 +128,7 @@ export function AppShell() {
           This is all Kamla sees. Saathi speaks first, and there are four large buttons. Nothing to set up and no
           menus.
         </p>
-        <p className="stage-note">Synthetic household. Voice runs live with Gemini.</p>
+        <p className="stage-note">Shared demo account, no login. Changes are saved. Voice runs live with Gemini.</p>
         <div className="stage-links">
           <Link className="button" to="/care?demo=1">
             See Rahul&rsquo;s caretaker app

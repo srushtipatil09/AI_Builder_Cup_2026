@@ -18,9 +18,28 @@ flowchart LR
 
 If Thursday's voice session does not connect, Friday morning is still voice.
 
-## Status as of 16 Oct 2026
+## Status
 
-Voice, extraction, the care desk, companion chat, accounts, and file uploads are in the tree. What is still open, and must not be marked done from reading the code: a verified public URL, the Cloud Tasks queue, the worker service, and the Cloud Scheduler job (empty `WORKER_URL` runs post-call work in-process), FCM on a real device, and the Sunday feature freeze, video, and submission. See [PROGRESS.md](PROGRESS.md).
+The product in [SPEC.md](SPEC.md) is finished and deployed. Milestones M01 through M13 and M15 are complete. M14 is the form itself: this repository, the English docs, and the tests are in place. The deck PDF and the three-minute video are the two files the form asks for beside the repository. M16, a Nest speaker, is later work.
+
+| Id | Result | State |
+| --- | --- | --- |
+| M01 | Cloud project, local API and web, `/health` reports `stage: connected`, public deploy | Complete |
+| M02 | Household, consent, pairing, judge demo without an account form | Complete |
+| M03 | Hindi Live bridge, Talk / Stop / Pause / Contact family. The socket opens before Talk | Complete |
+| M04 | Extraction, memory, family episodes, vector index | Complete |
+| M05 | Browser pause measurement. Speaking rate is a stored field the live chat does not fill | Complete |
+| M06 | Proactive invitation, snooze, unanswered versus device unavailable, FCM push | Complete |
+| M07 | Reminder records, once and daily, medicine and the other kinds, from the care desk | Complete |
+| M08 | Voice create and confirm, and a spoken "I have done it" on a reminder that is already due | Complete |
+| M09 | BigQuery daily rows and the SQL drift rule | Complete |
+| M10 | SafetyGuard, ADK insight, immediate contact path | Complete |
+| M11 | Care desk, caretaker memories, Ask Saathi, nearby help, several family members | Complete |
+| M12 | In-app alert and FCM. The service worker shows the notice and speaks it when the app is open | Complete |
+| M13 | Labeled synthetic household and demo clock | Complete |
+| M14 | Public repo and English docs are here. Deck PDF and video go with the form | Submission files |
+| M15 | PWA manifest, install sheet or iPhone instructions, notification opens the chat. Redux and localStorage keep the desk on the phone | Complete |
+| M16 | Nest speaker | After submission |
 
 ## Milestones
 
@@ -30,7 +49,7 @@ Voice, extraction, the care desk, companion chat, accounts, and file uploads are
 | M02 | Household, consent, pairing, judge demo without an account form |
 | M03 | Hindi Live bridge, Talk / Stop / Pause / Contact family |
 | M04 | Extraction, memory, family episodes, vector index |
-| M05 | Browser pause and speaking-rate measurement |
+| M05 | Browser pause measurement. Speaking rate is a stored field the live chat does not fill |
 | M06 | Proactive invitation, snooze, unanswered versus device unavailable |
 | M07 | Reminder records, once and daily, from the care desk |
 | M08 | Voice create and confirm |
@@ -53,7 +72,7 @@ Write the command and the real result in [PROGRESS.md](PROGRESS.md). Do not mark
 
 | Check | Proves |
 | --- | --- |
-| `python -m pytest api/tests` | Health, safety, drift, live, pipeline, scheduling, files, and household access. 75 tests collected on 16 Oct 2026; the last recorded green run is 71 passed |
+| `python -m pytest api/tests` | Health, safety, drift, live, pipeline, scheduling, files, nearby, family members, quota, and household access. 100 tests collected on 17 Oct 2026; the last recorded green run is 80 passed on 16 Oct 2026 |
 | Safety tests | Diagnosis, dose advice, and an order to enter counselling are rejected |
 | Drift fixtures | Stable, changing, fasting, and family-shift histories |
 | A real browser | Hindi audio, parent chat versus caretaker desk, and the health line on the demo page |

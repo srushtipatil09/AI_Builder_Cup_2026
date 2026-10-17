@@ -9,6 +9,18 @@ import pytest
 def isolated_services(monkeypatch):
     # The dev .env turns strict household access on; most tests exercise the open path.
     monkeypatch.setenv("REQUIRE_HOUSEHOLD_AUTH", "false")
+    # Caches and call throttles are for the deployed service; each test starts from a clean slate.
+    from saathi import cache
+    from saathi.scheduling import service as scheduling
+
+    monkeypatch.setattr(cache, "ENABLED", False)
+    from saathi.auth import firebase as auth_firebase
+
+    monkeypatch.setattr(auth_firebase, "_access_cache", {})
+    monkeypatch.setattr(scheduling, "_watch", {})
+    monkeypatch.setattr(scheduling, "_index_checked_at", -1e9)
+    monkeypatch.setattr(scheduling, "_none_until", {})
+    monkeypatch.setattr(scheduling, "_last_beat", {})
     if os.environ.get("SAATHI_LIVE_TESTS") == "1":
         yield
         return
