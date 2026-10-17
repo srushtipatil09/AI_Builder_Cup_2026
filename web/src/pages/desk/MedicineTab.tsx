@@ -9,6 +9,7 @@ import {
   newId,
   readBack,
   reminderKinds,
+  reminderStatus,
   today,
   type Desk,
   type Medicine,
@@ -125,7 +126,7 @@ function ReminderFields({ value, onChange }: { value: Draft; onChange: (patch: P
   );
 }
 
-export function MedicineTab({ desk, setDesk, name, author }: Props) {
+export function MedicineTab({ desk, setDesk, name }: Props) {
   const who = name || "the parent";
   const toast = useToast();
   const [draft, setDraft] = useState<Draft>(empty);
@@ -191,15 +192,6 @@ export function MedicineTab({ desk, setDesk, name, author }: Props) {
     window.setTimeout(() => setFresh((f) => (f === id ? "" : f)), 2400);
   }
 
-  function setConfirmed(id: string, on: boolean) {
-    setDesk((d) => ({
-      ...d,
-      medicines: d.medicines.map((m) =>
-        m.id === id ? { ...m, confirmedOn: on ? stamp : undefined, confirmedBy: on ? author : undefined } : m,
-      ),
-    }));
-  }
-
   const sorted = [...desk.medicines].sort((a, b) => a.time.localeCompare(b.time));
 
   return (
@@ -242,13 +234,14 @@ export function MedicineTab({ desk, setDesk, name, author }: Props) {
       <section className="panel" aria-labelledby="med-list">
         <h2 id="med-list">Reminders</h2>
         <p className="panel-lede">
-          The status is what {who} reports, or what you record after checking with {who}. &ldquo;I don&rsquo;t
-          remember&rdquo; stays not yet confirmed.
+          Confirmed means {who} told Saathi yes, for example &ldquo;haan, ja rahi hoon&rdquo;. A reminder
+          that only reached the phone says notification seen. &ldquo;I don&rsquo;t remember&rdquo; stays not yet
+          confirmed.
         </p>
         {sorted.length ? (
           <ul className="rows med-list">
             {sorted.map((m) => {
-              const confirmed = m.confirmedOn === stamp;
+              const status = reminderStatus(m, who, stamp);
               const kind = kindOf(m);
               if (editing === m.id) {
                 return (
@@ -290,7 +283,7 @@ export function MedicineTab({ desk, setDesk, name, author }: Props) {
                 <li
                   key={m.id}
                   id={`reminder-${m.id}`}
-                  className={["med-card", confirmed ? "med-card-ok" : "", fresh === m.id ? "med-card-new" : ""].filter(Boolean).join(" ")}
+                  className={["med-card", status === "confirmed" ? "med-card-ok" : "", fresh === m.id ? "med-card-new" : ""].filter(Boolean).join(" ")}
                 >
                   <div className="med-card-top">
                     <span className="med-time">{formatClock(m.time)}</span>
@@ -306,19 +299,18 @@ export function MedicineTab({ desk, setDesk, name, author }: Props) {
                       </span>
                       {m.note ? <span className="med-note">&ldquo;{m.note}&rdquo;</span> : null}
                     </span>
-                    <span className={confirmed ? "status-chip status-chip-ok" : "status-chip"}>
-                      {confirmed ? `Confirmed today · ${m.confirmedBy ?? ""}`.replace(/ · $/, "") : "Not yet confirmed"}
+                    <span className={status === "confirmed" ? "status-chip status-chip-ok" : status === "seen" ? "status-chip status-chip-seen" : "status-chip"}>
+                      {status === "confirmed" ? `Confirmed today · ${who}` : status === "seen" ? "Notification seen" : "Not yet confirmed"}
                     </span>
                   </div>
                   <div className="med-actions">
-                    <button
-                      className={confirmed ? "ghost med-confirm" : "ghost med-confirm med-confirm-todo"}
-                      type="button"
-                      onClick={() => setConfirmed(m.id, !confirmed)}
-                    >
-                      {confirmed ? "Undo confirmation" : "Mark confirmed"}
-                      <span className="visually-hidden"> {m.name}</span>
-                    </button>
+                    <span className="med-status-note">
+                      {status === "confirmed"
+                        ? `${who} told Saathi.`
+                        : status === "seen"
+                          ? "Waiting for what they say to Saathi."
+                          : "Saathi asks when they open the reminder."}
+                    </span>
                     <button
                       className="text-link row-edit"
                       type="button"

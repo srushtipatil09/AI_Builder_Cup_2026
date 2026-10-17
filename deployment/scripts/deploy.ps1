@@ -197,6 +197,7 @@ if ($deployApi) {
         UPLOADS_BUCKET             = (Env-Or $DotEnv "UPLOADS_BUCKET" "$GcpProject-media")
         REQUIRE_HOUSEHOLD_AUTH     = (Env-Or $DotEnv "REQUIRE_HOUSEHOLD_AUTH" "true")
         TASK_INVOKER_EMAIL         = $ServiceAccount
+        WEB_ORIGIN                 = $HostingUrl
     }
     if ($knownWorkerUrl) { $workerEnv["WORKER_URL"] = $knownWorkerUrl }
 

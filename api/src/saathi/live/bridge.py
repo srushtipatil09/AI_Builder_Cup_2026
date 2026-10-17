@@ -18,6 +18,7 @@ from saathi.contracts.desk import Desk
 from saathi.live.context import LiveContext
 from saathi.live.distress import _has, check_distress_keywords, classify_impact_audio, has_explicit_help
 from saathi.live.prompts import build_system_instruction, opening_line
+from saathi.scheduling.notice import confirm_from_parent
 from saathi.asks import service as asks
 from saathi.notify import raise_alert
 from saathi.usage import record_live_minutes
@@ -360,6 +361,10 @@ class LiveBridgeSession:
                     })
                 if sc.interrupted:
                     await self.ws.send_json({"type": "interrupted"})
+                if sc.turn_complete and heard.strip():
+                    await asyncio.get_running_loop().run_in_executor(
+                        None, confirm_from_parent, self.household_id, heard.strip()
+                    )
                 if sc.turn_complete or sc.interrupted:
                     await self.ws.send_json({"type": "turn_complete"})
                     flush()
@@ -598,6 +603,9 @@ class LiveBridgeSession:
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     })
                     self._last_parent_at = time.monotonic()
+                    await asyncio.get_running_loop().run_in_executor(
+                        None, confirm_from_parent, self.household_id, text
+                    )
                     has_distress, negated = check_distress_keywords(text)
                     if negated and self._watch and not self._watch.done():
                         self._watch.cancel()

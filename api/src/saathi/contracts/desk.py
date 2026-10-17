@@ -41,6 +41,8 @@ class Medicine(BaseModel):
     note: str = ""
     confirmedOn: Optional[str] = None
     confirmedBy: Optional[str] = None
+    # The local date a phone accepted the push. Seeing it is not the parent saying they will do it.
+    seenOn: Optional[str] = None
 
 
 class Contact(BaseModel):

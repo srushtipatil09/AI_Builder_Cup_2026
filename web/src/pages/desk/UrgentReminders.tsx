@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { formatClock, kindOf, reminderKinds, today, type Medicine } from "../../desk";
+import { formatClock, kindOf, reminderKinds, reminderStatus, today, type Medicine } from "../../desk";
 import { KindIcon } from "./MedicineTab";
 
 // A reminder is urgent when it is due within the next hour, or came due in the last three hours
@@ -12,7 +12,6 @@ type Props = {
   medicines: Medicine[];
   name: string;
   onOpen: () => void;
-  onConfirm: (id: string) => void;
 };
 
 type Urgent = { medicine: Medicine; minutes: number; label: string };
@@ -26,26 +25,27 @@ function useNow() {
   return now;
 }
 
-function urgentList(medicines: Medicine[], now: Date): Urgent[] {
+function urgentList(medicines: Medicine[], now: Date, parentName: string): Urgent[] {
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const stamp = today();
   return medicines
-    .filter((m) => m.time && m.confirmedOn !== stamp)
+    .filter((m) => m.time && reminderStatus(m, parentName, stamp) !== "confirmed")
     .filter((m) => m.schedule !== "Once" || !m.date || m.date === stamp)
     .map((medicine) => {
       const [h, m] = medicine.time.split(":").map(Number);
       const minutes = h * 60 + m - nowMin;
+      const seen = reminderStatus(medicine, parentName, stamp) === "seen";
       const label =
-        minutes > 0 ? `Due in ${minutes} min` : minutes === 0 ? "Due now" : "Not yet confirmed";
+        minutes > 0 ? `Due in ${minutes} min` : minutes === 0 ? "Due now" : seen ? "Notification seen" : "Not yet confirmed";
       return { medicine, minutes, label };
     })
     .filter((u) => u.minutes <= SOON_MIN && u.minutes >= -RECENT_MIN)
     .sort((a, b) => a.minutes - b.minutes);
 }
 
-export function UrgentReminders({ medicines, name, onOpen, onConfirm }: Props) {
+export function UrgentReminders({ medicines, name, onOpen }: Props) {
   const now = useNow();
-  const urgent = urgentList(medicines, now);
+  const urgent = urgentList(medicines, now, name);
   if (!urgent.length) return null;
   const who = name || "the parent";
 
@@ -77,9 +77,6 @@ export function UrgentReminders({ medicines, name, onOpen, onConfirm }: Props) {
               <span>{[medicine.dose, medicine.note].filter(Boolean).join(" · ") || "As written on the Reminders tab"}</span>
             </span>
             <span className={minutes > 0 ? "urgent-chip urgent-chip-soon" : "urgent-chip"}>{label}</span>
-            <button className="primary urgent-confirm" type="button" onClick={() => onConfirm(medicine.id)}>
-              Mark confirmed<span className="visually-hidden"> {medicine.name}</span>
-            </button>
           </li>
         ))}
       </ul>
@@ -87,7 +84,7 @@ export function UrgentReminders({ medicines, name, onOpen, onConfirm }: Props) {
         <button className="ghost" type="button" onClick={onOpen}>
           Open Reminders
         </button>
-        <span>Confirm after checking with {who}. Saathi never suggests a dose.</span>
+        <span>Confirmed only after {who} tells Saathi. Saathi never suggests a dose.</span>
       </div>
     </section>
   );

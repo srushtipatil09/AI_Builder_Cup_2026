@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { blankDesk, demoDesk, formatClock, formatQuiet, today, useDesk, type Desk } from "../desk";
+import { blankDesk, demoDesk, formatClock, formatQuiet, useDesk, type Desk } from "../desk";
 import { useFamilyLink } from "../family";
 import { useHealth, useMedia } from "../health";
 import { activeHouseholdId, readSession, writeSession, type HouseholdSession } from "../session";
@@ -454,12 +454,6 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
             name={name}
             medicines={desk.medicines}
             onOpenReminders={() => choose("reminders")}
-            onConfirmReminder={(id) =>
-              setDesk((d) => ({
-                ...d,
-                medicines: d.medicines.map((m) => (m.id === id ? { ...m, confirmedOn: today(), confirmedBy: author } : m)),
-              }))
-            }
           /> : null}
         {active === "ask" ? <TellSaathiTab desk={desk} setDesk={setDesk} author={author} name={name} guideSlot={guideSlot} householdId={householdId} /> : null}
         {active === "reminders" ? <MedicineTab desk={desk} setDesk={setDesk} name={name} author={author} /> : null}

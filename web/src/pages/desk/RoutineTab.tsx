@@ -35,7 +35,7 @@ const MOODS = ["Good", "Okay", "Low"];
 
 // The Routine tab: what the post-call pipeline wrote, read from the API. Nothing here is kept in this browser.
 export function RoutineTab(props: LiveProps) {
-  const { demo, name, medicines, onOpenReminders, onConfirmReminder, householdId, state, conversationMemories } = props;
+  const { demo, name, medicines, onOpenReminders, householdId, state, conversationMemories } = props;
   const { updates, metrics, error, loadedAt, refresh } = state;
   const [busy, setBusy] = useState("");
   const toast = useToast();
@@ -82,7 +82,7 @@ export function RoutineTab(props: LiveProps) {
 
   return (
     <div className="tab-grid">
-      <UrgentReminders medicines={medicines} name={name} onOpen={onOpenReminders} onConfirm={onConfirmReminder} />
+      <UrgentReminders medicines={medicines} name={name} onOpen={onOpenReminders} />
 
       {(updates?.alerts ?? []).filter((a) => a.tier >= 3 || !(insight || card)).map((a) => (
         <section key={a.id} className={`panel panel-wide alert-card alert-compact alert-tier-${a.tier}`} role="alert">

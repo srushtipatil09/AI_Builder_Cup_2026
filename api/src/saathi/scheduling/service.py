@@ -13,9 +13,11 @@ from firebase_admin import messaging as fcm_messaging
 from pydantic import BaseModel
 
 from saathi.auth.firebase import ensure_firebase_initialized
-from saathi.notify import PUSH_CHECK_IN, raise_alert
+from saathi.config import load_settings
+from saathi.notify import PUSH_CHECK_IN, PUSH_UPDATE, raise_alert
 from saathi.pipeline import LOCAL_TZ
 from saathi.providers.firestore import get_repository
+from saathi.scheduling.notice import mark_reminder_seen, reminder_copy, speak_path
 
 logger = logging.getLogger(__name__)
 
@@ -69,18 +71,43 @@ def evaluate_invitation_lifecycle(
     return "awaiting_retry"
 
 
-def send_fcm_notification(fcm_token: str, title: str, body: str) -> bool:
+def notification_link(path: str = "/app") -> str:
+    """FCM rejects a relative link. The installed app opens on the public site."""
+    settings = load_settings()
+    origin = (settings.web_origin or "").rstrip("/")
+    if not origin.startswith("https://"):
+        project = settings.firebase_project_id or settings.google_cloud_project
+        origin = f"https://{project}.web.app" if project else ""
+    if not origin.startswith("https://"):
+        return ""
+    return origin + (path if path.startswith("/") else f"/{path}")
+
+
+def send_fcm_notification(fcm_token: str, title: str, body: str, path: str = "/app", speak: str = "") -> bool:
     """Dispatches push notification via Firebase Cloud Messaging."""
     if not fcm_token or fcm_token == "mock-token":
         logger.info("Mock FCM notification dispatched: '%s' - '%s'", title, body)
         return True
 
+    link = notification_link(speak_path(path, speak))
+    if not link:
+        logger.warning("FCM not sent; no HTTPS site is configured")
+        return False
+
+    data = {"speak": speak, "title": title, "body": body} if speak else None
     if ensure_firebase_initialized():
         try:
+            webpush = fcm_messaging.WebpushConfig(
+                notification=fcm_messaging.WebpushNotification(title=title, body=body),
+                fcm_options=fcm_messaging.WebpushFCMOptions(link=link),
+            )
+            if data:
+                webpush.data = data
             message = fcm_messaging.Message(
                 notification=fcm_messaging.Notification(title=title, body=body),
-                webpush=fcm_messaging.WebpushConfig(fcm_options=fcm_messaging.WebpushFCMOptions(link="/app")),
+                webpush=webpush,
                 token=fcm_token,
+                **({"data": data} if data else {}),
             )
             response = fcm_messaging.send(message)
             logger.info("FCM sent successfully: %s", response)
@@ -118,16 +145,34 @@ def _parse(value: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def _push_parent_devices(household_id: str) -> int:
+def _push_devices(household_id: str, role: str, title: str, body: str, path: str, speak: str = "") -> tuple[int, int]:
+    """Returns (accepted sends, registered devices for this role)."""
     sent = 0
+    found = 0
     for row in get_repository().col_list(f"households/{household_id}/devices", 200):
-        if row.get("role") == "parent" and row.get("token"):
-            if send_fcm_notification(row["token"], PUSH_CHECK_IN[0], PUSH_CHECK_IN[1]):
+        if row.get("role") == role and row.get("token"):
+            found += 1
+            if send_fcm_notification(row["token"], title, body, path, speak):
                 sent += 1
+    return sent, found
+
+
+def _role_reached(sent: int, found: int) -> bool:
+    # No registered phone for this role cannot be pinged. A failed send stays open for the next minute.
+    return found == 0 or sent == found
+
+
+def _push_parent_devices(household_id: str) -> int:
+    sent, _found = _push_devices(household_id, "parent", PUSH_CHECK_IN[0], PUSH_CHECK_IN[1], "/app")
     return sent
 
 
-def _create_invitation(household_id: str, key: str, reason: str, now: datetime) -> dict:
+def _push_caretaker_devices(household_id: str) -> int:
+    sent, _found = _push_devices(household_id, "caretaker", PUSH_UPDATE[0], PUSH_UPDATE[1], "/care")
+    return sent
+
+
+def _create_invitation(household_id: str, key: str, reason: str, now: datetime, push: bool = True) -> dict:
     repo = get_repository()
     path = f"households/{household_id}/invitations/{key}"
     if repo.doc_get(path):
@@ -139,7 +184,10 @@ def _create_invitation(household_id: str, key: str, reason: str, now: datetime) 
     repo.doc_set(path, doc, merge=False)
     _none_until.pop(household_id, None)
     _watch[household_id] = time.monotonic() + WATCH_SECONDS
-    _push_parent_devices(household_id)
+    if push:
+        _push_parent_devices(household_id)
+        if reason == "reminder":
+            _push_caretaker_devices(household_id)
     return doc
 
 
@@ -236,7 +284,9 @@ def run_scheduler_tick(current_hhmm: Optional[str] = None, now: Optional[datetim
 
     for household_id in household_ids:
         entry = index.get(household_id)
-        due_now = entry is None or entry.get("checkIn") == hhmm or hhmm in (entry.get("times") or [])
+        times = (entry.get("times") or []) if entry else []
+        # A reminder whose minute already passed still needs its push. The 5:40 send was rejected, then marked done.
+        due_now = entry is None or entry.get("checkIn") == hhmm or any(t <= hhmm for t in times)
         look_at_invitations = evaluate_now and (
             sweep or household_id.startswith("demo-") or _watch.get(household_id, 0.0) > mono
         )
@@ -244,11 +294,11 @@ def run_scheduler_tick(current_hhmm: Optional[str] = None, now: Optional[datetim
             continue
 
         if due_now:
-            desk = repo.get_desk(household_id, fresh=not full)
+            desk = repo.get_desk(household_id, fresh=True)
             if not desk:
                 continue
             state_path = f"households/{household_id}/schedule/state"
-            is_due = desk.profile.checkIn == hhmm or any(m.time == hhmm for m in desk.medicines)
+            is_due = desk.profile.checkIn == hhmm or any(m.time and m.time <= hhmm for m in desk.medicines)
             state = (repo.doc_get(state_path) or {}) if is_due else {}
 
             if desk.profile.checkIn == hhmm and state.get("lastCheckInDate") != today:
@@ -258,15 +308,40 @@ def run_scheduler_tick(current_hhmm: Optional[str] = None, now: Optional[datetim
                     events.append({"type": "check_in_due", "household_id": household_id, "lockscreen_text": PUSH_CHECK_IN[1]})
                 repo.doc_set(state_path, {"lastCheckInDate": today})
 
-            fired = dict(state.get("reminders") or {})
+            pushed = dict(state.get("reminderPush") or {})
+            changed = False
             for med in desk.medicines:
-                due = med.time == hhmm and (med.schedule == "Daily" or med.date == today)
-                if due and med.confirmedOn != today and fired.get(med.id) != today:
-                    fired[med.id] = today
-                    _create_invitation(household_id, f"{today}-{med.id}", "reminder", now)
-                    events.append({"type": "reminder_due", "household_id": household_id, "medicine_id": med.id, "lockscreen_text": PUSH_CHECK_IN[1]})
-            if fired != (state.get("reminders") or {}):
-                repo.doc_set(state_path, {"reminders": fired})
+                due = bool(med.time) and med.time <= hhmm and (med.schedule == "Daily" or med.date == today)
+                # Marking it done on the desk does not replace the phone ping. Skip only after both phones were reached.
+                if not due:
+                    continue
+                stamp = f"{today}|{med.time}"
+                record = dict(pushed.get(med.id) or {})
+                if record.get("stamp") != stamp:
+                    record = {}
+                if record.get("parent") and record.get("caretaker"):
+                    continue
+                title, body, speak = reminder_copy(med)
+                delivered = False
+                if not record.get("parent"):
+                    sent, found = _push_devices(household_id, "parent", title, body, "/app", speak)
+                    record["parent"] = _role_reached(sent, found)
+                    delivered = delivered or sent > 0
+                    logger.warning("Reminder push %s parent %s/%s", household_id, sent, found)
+                if not record.get("caretaker"):
+                    sent, found = _push_devices(household_id, "caretaker", title, body, "/care", speak)
+                    record["caretaker"] = _role_reached(sent, found)
+                    delivered = delivered or sent > 0
+                    logger.warning("Reminder push %s caretaker %s/%s", household_id, sent, found)
+                if delivered:
+                    mark_reminder_seen(household_id, med.id, today)
+                record["stamp"] = stamp
+                pushed[med.id] = record
+                changed = True
+                _create_invitation(household_id, f"{today}-{med.id}", "reminder", now, push=False)
+                events.append({"type": "reminder_due", "household_id": household_id, "medicine_id": med.id, "lockscreen_text": PUSH_CHECK_IN[1]})
+            if changed:
+                repo.doc_set(state_path, {"reminderPush": pushed})
 
         if look_at_invitations:
             events.extend({**e, "household_id": household_id} for e in evaluate_invitations(household_id, now))

@@ -84,10 +84,20 @@ export type Medicine = {
   date?: string;
   time: string;
   note: string;
-  // The local date the parent's completion was last reported, and who recorded it.
+  // The local date the parent told Saathi they are doing it, and the name they go by.
   confirmedOn?: string;
   confirmedBy?: string;
+  // The local date a phone accepted the reminder. That is not a confirmation.
+  seenOn?: string;
 };
+
+// Confirmed only when the parent said so. A caretaker tap, or a delivered push, is "seen".
+export function reminderStatus(m: Medicine, parentName: string, stamp = today()): "confirmed" | "seen" | "open" {
+  const parent = parentName.trim();
+  if (m.confirmedOn === stamp && parent && m.confirmedBy === parent) return "confirmed";
+  if (m.seenOn === stamp || m.confirmedOn === stamp) return "seen";
+  return "open";
+}
 
 export type Contact = { id: string; name: string; relation: string; phone: string; local: boolean };
 

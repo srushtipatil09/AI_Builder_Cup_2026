@@ -4,11 +4,13 @@ import { Provider } from "react-redux";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import { listenForInstall } from "./install";
+import { listenForSpokenReminders } from "./lib/speak";
 import { store } from "./store";
 import { ToastProvider } from "./toast";
 import "./styles.css";
 
 listenForInstall();
+listenForSpokenReminders();
 
 // Chrome installs only with a service worker. On the dev server it passes requests through, so Vite reloads stay fresh.
 if ("serviceWorker" in navigator) {

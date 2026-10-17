@@ -35,7 +35,7 @@ def push_to_caretakers(household_id: str, title_body: tuple[str, str] = PUSH_UPD
     for row in get_repository().col_list(f"households/{household_id}/devices", 200):
         if row.get("role") == "parent" or not row.get("token"):
             continue
-        if send_fcm_notification(row["token"], title_body[0], title_body[1]):
+        if send_fcm_notification(row["token"], title_body[0], title_body[1], "/care"):
             sent += 1
     return sent
 

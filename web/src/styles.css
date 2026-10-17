@@ -996,6 +996,12 @@ input[aria-invalid="true"] {
   color: var(--teal) !important;
 }
 
+.status-chip-seen {
+  background: var(--paper);
+  color: var(--ink) !important;
+  border: 1px solid var(--field);
+}
+
 .empty {
   margin: 0;
   padding: 14px 16px;
@@ -4891,6 +4897,12 @@ textarea:focus {
   padding: 8px 12px;
   border-top: 1px solid var(--line);
   background: var(--cream);
+}
+
+.med-status-note {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 0.92rem;
 }
 
 .med-actions .med-confirm {

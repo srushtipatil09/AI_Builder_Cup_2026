@@ -73,7 +73,10 @@ def update_household_desk(
     actor: ActorContext = Depends(get_current_actor),
 ) -> Desk:
     ensure_household_access(actor, household_id)
+    from saathi.scheduling.notice import keep_reminder_status
+
     repo = get_repository()
+    desk = keep_reminder_status(desk, repo.get_desk(household_id, fresh=True))
     repo.save_desk(household_id, desk)
     return desk
 
