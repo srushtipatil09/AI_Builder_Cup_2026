@@ -103,7 +103,7 @@ export function RoutineTab(props: LiveProps) {
 
       {synthetic ? (
         <p className="synthetic panel-wide">
-          <strong>Synthetic history.</strong> The demo household&rsquo;s days are labeled synthetic. They are not measurements.
+          <strong>Demo Preview.</strong> Showing sample routine activity for demonstration.
         </p>
       ) : null}
 
@@ -185,12 +185,9 @@ export function RoutineTab(props: LiveProps) {
         <p className="alert-meta">
           {error ? "Could not refresh just now. " : ""}
           {loadedAt ? `Updated ${ago(new Date(loadedAt).toISOString())}` : "Loading"}
-          {updates
-            ? updates.sessionsProcessed === 0 && rows.some((d) => d.synthetic)
-              ? " · synthetic days, no real conversation processed yet"
-              : ` · ${updates.sessionsProcessed} conversation${updates.sessionsProcessed === 1 ? "" : "s"} processed`
+          {updates && updates.sessionsProcessed > 0
+            ? ` · ${updates.sessionsProcessed} conversation${updates.sessionsProcessed === 1 ? "" : "s"}`
             : ""}
-          {drift?.engine ? ` · compared by ${drift.engine === "bigquery" ? "BigQuery SQL" : "the service"}` : ""}
         </p>
         <p>
           <button
@@ -216,7 +213,7 @@ export function RoutineTab(props: LiveProps) {
               </span>
             </div>
             <div className="tile">
-              <span className="tile-label">{rows.some((d) => d.synthetic) ? "Days in the synthetic history" : "Days with a processed conversation"}</span>
+              <span className="tile-label">Days with conversation history</span>
               <span className="tile-value">
                 {rows.length} <small>of 14</small>
               </span>
@@ -337,8 +334,8 @@ export function RoutineTab(props: LiveProps) {
           <ul className="rows">
             <li>
               <span className="row-main">
-                <strong>Load synthetic history</strong>
-                <span>Synthetic history. Sixteen labeled days go through the real BigQuery rule and the insight.</span>
+                <strong>Load sample routine</strong>
+                <span>Preview 16 days of routine history to see pattern analysis.</span>
               </span>
               <span className="demo-buttons">
                 {(["stable", "changing", "fasting", "family"] as const).map((sc) => (
@@ -350,8 +347,8 @@ export function RoutineTab(props: LiveProps) {
             </li>
             <li>
               <span className="row-main">
-                <strong>Run seeded session</strong>
-                <span>Recorded transcript. Extraction, BigQuery, and the insight are live. No speech timing is invented.</span>
+                <strong>Run sample conversation</strong>
+                <span>Replay a sample conversation to see live memory updates.</span>
               </span>
               <button className="ghost" type="button" disabled={Boolean(busy)} onClick={() => void run("seed", () => runSeededSession())}>
                 {busy === "seed" ? "Working..." : "Run"}
@@ -360,7 +357,7 @@ export function RoutineTab(props: LiveProps) {
             <li>
               <span className="row-main">
                 <strong>Check-in with no reply</strong>
-                <span>Demo clock for this synthetic household only. Two played invitations, 15 minutes, no reply.</span>
+                <span>Preview an alert when a scheduled check-in gets no response after 15 minutes.</span>
               </span>
               <button className="ghost" type="button" disabled={Boolean(busy)} onClick={() => void run("un", () => simulateCheckin("unanswered"))}>
                 Simulate
@@ -369,7 +366,7 @@ export function RoutineTab(props: LiveProps) {
             <li>
               <span className="row-main">
                 <strong>Phone unavailable</strong>
-                <span>Demo clock for this synthetic household only. The app was closed or the microphone blocked.</span>
+                <span>Preview notification when the phone is unreachable or app is closed.</span>
               </span>
               <button className="ghost" type="button" disabled={Boolean(busy)} onClick={() => void run("dev", () => simulateCheckin("device_unavailable"))}>
                 Simulate

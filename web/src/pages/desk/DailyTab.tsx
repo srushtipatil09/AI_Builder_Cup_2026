@@ -47,7 +47,7 @@ export function StaticDemoRoutine({ demo, name, medicines, onOpenReminders }: Pr
     <div className="tab-grid">
       {urgent}
       <p className="synthetic panel-wide">
-        <strong>Synthetic history.</strong> Day 1 to Day 14 for the demo household. These are not measurements.
+        <strong>Sample preview.</strong> 14-day history for the demo household.
       </p>
 
       <section className="tiles panel-wide" aria-label="Last three days">

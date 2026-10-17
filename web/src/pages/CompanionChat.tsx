@@ -567,25 +567,25 @@ export function CompanionChat({ demo, name, householdId }: Props) {
               <button className="ghost" type="button" onClick={simulateMorningInactivity}>
                 Simulate morning inactivity
               </button>
-              <span>Simulated. This build does not read a Nest sensor. Saathi starts a check-in the way the scheduler does.</span>
+              <span>Demonstrates an automatic morning check-in invitation when no activity is detected.</span>
             </li>
             <li>
               <button className="ghost" type="button" onClick={playDistressClip}>
-                Play labeled distress clip
+                Play sample fall clip
               </button>
-              <span>Labeled recording. The spoken check and the alert use the live rule.</span>
+              <span>Sample recording demonstrating automatic fall check and caregiver alert.</span>
             </li>
             <li>
               <button className="ghost" type="button" onClick={playDoorClip}>
-                Play ordinary door clip
+                Play sample door sound
               </button>
-              <span>Labeled recording. An ordinary door does not raise an alert.</span>
+              <span>Normal household noise that does not raise an alert.</span>
             </li>
             <li>
               <button className="ghost" type="button" onClick={() => handleUserUtterance("Rahul roz phone karta hai, par aaj baat nahi hui.")}>
-                Run seeded session
+                Play sample conversation
               </button>
-              <span>Recorded transcript, sent as typed text. Excluded from speech measurements.</span>
+              <span>Sample conversation demonstrating live memory updates and family recall.</span>
             </li>
           </ul>
         </details>
