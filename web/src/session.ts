@@ -16,6 +16,14 @@ export type HouseholdSession = {
   familyCode?: string;
   // The parent chose "Skip for now" on the join step; the chat still offers Join family.
   joinSkipped?: boolean;
+  // A Google sign-up asks for the parent's name and city once, after login.
+  detailsPending?: boolean;
+  // The parent's city, until their phone shares a position.
+  city?: string;
+  // When the account holder agreed to what Saathi stores, at signup.
+  consentAt?: string;
+  // A caretaker can look after several family members. Empty means the first one, named by the email.
+  activeHousehold?: string;
 };
 
 const ACCOUNTS = "saathi.accounts";
@@ -50,6 +58,8 @@ export function readSession(): HouseholdSession | null {
       language: parsed.language || "Hindi",
       familyCode: parsed.familyCode,
       joinSkipped: parsed.joinSkipped,
+      detailsPending: parsed.detailsPending,
+      city: parsed.city,
     };
   } catch {
     return null;
@@ -67,6 +77,10 @@ export function writeSession(session: HouseholdSession) {
     language: session.language,
     familyCode: session.familyCode ?? null,
     joinSkipped: session.joinSkipped ?? false,
+    detailsPending: session.detailsPending ?? false,
+    city: session.city ?? "",
+    consentAt: session.consentAt ?? null,
+    activeHousehold: session.activeHousehold ?? null,
   }).catch(() => {
     // Not signed in with Firebase, or offline: the browser copy still works.
   });
@@ -77,8 +91,15 @@ export function writeSession(session: HouseholdSession) {
   }
 }
 
+// The store registers here, so logging out also drops the cached household data without session.ts importing it.
+const clearedListeners: Array<() => void> = [];
+export function onSessionCleared(listener: () => void) {
+  clearedListeners.push(listener);
+}
+
 export function clearSession() {
   localStorage.removeItem(KEY);
+  for (const listener of clearedListeners) listener();
   firebaseSignOut().catch(() => {});
 }
 
@@ -95,12 +116,18 @@ export function needsJoin(session: HouseholdSession): boolean {
 
 // Where to go straight after signing up or logging in.
 export function afterSignIn(session: HouseholdSession): string {
+  if (session.detailsPending) return "/details";
   return needsJoin(session) ? "/join" : homePath(session);
 }
 
-// The browser keys a household's desk by the caretaker's email.
+// The household the care desk shows: the family member chosen last, or the first one (named by the email).
+export function activeHouseholdId(session: HouseholdSession | null): string {
+  return session?.activeHousehold || session?.email || "";
+}
+
+// The browser keys each household's desk cache by its id.
 export function householdKey(session: HouseholdSession | null): string {
-  return `saathi.desk.${session?.email || "local"}`;
+  return `saathi.desk.${activeHouseholdId(session) || "local"}`;
 }
 
 export function emailError(email: string): string | null {
@@ -133,5 +160,9 @@ export function fromProfile(p: AccountProfile): HouseholdSession {
     language: p.language || "Hindi",
     familyCode: p.familyCode ?? undefined,
     joinSkipped: p.joinSkipped || undefined,
+    detailsPending: p.detailsPending || undefined,
+    city: p.city || undefined,
+    consentAt: p.consentAt ?? undefined,
+    activeHousehold: p.activeHousehold ?? undefined,
   };
 }

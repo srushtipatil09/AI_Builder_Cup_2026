@@ -88,11 +88,11 @@ export function FamilySheet({ session, demo, onClose, onJoined }: Props) {
             </dl>
             {demo ? <p className="family-demo">Demo household. Changes here are not saved.</p> : null}
             <div className="auth-actions">
-              <button className="primary" type="button" onClick={() => setChanging(true)}>
-                Change code
-              </button>
-              <button className="ghost" type="button" onClick={onClose}>
+              <button className="primary" type="button" onClick={onClose} autoFocus>
                 Close
+              </button>
+              <button className="ghost" type="button" onClick={() => setChanging(true)}>
+                Change code
               </button>
             </div>
           </>

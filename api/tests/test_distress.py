@@ -40,6 +40,7 @@ def test_impact_classification_rules() -> None:
 def test_classify_impact_endpoint() -> None:
     res = client.post(
         "/api/v1/sessions/test-distress-sess/classify-impact",
+        headers={"X-Household-Id": "demo-kamla-sharma"},
         json={"description": "loud thud on floor"},
     )
     assert res.status_code == 200

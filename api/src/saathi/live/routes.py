@@ -24,7 +24,14 @@ from saathi.live.bridge import LiveBridgeSession
 from saathi.live.context import build_live_context
 from saathi.live.prompts import build_system_instruction
 from saathi.taskqueue import enqueue_post_call
-from saathi.usage import live_allowed
+from saathi.usage import (
+    demo_session_allowed,
+    extraction_allowed,
+    live_allowed,
+    record_demo_session,
+    record_extraction,
+    visitor_key,
+)
 from saathi.providers.firestore import get_repository
 from saathi.providers.gemini import get_genai_client
 
@@ -62,7 +69,7 @@ async def live_voice_bridge(websocket: WebSocket, session_id: str):
         token = auth_msg.get("token", "")
         household_id = auth_msg.get("householdId", "demo-kamla-sharma")
         actor = actor_from_token(token, household_id, auth_msg.get("role"), auth_msg.get("familyCode"))
-        allowed, reason = has_household_access(actor, household_id) if household_id else (True, "blank")
+        allowed, reason = has_household_access(actor, household_id, allow_family_code=True) if household_id else (True, "blank")
     except Exception as exc:
         await websocket.send_json({"type": "error", "message": "Authentication failed."})
         logger.warning("Live auth failed: %s", exc)
@@ -93,8 +100,22 @@ async def live_voice_bridge(websocket: WebSocket, session_id: str):
         household_id=household_id,
         desk=desk,
         context=extra,
+        start_gate=_demo_gate(household_id, websocket.client.host if websocket.client else "") if is_demo_household(household_id) else None,
     )
     await bridge.run()
+
+
+def _demo_gate(household_id: str, client_ip: str):
+    """Count a demo voice session when Talk is tapped, not when the page opens the line."""
+    key = visitor_key(client_ip or "unknown")
+
+    def gate() -> Optional[str]:
+        if not demo_session_allowed(key):
+            return "This demo allows three voice sessions a day for each visitor. Run seeded session still works."
+        record_demo_session(key)
+        return None
+
+    return gate
 
 
 @router.post("/{session_id}/complete")
@@ -104,7 +125,7 @@ def complete_session(
     actor: ActorContext = Depends(get_current_actor),
 ):
     """Records the browser's measurements and hands the session to the post-call pipeline."""
-    ensure_household_access(actor, actor.household_id)
+    ensure_household_access(actor, actor.household_id, allow_family_code=True)
     repo = get_repository()
     repo.doc_set(f"households/{actor.household_id}/sessions/{session_id}", {
         "id": session_id,
@@ -128,7 +149,7 @@ def text_session_turn(
     """Text fallback for testing conversation when microphone is unavailable."""
     repo = get_repository()
     hh_id = body.household_id or actor.household_id
-    ensure_household_access(actor, hh_id)
+    ensure_household_access(actor, hh_id, allow_family_code=True)
     desk = (repo.get_desk(hh_id) or create_demo_desk()) if is_demo_household(hh_id) else (repo.get_desk(hh_id) or Desk())
     now = datetime.now(timezone.utc)
     system_prompt = build_system_instruction(desk, now)
@@ -178,7 +199,15 @@ class ClassifyImpactRequest(BaseModel):
 def classify_session_impact(
     session_id: str,
     body: ClassifyImpactRequest,
+    actor: ActorContext = Depends(get_current_actor),
 ) -> ImpactClassification:
-    """Classify loud audio event during open session."""
-    return classify_impact_audio(body.description)
+    """Classify a described loud sound. The web app classifies over the WebSocket; this is for testing.
+
+    It can call Gemini, so it needs household access and counts against the daily extraction limit.
+    """
+    ensure_household_access(actor, actor.household_id)
+    if not extraction_allowed():
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Today's classification limit is reached.")
+    record_extraction()
+    return classify_impact_audio(body.description[:500])
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useToast } from "./toast";
 
 // A family code pairs the caretaker's desk with the parent's phone.
 // This build keeps codes in the browser; a code made on one device is only recognised on another
@@ -48,7 +49,9 @@ export function joinUrl(code: string): string {
   return `${window.location.origin}/join/${code}`;
 }
 
-import { createPairingLink, fetchPairing, lookupFamilyCode, pairFamilyCode } from "./lib/api";
+import { lookupFamilyCode, pairFamilyCode } from "./lib/api";
+import { createFamilyLink, loadFamilyLink } from "./store/care";
+import { useAppDispatch, useAppSelector } from "./store";
 
 export function findByCode(code: string): FamilyLink | null {
   return load()[normalizeCode(code)] ?? null;
@@ -69,64 +72,36 @@ function forHousehold(household: string): FamilyLink | null {
   return Object.values(load()).find((l) => l.household === household) ?? null;
 }
 
-// The caretaker's view of the link: the server is the record. It is read now, every 20 seconds, and when the tab
-// regains focus, so "Joined" appears when the parent joins on their own phone.
+// The caretaker's family code. The browser keeps the last answer and reads the server once when that answer is stale.
 export function useFamilyLink(household: string, parentName: string, caretakerName: string, enabled = true) {
-  const [link, setLink] = useState<FamilyLink | null>(() => forHousehold(household));
-  const [error, setError] = useState("");
+  const dispatch = useAppDispatch();
+  const toast = useToast();
+  const cached = useAppSelector((state) => (household ? state.care.byId[household]?.family ?? null : null));
   const [busy, setBusy] = useState(false);
+  const link = cached ?? forHousehold(household);
 
   useEffect(() => {
-    if (!enabled) return;
-    let live = true;
-    const pull = async () => {
-      try {
-        const remote = await fetchPairing(household);
-        if (!live) return;
-        setError("");
-        if (remote) {
-          const store = load();
-          for (const [code, l] of Object.entries(store)) if (l.household === household && code !== remote.code) delete store[code];
-          store[remote.code] = remote;
-          save(store);
-        }
-        setLink(remote);
-      } catch {
-        if (live) setLink((prev) => prev ?? forHousehold(household));
-      }
-    };
-    void pull();
-    const id = window.setInterval(() => {
-      if (document.visibilityState === "visible") void pull();
-    }, 20_000);
-    const onFocus = () => void pull();
-    window.addEventListener("focus", onFocus);
-    return () => {
-      live = false;
-      window.clearInterval(id);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [household, enabled]);
+    if (!enabled || !household) return;
+    void dispatch(loadFamilyLink(household));
+  }, [dispatch, enabled, household]);
 
   async function create() {
     setBusy(true);
-    setError("");
     try {
-      const remote = await createPairingLink(household, caretakerName, parentName);
+      const remote = await dispatch(createFamilyLink({ householdId: household, caretakerName, parentName })).unwrap();
       const store = load();
-      for (const [code, l] of Object.entries(store)) if (l.household === household) delete store[code];
-      store[remote.code] = remote;
+      for (const [code, item] of Object.entries(store)) if (item.household === household && code !== remote.family.code) delete store[code];
+      store[remote.family.code] = remote.family;
       save(store);
-      setLink(remote);
     } catch {
       // A code made only on this device would not work on the parent's phone, so none is made.
-      setError("Could not make a family code. Check the connection and try again.");
+      toast("Could not make a family code. Check the connection and try again.", "bad");
     } finally {
       setBusy(false);
     }
   }
 
-  return { link, create, error, busy };
+  return { link, create, busy };
 }
 
 // The household a family code belongs to: this browser's record first, then the API.

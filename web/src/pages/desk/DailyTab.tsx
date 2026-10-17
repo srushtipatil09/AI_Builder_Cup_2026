@@ -8,16 +8,15 @@ export type Props = {
   name: string;
   medicines: Medicine[];
   onOpenReminders: () => void;
-  onConfirmReminder: (id: string) => void;
 };
 
 const moods: Mood[] = ["Good", "Okay", "Low"];
 
 // The static synthetic view. RoutineTab falls back to it when the demo cannot reach the API.
-export function StaticDemoRoutine({ demo, name, medicines, onOpenReminders, onConfirmReminder }: Props) {
+export function StaticDemoRoutine({ demo, name, medicines, onOpenReminders }: Props) {
   // Urgent reminders always come first on this tab.
   const urgent = (
-    <UrgentReminders medicines={medicines} name={name} onOpen={onOpenReminders} onConfirm={onConfirmReminder} />
+    <UrgentReminders medicines={medicines} name={name} onOpen={onOpenReminders} />
   );
 
   if (!demo) {

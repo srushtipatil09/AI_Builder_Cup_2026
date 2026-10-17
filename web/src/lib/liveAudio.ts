@@ -26,6 +26,8 @@ export class LiveAudio {
   private impactAt = 0;
   private impactsSent = 0;
   private collecting = 0;
+  // Paused: no microphone frames leave the browser and nothing new is played.
+  paused = false;
 
   async start(): Promise<void> {
     this.ctx = new AudioContext({ latencyHint: "interactive" });
@@ -37,6 +39,7 @@ export class LiveAudio {
     this.node = new AudioWorkletNode(this.ctx, "pcm-capture");
     this.node.port.onmessage = (e) => {
       const pcm = e.data as ArrayBuffer;
+      if (this.paused) return;
       const level = rms(pcm);
       if (level > 0.02) {
         this.lastVoiceAt = performance.now();
@@ -72,7 +75,7 @@ export class LiveAudio {
   // Queue a chunk of 24 kHz PCM16 so chunks play back to back without gaps.
   play(pcm: ArrayBuffer): void {
     const ctx = this.ctx;
-    if (!ctx) return;
+    if (!ctx || this.paused) return;
     if (this.waiting) {
       this.waiting = false;
       this.gaps.push(Math.round(performance.now() - this.lastVoiceAt));
@@ -107,6 +110,15 @@ export class LiveAudio {
     }
     this.sources.clear();
     this.nextTime = 0;
+  }
+
+  pause(): void {
+    this.paused = true;
+    this.interrupt();
+  }
+
+  resume(): void {
+    this.paused = false;
   }
 
   // Median of the measured gaps, or undefined when no turn was heard.

@@ -1,5 +1,5 @@
 /* App shell cache. Check-ins are notifications, not a background microphone. */
-const CACHE = "saathi-shell-v1";
+const CACHE = "saathi-shell-v3";
 const DEV = new URL(self.location.href).searchParams.get("mode") === "dev";
 const SHELL = ["/app", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
@@ -59,27 +59,36 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
-// Push from Firebase Cloud Messaging. The text is generic by design: no name, quote, or medicine.
+// Push from Firebase Cloud Messaging. The body is the line the family wrote. A dose is never included.
 self.addEventListener("push", (event) => {
   let title = "Saathi";
   let body = "New Saathi update";
   let target = "/app";
+  let speak = "";
   try {
     const data = event.data ? event.data.json() : {};
     const note = data.notification || {};
-    title = note.title || title;
-    body = note.body || body;
-    target = (data.fcmOptions && data.fcmOptions.link) || (data.data && data.data.link) || target;
+    const extra = data.data || {};
+    title = note.title || extra.title || title;
+    body = note.body || extra.body || body;
+    speak = extra.speak || "";
+    target = (data.fcmOptions && data.fcmOptions.link) || extra.link || target;
   } catch (err) {
     // keep the generic text
   }
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon: "/icons/icon-192.png",
-      badge: "/icons/favicon-32.png",
-      data: { link: target },
-    }),
+    (async () => {
+      await self.registration.showNotification(title, {
+        body,
+        icon: "/icons/icon-192.png",
+        badge: "/icons/favicon-32.png",
+        data: { link: target, speak: speak || body },
+      });
+      const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of open) {
+        client.postMessage({ type: "saathi-speak", text: speak || body });
+      }
+    })(),
   );
 });
 

@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { joinUrl, type FamilyLink } from "../../family";
+import { useToast } from "../../toast";
 
 type Props = {
   link: FamilyLink | null;
   name: string;
   demo: boolean;
   onCreate: () => void;
-  error?: string;
   busy?: boolean;
 };
 
@@ -15,9 +15,9 @@ function formatWhen(iso: string) {
 }
 
 // Pairs the caretaker's desk with the parent's phone: one short code, one join link.
-export function FamilyCard({ link, name, demo, onCreate, error, busy }: Props) {
+export function FamilyCard({ link, name, demo, onCreate, busy }: Props) {
   const who = name || "your parent";
-  const [note, setNote] = useState("");
+  const toast = useToast();
   const [confirmNew, setConfirmNew] = useState(false);
   const url = link ? joinUrl(link.code) : "";
   const canShare = typeof navigator !== "undefined" && "share" in navigator;
@@ -25,9 +25,9 @@ export function FamilyCard({ link, name, demo, onCreate, error, busy }: Props) {
   async function copy() {
     try {
       await navigator.clipboard.writeText(url);
-      setNote("Link copied. Send it to " + who + "’s phone.");
+      toast("Link copied. Send it to " + who + "’s phone.", "ok");
     } catch {
-      setNote("Copy did not work here. Select the link below and copy it.");
+      toast("Copy did not work here. Select the link below and copy it.", "bad");
     }
   }
 
@@ -86,9 +86,6 @@ export function FamilyCard({ link, name, demo, onCreate, error, busy }: Props) {
             <span className="visually-hidden">Join link: </span>
             {url}
           </p>
-          <p role="status" className="saved">
-            {note}
-          </p>
           <div className="family-foot">
             {confirmNew ? (
               <>
@@ -99,7 +96,6 @@ export function FamilyCard({ link, name, demo, onCreate, error, busy }: Props) {
                   onClick={() => {
                     onCreate();
                     setConfirmNew(false);
-                    setNote("");
                   }}
                 >
                   Make a new code
@@ -126,11 +122,6 @@ export function FamilyCard({ link, name, demo, onCreate, error, busy }: Props) {
         </button>
       )}
       {demo ? <p className="family-demo">Demo: open the join page in a new tab, join, and come back here.</p> : null}
-      {error ? (
-        <p className="field-error" role="alert">
-          {error}
-        </p>
-      ) : null}
     </section>
   );
 }

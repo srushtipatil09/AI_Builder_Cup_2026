@@ -41,7 +41,7 @@ export function AuthLayout({ eyebrow, title, lede, children, aside, demoLinks = 
           <p className="m-auth-brand" lang="hi">
             साथी
           </p>
-          <p className="m-auth-tag">A Hindi companion that speaks first.</p>
+          <p className="m-auth-tag">A companion that speaks first, in your language.</p>
         </header>
         <main id="main" className="m-auth-sheet" aria-labelledby="auth-title">
           <h1 id="auth-title">{title}</h1>
@@ -49,7 +49,7 @@ export function AuthLayout({ eyebrow, title, lede, children, aside, demoLinks = 
           {children}
           {demoLinks ? (
             <div className="m-auth-demo">
-              <p>Try a demo. No account form; the household is synthetic.</p>
+              <p>Try a demo. No login; shared demo accounts where changes are saved.</p>
               <div className="m-auth-demo-links">
                 <Link to="/app?demo=1">Kamla&rsquo;s phone</Link>
                 <Link to="/care?demo=1">Caretaker app</Link>
@@ -75,7 +75,7 @@ export function AuthLayout({ eyebrow, title, lede, children, aside, demoLinks = 
           {demoLinks ? (
             <div className="auth-demo">
               <p>
-                <strong>Just looking?</strong> Neither demo needs an account form. The household is synthetic.
+                <strong>Just looking?</strong> Neither demo needs a login. They are shared demo accounts: changes are saved and everyone sees them.
               </p>
               <div className="auth-demo-links">
                 <Link className="button button-light" to="/app?demo=1">

@@ -24,7 +24,7 @@ from saathi.providers.gemini import get_genai_client
 
 logger = logging.getLogger(__name__)
 
-Kind = Literal["add_memory", "add_person", "set_checkin", "set_quiet_hours", "add_reminder", "unknown"]
+Kind = Literal["add_memory", "add_person", "set_checkin", "set_quiet_hours", "add_reminder", "question", "unknown"]
 
 
 class AskIntent(BaseModel):
@@ -38,21 +38,24 @@ class AskIntent(BaseModel):
     quiet_start_24h: str = ""
     quiet_end_24h: str = ""
     reminder_name: str = ""
+    reminder_kind: Literal["medicine", "exercise", "call", "meal", "other"] = "other"
     reminder_dose_as_typed: str = ""
     reminder_schedule: Literal["Once", "Daily", "none"] = "none"
     reminder_date: str = ""  # YYYY-MM-DD
     reminder_note: str = ""
     asks_for_medical_advice: bool = False
+    question_days: int = 0  # for a question: how many days back, 0 when not said
 
 
 class Proposal(BaseModel):
     id: str
-    status: Literal["awaiting_confirmation", "applied", "cancelled", "needs_more"] = "awaiting_confirmation"
+    status: Literal["awaiting_confirmation", "applied", "cancelled", "needs_more", "answered"] = "awaiting_confirmation"
     kind: Kind = "unknown"
     readback: str = ""
     question: str = ""
     payload: dict = Field(default_factory=dict)
     hash: str = ""
+    answer: str = ""
     created_at: str = ""
 
 
@@ -62,8 +65,9 @@ Choose kind:
 - add_person: a NEW person who matters (name, relation, city if given). A correction about who someone is (for example "Meena is her sister, not her daughter") is add_memory with the sentence as written.
 - set_checkin: the daily check-in time. time_24h as HH:MM.
 - set_quiet_hours: a quiet period. quiet_start_24h and quiet_end_24h as HH:MM.
-- add_reminder: a reminder. reminder_name, reminder_schedule Once or Daily, time_24h, reminder_date (YYYY-MM-DD) for Once, reminder_note. Copy any dose text exactly as typed into reminder_dose_as_typed; leave it empty if none was typed. Never invent a dose.
-- unknown: anything else, or a question.
+- add_reminder: a reminder. reminder_kind is medicine, exercise (a walk, yoga), call (phone someone), meal (food or water), or other. reminder_name, reminder_schedule Once or Daily, time_24h, reminder_date (YYYY-MM-DD) for Once, reminder_note. Copy any dose text exactly as typed into reminder_dose_as_typed; leave it empty if none was typed. Never invent a dose.
+- question: the caretaker ASKS how the parent is or was, what happened, how the days went, or whether something was done (for example "how is Kamla since 4 days"). question_days is how many days back they mean (4 for "since 4 days", 7 for "this week", 1 for "today"); 0 if not said.
+- unknown: anything else.
 Set asks_for_medical_advice true if the caretaker asks what dose to give, what medicine to take, or for a diagnosis.
 Leave a field empty when the note does not say it. Do not guess times or dates. Today is {today}.
 
@@ -95,6 +99,8 @@ def interpret(text: str) -> AskIntent:
             return AskIntent(**json.loads(response.text))
     except Exception as exc:
         logger.warning("Ask interpretation failed (%s); keeping the note as a memory", exc)
+    if text.strip().endswith("?"):
+        return AskIntent(kind="question")
     return AskIntent(kind="add_memory", memory_text=text.strip())
 
 
@@ -134,6 +140,14 @@ def build_proposal(household_id: str, text: str, author: str, intent: Optional[A
             question="I cannot suggest a medicine, a dose, or a diagnosis. Please ask the doctor. I can save a reminder using the exact words you give me.",
         )
 
+    if intent.kind == "question":
+        from saathi.asks.answer import answer_question
+
+        return Proposal(
+            id=pid, status="answered", kind="question", created_at=now,
+            answer=answer_question(household_id, text, intent.question_days or 3),
+        )
+
     payload: dict
     readback: str
     if intent.kind == "add_memory" and intent.memory_text.strip():
@@ -167,7 +181,7 @@ def build_proposal(household_id: str, text: str, author: str, intent: Optional[A
         if dose and _squash(dose) not in _squash(text):
             dose = ""  # a dose the caretaker did not type is dropped
         payload = {
-            "name": intent.reminder_name.strip(), "dose": dose, "schedule": schedule,
+            "kind": intent.reminder_kind, "name": _sentence_case(intent.reminder_name.strip()), "dose": dose, "schedule": schedule,
             "date": intent.reminder_date if schedule == "Once" else "", "time": intent.time_24h,
             "note": intent.reminder_note.strip(),
         }
@@ -221,13 +235,18 @@ def confirm(household_id: str, proposal_id: str, given_hash: str) -> tuple[Propo
         desk.profile.quietHours = f"{p['start']}-{p['end']}"
     elif proposal.kind == "add_reminder":
         desk.medicines.append(Medicine(
-            id=f"med-{uid}", name=p["name"], dose=p["dose"], schedule=p["schedule"], date=p["date"],
+            id=f"med-{uid}", kind=p.get("kind", "medicine"), name=p["name"], dose=p["dose"], schedule=p["schedule"], date=p["date"],
             time=p["time"], note=p["note"],
         ))
     repo.save_desk(household_id, desk)
     proposal.status = "applied"
     repo.doc_set(f"households/{household_id}/proposals/{proposal.id}", {"status": "applied", "applied_at": now})
     return proposal, desk
+
+
+def _sentence_case(name: str) -> str:
+    """'walk' reads as 'Walk' on the card. The rest is kept as typed."""
+    return name[:1].upper() + name[1:]
 
 
 def cancel(household_id: str, proposal_id: str) -> None:

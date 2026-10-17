@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// Care desk records. Until Firestore writes land, they are kept in this browser only.
+// Care desk records. Each edit is saved to Firestore through the store (store/care.ts); this browser keeps a copy.
 
 export type Profile = {
   preferredName: string;
@@ -17,20 +17,87 @@ export type Person = { id: string; name: string; relation: string; city: string 
 // A caretaker fact. Source is always caregiver; the author and time are shown on the row.
 export type Memory = { id: string; text: string; author: string; addedAt: string; editedAt?: string };
 
-// The dose is stored exactly as the family typed it. Saathi reads it back and never suggests one.
+export type ReminderKind = "medicine" | "exercise" | "call" | "meal" | "other";
+
+// Labels for each kind of reminder. For a medicine, the detail is the dose, copied exactly as written.
+export const reminderKinds: Record<
+  ReminderKind,
+  { label: string; name: string; namePlaceholder: string; detail: string; detailPlaceholder: string; notePlaceholder: string }
+> = {
+  medicine: {
+    label: "Medicine",
+    name: "Medicine name",
+    namePlaceholder: "As written on the strip",
+    detail: "Dose, as the doctor wrote it",
+    detailPlaceholder: "Copied from the prescription",
+    notePlaceholder: "e.g. after breakfast",
+  },
+  exercise: {
+    label: "Exercise",
+    name: "Activity",
+    namePlaceholder: "e.g. Morning walk",
+    detail: "How long",
+    detailPlaceholder: "e.g. 20 minutes",
+    notePlaceholder: "e.g. in the park, with a friend",
+  },
+  call: {
+    label: "Call",
+    name: "Who to call",
+    namePlaceholder: "e.g. Rahul",
+    detail: "Why",
+    detailPlaceholder: "e.g. his birthday",
+    notePlaceholder: "e.g. he is free after 7",
+  },
+  meal: {
+    label: "Food",
+    name: "Meal or drink",
+    namePlaceholder: "e.g. Lunch",
+    detail: "What",
+    detailPlaceholder: "e.g. dal chawal from the fridge",
+    notePlaceholder: "e.g. warm it first",
+  },
+  other: {
+    label: "Other",
+    name: "Reminder",
+    namePlaceholder: "e.g. Water the tulsi",
+    detail: "Detail",
+    detailPlaceholder: "Optional",
+    notePlaceholder: "Anything Saathi should add",
+  },
+};
+
+// Older reminders were all medicines and have no kind.
+export function kindOf(m: { kind?: ReminderKind }): ReminderKind {
+  return m.kind && m.kind in reminderKinds ? m.kind : "medicine";
+}
+
+// Any reminder: a medicine, a walk, a call, a meal. The name keeps its history.
+// A dose is stored exactly as the family typed it. Saathi reads it back and never suggests one.
 export type Medicine = {
   id: string;
+  kind?: ReminderKind;
   name: string;
+  // The dose for a medicine; a short detail for any other kind.
   dose: string;
   schedule: "Once" | "Daily";
   // Only for "Once": the local date, YYYY-MM-DD.
   date?: string;
   time: string;
   note: string;
-  // The local date the parent's completion was last reported, and who recorded it.
+  // The local date the parent told Saathi they are doing it, and the name they go by.
   confirmedOn?: string;
   confirmedBy?: string;
+  // The local date a phone accepted the reminder. That is not a confirmation.
+  seenOn?: string;
 };
+
+// Confirmed only when the parent said so. A caretaker tap, or a delivered push, is "seen".
+export function reminderStatus(m: Medicine, parentName: string, stamp = today()): "confirmed" | "seen" | "open" {
+  const parent = parentName.trim();
+  if (m.confirmedOn === stamp && parent && m.confirmedBy === parent) return "confirmed";
+  if (m.seenOn === stamp || m.confirmedOn === stamp) return "seen";
+  return "open";
+}
 
 export type Contact = { id: string; name: string; relation: string; phone: string; local: boolean };
 
@@ -74,9 +141,11 @@ export function formatDate(value: string): string {
 }
 
 // The words Saathi will say for a reminder, built only from what the family typed.
-export function readBack(m: Pick<Medicine, "name" | "dose" | "schedule" | "date" | "time" | "note">): string {
+export function readBack(m: Pick<Medicine, "kind" | "name" | "dose" | "schedule" | "date" | "time" | "note">): string {
+  // "Who to call" holds a name, so a call reads back as "Call Rahul".
+  const name = m.kind === "call" && m.name && !/^call/i.test(m.name) ? `Call ${m.name}` : m.name;
   const when = m.schedule === "Once" && m.date ? `on ${formatDate(m.date)} at ${formatClock(m.time)}` : `every day at ${formatClock(m.time)}`;
-  return [m.name, m.dose, when, m.note].filter(Boolean).join(", ") + ".";
+  return [name, m.dose, when, m.note].filter(Boolean).join(", ") + ".";
 }
 
 // Loose check for an Indian or international phone number: digits with optional +, spaces, or dashes.
@@ -112,15 +181,16 @@ export function demoDesk(): Desk {
     memories: [],
     // Synthetic. Set 20 minutes after the demo opens so the Routine tab shows an urgent reminder.
     medicines: [
-      { id: "bp", name: "BP tablet", dose: "", schedule: "Daily", time: soon(20), note: "" },
+      { id: "bp", kind: "medicine", name: "BP tablet", dose: "", schedule: "Daily", time: soon(20), note: "" },
+      { id: "walk", kind: "exercise", name: "Evening walk", dose: "20 minutes", schedule: "Daily", time: "18:00", note: "" },
     ],
     contacts: [{ id: "rahul", name: "Rahul", relation: "Son, caretaker", phone: "", local: false }],
   };
 }
 
-export function blankDesk(preferredName: string, language: string): Desk {
+export function blankDesk(preferredName: string, language: string, city = ""): Desk {
   return {
-    profile: { preferredName, language, city: "", persona: "Saathi", checkIn: "", quietHours: "" },
+    profile: { preferredName, language, city, persona: "Saathi", checkIn: "", quietHours: "" },
     people: [],
     memories: [],
     medicines: [],
@@ -128,148 +198,64 @@ export function blankDesk(preferredName: string, language: string): Desk {
   };
 }
 
-function read(key: string, seed: Desk): Desk {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return seed;
-    return { ...seed, ...(JSON.parse(raw) as Partial<Desk>) };
-  } catch {
-    return seed;
-  }
-}
-
-import { fetchDesk, saveDesk } from "./lib/api";
+import { deskEdited, loadCareSnapshot, saveCareDesk } from "./store/care";
+import { useAppDispatch, useAppSelector } from "./store";
+import { DEMO_HOUSEHOLD_ID } from "./store/storage";
 
 export type SyncState = "loading" | "synced" | "saving" | "offline";
 
 const SAVE_DELAY_MS = 600;
 const RETRY_MS = 10_000;
-const REFRESH_MS = 20_000;
 
-// The care desk, kept in sync with Firestore through the API.
-// - Nothing is sent to the server until its copy has been loaded, so a new device cannot overwrite it with a blank desk.
-// - Edits are saved after a short pause. A failed save is kept and retried; the status says so.
-// - With no unsaved edits, the desk refreshes every 20 seconds, when the tab regains focus, and when the network returns.
+// The care desk for this browser. localStorage is the copy Redux starts from, so opening the page
+// does not read Firestore again while that copy is still fresh. An edit is saved once, after a short pause.
 export function useDesk(key: string, seed: () => Desk) {
-  const [desk, setDeskState] = useState<Desk>(() => read(key, seed()));
-  const [sync, setSync] = useState<SyncState>("loading");
-  const [syncedAt, setSyncedAt] = useState<number | null>(null);
-  const [syncError, setSyncError] = useState("");
-  const dirty = useRef(false);
-  const loaded = useRef(false);
-  const saving = useRef(false);
-  const latest = useRef(desk);
-  latest.current = desk;
-  const isDemo = key.includes("demo");
-  const hhId = key.replace("saathi.desk.", "");
+  const demo = key.includes("demo");
+  const householdId = demo ? DEMO_HOUSEHOLD_ID : key.replace("saathi.desk.", "");
+  const dispatch = useAppDispatch();
+  const row = useAppSelector((state) => state.care.byId[householdId]);
+  const fallback = useState(seed)[0];
+  const seedRef = useRef(seed);
+  seedRef.current = seed;
+  const desk = row?.desk ?? fallback;
 
-  const remember = useCallback(
-    (next: Desk) => {
-      try {
-        localStorage.setItem(key, JSON.stringify(next));
-      } catch {
-        // Private mode: edits last until the tab closes.
-      }
+  const setDesk: React.Dispatch<React.SetStateAction<Desk>> = useCallback(
+    (update) => {
+      const next = typeof update === "function" ? (update as (current: Desk) => Desk)(desk) : update;
+      dispatch(deskEdited({ householdId, desk: next }));
     },
-    [key],
+    [desk, dispatch, householdId],
   );
 
-  const setDesk: React.Dispatch<React.SetStateAction<Desk>> = useCallback((update) => {
-    dirty.current = true;
-    setDeskState((prev) => (typeof update === "function" ? (update as (d: Desk) => Desk)(prev) : update));
-  }, []);
-
-  const load = useCallback(async () => {
-    if (saving.current) return;
-    try {
-      const server = await fetchDesk(hhId, isDemo);
-      loaded.current = true;
-      setSyncError("");
-      if (dirty.current) {
-        // Unsaved local edits win; they are saved next.
-        setSyncedAt(Date.now());
-        return;
-      }
-      const base = seed();
-      // A brand-new server desk is empty; keep the names entered at signup and save them.
-      const profile = { ...base.profile };
-      for (const [k, v] of Object.entries(server.profile ?? {})) {
-        if (v !== "" && v !== undefined && v !== null) (profile as Record<string, unknown>)[k] = v;
-      }
-      const next = { ...base, ...server, profile };
-      remember(next);
-      setDeskState(next);
-      if (!server.profile?.preferredName && profile.preferredName) dirty.current = true;
-      setSync("synced");
-      setSyncedAt(Date.now());
-    } catch (err) {
-      setSync("offline");
-      setSyncError(err instanceof Error ? err.message : "Could not reach the server.");
-    }
-  }, [hhId, isDemo, remember]);
-
-  const flush = useCallback(async () => {
-    if (!loaded.current || !dirty.current || saving.current) return;
-    saving.current = true;
-    setSync("saving");
-    const sending = latest.current;
-    dirty.current = false;
-    try {
-      await saveDesk(hhId, sending, isDemo);
-      remember(sending);
-      setSync(dirty.current ? "saving" : "synced");
-      setSyncedAt(Date.now());
-      setSyncError("");
-    } catch (err) {
-      dirty.current = true;
-      setSync("offline");
-      setSyncError(err instanceof Error ? err.message : "Could not save.");
-    } finally {
-      saving.current = false;
-    }
-  }, [hhId, isDemo, remember]);
-
-  // First load, then keep fresh.
   useEffect(() => {
-    loaded.current = false;
-    dirty.current = false;
-    setSync("loading");
-    void load();
-    const refresh = () => {
-      if (document.visibilityState !== "visible") return;
-      if (dirty.current) void flush();
-      else void load();
-    };
-    const id = window.setInterval(refresh, REFRESH_MS);
-    document.addEventListener("visibilitychange", refresh);
-    window.addEventListener("online", refresh);
-    return () => {
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", refresh);
-      window.removeEventListener("online", refresh);
-    };
-  }, [load, flush]);
+    void dispatch(loadCareSnapshot({ householdId, demo, seed: seedRef.current() }));
+  }, [demo, dispatch, householdId]);
 
-  // Save after edits, and retry while offline.
   useEffect(() => {
-    if (!dirty.current) return;
-    remember(desk);
-    const wait = sync === "offline" ? RETRY_MS : SAVE_DELAY_MS;
+    if (!row?.dirty || !row.loaded) return;
+    const wait = row.sync === "offline" ? RETRY_MS : SAVE_DELAY_MS;
     const id = window.setTimeout(() => {
-      if (!loaded.current) void load().then(() => flush());
-      else void flush();
+      void dispatch(saveCareDesk({ householdId, demo }));
     }, wait);
     return () => window.clearTimeout(id);
-  }, [desk, sync, flush, load, remember]);
-
-  function reset() {
-    setDesk(seed());
-  }
+  }, [demo, dispatch, householdId, row?.desk, row?.dirty, row?.loaded, row?.sync]);
 
   const retry = useCallback(() => {
-    if (dirty.current) void flush();
-    else void load();
-  }, [flush, load]);
+    if (row?.dirty) void dispatch(saveCareDesk({ householdId, demo }));
+    else void dispatch(loadCareSnapshot({ householdId, demo, seed: seedRef.current(), force: true }));
+  }, [demo, dispatch, householdId, row?.dirty]);
 
-  return { desk, setDesk, reset, sync, syncedAt, syncError, retry };
+  function reset() {
+    setDesk(seedRef.current());
+  }
+
+  return {
+    desk,
+    setDesk,
+    reset,
+    sync: row?.sync ?? "loading",
+    syncedAt: row?.syncedAt ?? null,
+    syncError: row?.error ?? "",
+    retry,
+  };
 }

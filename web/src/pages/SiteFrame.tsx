@@ -25,14 +25,20 @@ export function SiteFrame({ children, home = false }: Props) {
       </a>
       <header className="site-header">
         <div className="site-bar">
-          <Link className="brand" to="/" lang="hi">
-            साथी
+          <Link className="brand" to="/">
+            <img className="brand-logo" src="/brand/saathi-logo.png" width="648" height="422" alt="Saathi" />
           </Link>
           <nav className="site-nav" aria-label="Primary">
             {phone ? null : pathname === "/" ? (
-              <a href="#day">A day with Saathi</a>
+              <>
+                <a href="#languages">Languages</a>
+                <a href="#day">A day with Saathi</a>
+              </>
             ) : (
-              <Link to="/#day">A day with Saathi</Link>
+              <>
+                <Link to="/#languages">Languages</Link>
+                <Link to="/#day">A day with Saathi</Link>
+              </>
             )}
             <Link className="nav-demo" to="/app?demo=1">
               Kamla Sharma demo
@@ -70,10 +76,8 @@ export function SiteFrame({ children, home = false }: Props) {
       <footer className="site-footer">
         <div className="site-foot">
           <div className="foot-about">
-            <p className="footer-name" lang="hi">
-              साथी
-            </p>
-            <p>A Hindi companion that starts the conversation for a parent whose family lives somewhere else.</p>
+            <img className="footer-name brand-logo" src="/brand/saathi-logo.png" width="648" height="422" alt="Saathi" />
+            <p>A companion that starts the conversation, in the parent&rsquo;s own language, for a parent whose family lives somewhere else.</p>
           </div>
           <nav aria-label="Footer">
             <p className="foot-head">Get started</p>
@@ -91,7 +95,7 @@ export function SiteFrame({ children, home = false }: Props) {
             </ul>
           </div>
         </div>
-        <p className="foot-base">The demo household is synthetic, and its data is labeled.</p>
+        <p className="foot-base">The demo accounts are shared and need no login. Their data is synthetic and labeled.</p>
       </footer>
     </div>
   );

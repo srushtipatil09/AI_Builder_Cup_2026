@@ -2,7 +2,7 @@
   "id": "/app",
   "name": "Saathi",
   "short_name": "Saathi",
-  "description": "A Hindi companion that starts the conversation for a parent whose family lives somewhere else.",
+  "description": "A companion that starts the conversation, in the parent's own language, for a parent whose family lives somewhere else.",
   "start_url": "/app",
   "scope": "/",
   "display": "standalone",

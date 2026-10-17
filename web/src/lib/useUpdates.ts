@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchMetrics, fetchUpdates, type Metrics, type Updates } from "./api";
+import { useCallback, useEffect } from "react";
+import type { Metrics, Updates } from "./api";
+import { loadCareSnapshot } from "../store/care";
+import { useAppDispatch, useAppSelector } from "../store";
+import { POLL_MS } from "../store/storage";
 
 export type UpdatesState = {
   updates: Updates | null;
@@ -9,44 +12,43 @@ export type UpdatesState = {
   refresh: () => void;
 };
 
-// Polls the care desk data every 10 seconds while the tab is visible. Nothing is stored in this browser.
-export function useUpdates(householdId: string, enabled = true, intervalMs = 10_000): UpdatesState {
-  const [updates, setUpdates] = useState<Updates | null>(null);
-  const [metrics, setMetrics] = useState<Metrics | null>(null);
-  const [error, setError] = useState(false);
-  const [loadedAt, setLoadedAt] = useState<number | null>(null);
-  const alive = useRef(true);
-
-  const load = useCallback(async () => {
-    if (!householdId || !enabled) return;
-    try {
-      const [u, m] = await Promise.all([fetchUpdates(householdId), fetchMetrics(householdId, 14)]);
-      if (!alive.current) return;
-      setUpdates(u);
-      setMetrics(m);
-      setError(false);
-      setLoadedAt(Date.now());
-    } catch {
-      if (alive.current) setError(true);
-    }
-  }, [householdId, enabled]);
+// The routine numbers live in the same Redux record as the desk. A fresh local copy is shown as-is.
+// refresh() is the one read after the caretaker runs something that should change those numbers.
+export function useUpdates(householdId: string, enabled = true): UpdatesState {
+  const dispatch = useAppDispatch();
+  const row = useAppSelector((state) => (householdId ? state.care.byId[householdId] : undefined));
+  const demo = householdId.startsWith("demo");
 
   useEffect(() => {
-    alive.current = true;
-    void load();
-    const id = window.setInterval(() => {
-      if (document.visibilityState === "visible") void load();
-    }, intervalMs);
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void load();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      alive.current = false;
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [load, intervalMs]);
+    if (!enabled || !householdId) return;
+    void dispatch(loadCareSnapshot({ householdId, demo }));
+  }, [demo, dispatch, enabled, householdId]);
 
-  return { updates, metrics, error, loadedAt, refresh: () => void load() };
+  // While the desk is open and visible it asks again every minute, and at once when the tab comes back into view.
+  // That is how a conversation the parent just had, or an edit by another caretaker, reaches this screen.
+  useEffect(() => {
+    if (!enabled || !householdId) return;
+    const poll = () => {
+      if (document.visibilityState === "visible") void dispatch(loadCareSnapshot({ householdId, demo, maxAgeMs: POLL_MS - 5000 }));
+    };
+    const timer = window.setInterval(poll, POLL_MS);
+    document.addEventListener("visibilitychange", poll);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", poll);
+    };
+  }, [demo, dispatch, enabled, householdId]);
+
+  const refresh = useCallback(() => {
+    if (!householdId) return;
+    void dispatch(loadCareSnapshot({ householdId, demo, force: true }));
+  }, [demo, dispatch, householdId]);
+
+  return {
+    updates: row?.updates ?? null,
+    metrics: row?.metrics ?? null,
+    error: Boolean(row?.error) && !row?.updates,
+    loadedAt: row?.readAt || null,
+    refresh,
+  };
 }
