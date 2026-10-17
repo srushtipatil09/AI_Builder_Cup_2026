@@ -59,9 +59,9 @@ class Settings(BaseSettings):
 def cors_origins(settings: Settings) -> list[str]:
     """Exact origins the browser may call the API from, with credentials."""
     origins = [settings.web_origin, "http://localhost:5173", "http://127.0.0.1:5173"]
-    project = settings.firebase_project_id or settings.google_cloud_project
-    if project:
-        origins += [f"https://{project}.web.app", f"https://{project}.firebaseapp.com"]
+    for project in (settings.firebase_project_id, settings.google_cloud_project):
+        if project:
+            origins += [f"https://{project}.web.app", f"https://{project}.firebaseapp.com"]
     origins += [o.strip() for o in settings.cors_extra_origins.split(",") if o.strip()]
     return [o.rstrip("/") for o in dict.fromkeys(origins) if o]
 

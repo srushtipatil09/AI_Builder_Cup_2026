@@ -20,7 +20,7 @@
 [CmdletBinding()]
 param(
     [string]$GcpProject = "saathi-511717",
-    [string]$FirebaseProject = "saathi-511717",
+    [string]$FirebaseProject = "saathi-5afcf",
     [string]$Region = "us-central1",
     [switch]$DryRun
 )

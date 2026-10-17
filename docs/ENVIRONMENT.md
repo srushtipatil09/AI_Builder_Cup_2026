@@ -6,7 +6,7 @@ Fill this file when a command actually succeeds. Do not invent a project id or a
 | --- | --- |
 | Date checked | 16 Oct 2026 |
 | Google Cloud project | `saathi-511717` |
-| Firebase project | `saathi-511717` |
+| Firebase project | `saathi-5afcf` |
 | Vertex / Live region | `us-central1` (`CLOUD_REGION` default) |
 | Media bucket location | `asia-south1`, as recorded for `saathi-511717-media` in [PROGRESS.md](PROGRESS.md). The code does not set the bucket region |
 | BigQuery location | `US` |

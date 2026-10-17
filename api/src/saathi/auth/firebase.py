@@ -35,6 +35,12 @@ def ensure_firebase_initialized() -> bool:
     try:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(options={"projectId": project_id})
+        gcp_project = settings.google_cloud_project
+        if gcp_project and gcp_project != project_id and "gcp" not in firebase_admin._apps:
+            try:
+                firebase_admin.initialize_app(options={"projectId": gcp_project}, name="gcp")
+            except Exception:
+                pass
         _firebase_initialized = True
         return True
     except Exception as exc:
@@ -69,7 +75,15 @@ def actor_from_token(
     # Real Firebase Auth Verification
     if ensure_firebase_initialized():
         try:
-            decoded = firebase_auth.verify_id_token(token, clock_skew_seconds=60)
+            try:
+                decoded = firebase_auth.verify_id_token(token, clock_skew_seconds=60)
+            except Exception as first_exc:
+                if "gcp" in firebase_admin._apps:
+                    decoded = firebase_auth.verify_id_token(
+                        token, app=firebase_admin.get_app("gcp"), clock_skew_seconds=60
+                    )
+                else:
+                    raise first_exc
             uid = decoded.get("uid", "")
             return ActorContext(
                 uid=uid,
