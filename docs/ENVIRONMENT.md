@@ -6,7 +6,7 @@ Fill this file when a command actually succeeds. Do not invent a project id or a
 | --- | --- |
 | Date checked | 16 Oct 2026 |
 | Google Cloud project | `saathi-511717` |
-| Firebase project | `saathi-5afcf` |
+| Firebase project | `saathi-511717` |
 | Vertex / Live region | `us-central1` (`CLOUD_REGION` default) |
 | Media bucket location | `asia-south1`, as recorded for `saathi-511717-media` in [PROGRESS.md](PROGRESS.md). The code does not set the bucket region |
 | BigQuery location | `US` |
@@ -15,7 +15,7 @@ Fill this file when a command actually succeeds. Do not invent a project id or a
 | Embedding model | `text-multilingual-embedding-002` |
 | Uploads bucket | `UPLOADS_BUCKET`, or `{project}-media` when empty. Progress records `saathi-511717-media`. The earlier `saathi-511717-private` bucket is unused |
 | API URL | https://saathi-api-ikr6m7lina-uc.a.run.app (Cloud Run `saathi-api`, us-central1). `/health` returned 200 on 16 Oct 2026 |
-| Web URL | https://saathi-5afcf.web.app (Firebase Hosting). Built with `VITE_API_URL` set to the API URL. The caretaker demo loaded and called the API on 16 Oct 2026 |
+| Web URL | https://saathi-511717.web.app (Firebase Hosting). Built with `VITE_API_URL` set to the API URL. |
 | Git revision | `saathi-api-00007-l7g` and `saathi-worker-00008-drj` (16 Oct 2026, about 18:20 UTC), code from `dev`. `smoke_cloud.py`: 8/8 outside checks pass |
 | Billing shape | Request-based Cloud Run CPU, min instances 0, session cap 240 seconds, max bytes billed 100 MiB |
 | Household auth | `REQUIRE_HOUSEHOLD_AUTH=true` on Cloud Run. Code default is false for local runs. Demo households stay open |

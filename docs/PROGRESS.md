@@ -328,7 +328,7 @@ Compared the clean `dev` tree at `4776be2` with `docs/`. The product docs now ma
 
 ## 16 Oct 2026 — pending items from the master plan, and two production faults
 
-Checked the deployed services from outside: the site, `/health`, and the demo API answer; the worker refuses anonymous calls (403); CORS allows only `https://saathi-5afcf.web.app`.
+Checked the deployed services from outside: the site, `/health`, and the demo API answer; the worker refuses anonymous calls (403); CORS allows only `https://saathi-511717.web.app`.
 
 Two faults found in production logs and settings:
 

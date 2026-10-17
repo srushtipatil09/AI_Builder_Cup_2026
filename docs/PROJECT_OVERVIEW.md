@@ -3,7 +3,7 @@
 **Theme**: Sustainability and Social Impact (Social Good)  
 **Hackathon**: AI Builder Cup 2026  
 **Project Leads**: Srushti Patil & Vibhuti Singh 
-**Live Application**: [https://saathi-5afcf.web.app](https://saathi-5afcf.web.app)  
+**Live Application**: [https://saathi-511717.web.app](https://saathi-511717.web.app)  
 
 ---
 

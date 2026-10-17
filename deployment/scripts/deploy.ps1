@@ -26,7 +26,7 @@ param(
     [ValidateSet("all", "web", "api")]
     [string]$Target = "all",
     [string]$GcpProject = "saathi-511717",
-    [string]$FirebaseProject = "saathi-5afcf",
+    [string]$FirebaseProject = "saathi-511717",
     [string]$Region = "us-central1",
     [string]$Tag = "latest",
     [switch]$SkipFirestore,
