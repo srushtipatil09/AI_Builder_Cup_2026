@@ -83,7 +83,7 @@ A caretaker memory stores the caretaker's name in `author` (or "You" when the na
 
 ### Companion chat
 
-Talk, Stop, Pause, Contact family, and Nearby help. Captions are optional. Nearby help opens a sheet for a hospital, a medical shop, a park, food, a trusted person, or a helpline. Each row can show a Call button and, for a place, a directions link. The parent taps. Saathi does not place the call.
+Talk, Stop, Pause, Contact family, and Nearby help. Captions are optional. Nearby help opens a sheet for a hospital, a medical shop, a grocery store, a park, food, a trusted person, or a helpline. A list the parent opens is saved for the care desk. Each row can show a Call button and, for a place, a directions link. The parent taps. Saathi does not place the call.
 
 A signed-in parent sees **Allow location once** until they allow it or dismiss it. The point is rounded to about 100 metres and stored for that household. The shared demo never stores a position. Without one, nearby places use the city on the care desk. The family deletes the point from the Trusted Contacts card.
 
@@ -187,7 +187,7 @@ The alert does not say a fall was confirmed unless the person said so. A door cl
 
 ### Help nearby
 
-When the parent asks for a hospital, a medical shop, a park, somewhere to eat, a helpline, or a trusted person, the Live tool `find_nearby` looks it up. A card appears on the phone. `offer_call` shows a Call button for a number the server resolved from helplines, trusted contacts, or the places just found. The model does not invent a phone number and does not dial.
+When the parent asks for a hospital, a medical shop, a grocery store, a park, somewhere to eat, a helpline, or a trusted person, the Live tool `find_nearby` looks it up. A card appears on the phone. That list is stored for the household, and the care desk shows the same places. `offer_call` shows a Call button for a number the server resolved from helplines, trusted contacts, or the places just found. The model does not invent a phone number and does not dial.
 
 In danger, Saathi says to call 112 first and offers that call. A hospital is a place and a number, not advice about what is wrong. Ordering food is helping them call a restaurant. If the position was not shared, Saathi says it is looking in the city's results and that the Allow location button is on the screen. Helplines still work when the Places API is off: 112, 108, and Elderline 14567. The care desk shows the same card under Trusted Contacts, and the family can delete the saved position.
 

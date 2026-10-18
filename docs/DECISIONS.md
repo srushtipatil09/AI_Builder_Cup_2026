@@ -64,7 +64,7 @@ Caregiver sentences always pass `compose_family_insight`. The three insight tool
 
 ## D16. Nearby help is a place and a button, not advice
 
-The parent asks. `find_nearby` uses the Places API (New) for a hospital, a medical shop, a park, or food, and returns trusted people and the helplines 112, 108, and 14567 from stored data. `offer_call` shows a Call button. The number is resolved on the server. The model does not dial and does not invent a number. The stored position is one point rounded to about 100 metres, and only after the parent allows it. The shared demo does not keep a position. After 9 pm a park is not offered.
+The parent asks. `find_nearby` uses the Places API (New) for a hospital, a medical shop, a grocery store, a park, or food, and returns trusted people and the helplines 112, 108, and 14567 from stored data. The list the parent opens is kept on the household so the care desk shows the same places. `offer_call` shows a Call button. The number is resolved on the server. The model does not dial and does not invent a number. The stored position is one point rounded to about 100 metres, and only after the parent allows it. The shared demo does not keep a position. After 9 pm a park is not offered.
 
 ## D17. One caretaker, many households
 

@@ -76,12 +76,12 @@ TOOL_DECLARATIONS = [
     types.FunctionDeclaration(
         name="find_nearby",
         description=(
-            "Find help near the parent: a hospital, a medical shop (pharmacy), a park, a restaurant, trusted people "
+            "Find help near the parent: a hospital, a medical shop (pharmacy), a grocery store, a park, a restaurant, trusted people "
             "who can be called, or national helplines. A card with names and call buttons is shown on their screen."
         ),
         parameters=types.Schema(
             type="OBJECT",
-            properties={"kind": _prop("STRING", "hospital, pharmacy, park, restaurant, people, or helpline")},
+            properties={"kind": _prop("STRING", "hospital, pharmacy, grocery, park, restaurant, people, or helpline")},
             required=["kind"],
         ),
     ),
@@ -421,10 +421,15 @@ class LiveBridgeSession:
         """Look up help for the parent. The card for the screen travels in "_ui"; the model only sees the short result."""
         from saathi.nearby import service as nearby
 
-        kind = {"helpline": "helplines", "helplines": "helplines", "food": "restaurant", "medical shop": "pharmacy"}.get(kind, kind)
+        kind = {
+            "helpline": "helplines", "helplines": "helplines", "food": "restaurant", "medical shop": "pharmacy",
+            "grocery store": "grocery", "groceries": "grocery", "kirana": "grocery",
+        }.get(kind, kind)
         if kind == "park" and nearby.is_late():
             return {"status": "not_now", "message": "It is late at night. Do not suggest going to a park; say it is better in the morning."}
-        data = nearby.overview(self.household_id, self.desk, kind if kind in nearby.KINDS else "all")
+        data = nearby.overview(
+            self.household_id, self.desk, kind if kind in nearby.KINDS else "all", remember=kind in nearby.KINDS,
+        )
         self._found = {}
         if kind == "helplines":
             items = data["helplines"]
@@ -433,7 +438,7 @@ class LiveBridgeSession:
         elif kind in nearby.KINDS:
             items = data["places"].get(kind, [])
         else:
-            return {"status": "error", "message": "Ask for a hospital, pharmacy, park, restaurant, people, or helpline."}
+            return {"status": "error", "message": "Ask for a hospital, pharmacy, grocery, park, restaurant, people, or helpline."}
         for item in items:
             if item.get("phone") and item.get("name"):
                 self._found[item["name"].lower()] = item

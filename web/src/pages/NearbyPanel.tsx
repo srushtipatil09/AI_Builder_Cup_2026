@@ -10,6 +10,7 @@ import { useToast } from "../toast";
 const tabs: { id: NearbyTab; word: keyof PhoneWords; en: string }[] = [
   { id: "hospital", word: "hospital", en: "Hospitals" },
   { id: "pharmacy", word: "pharmacy", en: "Medical shops" },
+  { id: "grocery", word: "grocery", en: "Grocery stores" },
   { id: "people", word: "people", en: "My people" },
   { id: "park", word: "park", en: "Parks" },
   { id: "restaurant", word: "food", en: "Food" },
@@ -29,7 +30,7 @@ type Props = {
   language?: Language;
 };
 
-// The parent's "Nearby help" sheet: six large buttons, then a short list with Call and Directions.
+// The parent's "Nearby help" sheet: one button per kind of help, then a short list with Call and Directions.
 // Lists come from the store; the server (and the paid Places lookup behind it) is asked only when the copy is old.
 export function NearbyPanel({ householdId, onClose, card, demo = false, language = LANGUAGES[0] }: Props) {
   const dispatch = useAppDispatch();
@@ -49,7 +50,7 @@ export function NearbyPanel({ householdId, onClose, card, demo = false, language
     setFailed(false);
     // Late at night the park tab only says "tomorrow morning", so nothing is looked up.
     if (tab === "park" && isLateNow()) return;
-    dispatch(loadNearby({ householdId, tab }))
+    dispatch(loadNearby({ householdId, tab, remember: true }))
       .unwrap()
       .catch((err: { name?: string }) => {
         // A skipped read (the copy is fresh, or the same read is already on its way) is not a failure.
@@ -71,7 +72,7 @@ export function NearbyPanel({ householdId, onClose, card, demo = false, language
     setAsking(false);
     if (result === "saved") {
       dispatch(nearbyForget(householdId));
-      void dispatch(loadNearby({ householdId, tab, force: true }));
+      void dispatch(loadNearby({ householdId, tab, force: true, remember: true }));
     }
   }
 

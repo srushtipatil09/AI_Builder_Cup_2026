@@ -8,6 +8,7 @@ import { useToast } from "../../toast";
 const sections: { id: NearbyKind; title: string }[] = [
   { id: "hospital", title: "Hospitals" },
   { id: "pharmacy", title: "Medical shops" },
+  { id: "grocery", title: "Grocery stores" },
   { id: "park", title: "Parks" },
   { id: "restaurant", title: "Food" },
 ];
@@ -72,8 +73,8 @@ export function NearbyCard({ householdId, name, city: deskCity = "", contactsKey
     <section className="panel panel-wide nearby-card-desk" aria-labelledby="nearby-desk-title">
       <h2 id="nearby-desk-title">Near {who}</h2>
       <p className="panel-lede">
-        {who} can ask Saathi, by voice or on the phone, for a hospital, a medical shop, a park, or somewhere to eat, and
-        Saathi shows it with a Call button. Trusted contacts who live nearby come first. These are places and numbers, not
+        {who} can ask Saathi, by voice or on the phone, for a hospital, a medical shop, a grocery store, a park, or somewhere to eat, and
+        Saathi shows it with a Call button. A list they open on the phone is kept here. Trusted contacts who live nearby come first. These are places and numbers, not
         medical advice.
       </p>
       <p className="nearby-source">
@@ -107,6 +108,12 @@ export function NearbyCard({ householdId, name, city: deskCity = "", contactsKey
               </button>
             ))}
           </div>
+          {data.checked?.[open] ? (
+            <p className="nearby-source">
+              {who} opened this list on the phone
+              {` on ${new Date(data.checked[open]).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}`}.
+            </p>
+          ) : null}
           <NearbyList
             items={data.places[open] ?? []}
             directions

@@ -358,7 +358,7 @@ Compared `docs/` and `README.md` with the source. The product docs now also desc
 
 | Area | What the code does | Where |
 | --- | --- | --- |
-| Nearby help | Hospitals, medical shops, parks, and food from the Places API (New), within 5 km, at most 5, cached one hour. Helplines 112, 108, and Elderline 14567, and trusted contacts, still return if Places fails. The parent taps Call. After 9 pm a park lookup is refused | `nearby/`, `live/bridge.py` `find_nearby` and `offer_call`, `NearbyPanel.tsx`, `NearbyCard.tsx` |
+| Nearby help | Hospitals, medical shops, grocery stores, parks, and food from the Places API (New), within 5 km, at most 5, cached one hour. A list the parent opens is stored at `households/<id>/nearbyChecks/<kind>` and the care desk shows that list. Helplines 112, 108, and Elderline 14567, and trusted contacts, still return if Places fails. The parent taps Call. After 9 pm a park lookup is refused | `nearby/`, `live/bridge.py` `find_nearby` and `offer_call`, `NearbyPanel.tsx`, `NearbyCard.tsx` |
 | Position | One point rounded to three decimals, saved only after Allow location. The shared demo does not store it. The city on the desk is the fallback. The family can delete it | `PUT/DELETE .../location` |
 | Languages | Ten languages in the Live prompt and in the server's distress, listening, yes, no, help, and fine phrases. Hindi remains the demo language | `languages.py`, `live/prompts.py` |
 | Several family members | A caretaker adds up to 10 households. Each has a desk and a family code. A profile save cannot attach a household the account does not own | `accounts/routes.py`, `FamilySwitcher.tsx` |

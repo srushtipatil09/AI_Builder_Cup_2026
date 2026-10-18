@@ -6,6 +6,33 @@ The expensive minute is an open voice session. Gemini Live runs only inside a fo
 
 This repository is the AI Builder Cup 2026 prototype. Live voice, Firestore, BigQuery drift, SafetyGuard, and the insight run against a real Google Cloud project. What is checked and what is not is in [docs/PROGRESS.md](docs/PROGRESS.md).
 
+## Try it in 2 minutes (for judges)
+
+Open https://saathi-511717.web.app. Neither demo asks for an email.
+
+1. **Kamla's phone** (`/app?demo=1`). Allow the microphone and press Talk. She is a synthetic 78-year-old in Varanasi. Hindi is the Live voice this demo was tested with. Press Stop when you are done. The microphone is off, and a closed tab does not keep listening.
+2. **Caretaker demo** (`/care?demo=1`). Open Routine for her own pause and speaking pace, and for the two quotes about her son Rahul. Ask Saathi a question from the examples. Under Photos and documents, **Read the sample page** copies a synthetic note once. Confirm before it is kept.
+
+### What needs a real email
+
+Log in or Create account, with an email and password, or with Google. That is your household, not the shared Kamla desk.
+
+- A care desk and a phone that stay yours after you leave
+- A family code that joins the parent's phone to that household
+- More than one family member (up to 10)
+- Saving a location once, so nearby places use that point instead of the city
+
+Google sign-up asks once who Saathi will talk with, the language, and the city. The account is not created until the agreement about what is kept is ticked: words for 7 days, summaries for 30.
+
+### What the demo does not do
+
+- It is one shared household. A change on the desk is saved, and the next visitor sees it. It is labeled synthetic.
+- Three Live sessions a visitor a day. Each talk stops at 4 minutes.
+- It does not add family members, does not keep a join, and does not store a location. Nearby help uses Varanasi.
+- Contact family on Kamla's phone does not notify a real person.
+- The other nine languages change the words on the phone. Hindi is the voice that was tested.
+- There is no Nest Home integration yet, and no model machine left running. The sample page is one Gemini Flash read, not a live MedGemma endpoint.
+
 ## What you open
 
 ```mermaid
@@ -117,7 +144,7 @@ Saathi already knows the household before the parent speaks. The Live prompt is 
 | Drift | BigQuery compares this person with their own earlier days. A named fast is not a nutrition alert. Eval of extraction: 30/30 labeled cases on `gemini-2.5-flash` |
 | SafetyGuard | Every sentence the family sees is checked. A diagnosis, a dose, or an order to enter counselling is replaced by a sentence built from the stored facts |
 | Insight | Three tools, in a fixed order, or an optional ADK agent that can only word the notice. The code chooses the tier and the evidence |
-| Nearby help | Hospitals, medical shops, parks, and food, plus trusted people and 112, 108, and Elderline 14567. The parent taps Call |
+| Nearby help | Hospitals, medical shops, grocery stores, parks, and food, plus trusted people and 112, 108, and Elderline 14567. The parent taps Call. A list they open is saved for the care desk |
 | Several family members | One caretaker, up to 10 people, each with a desk and a family code |
 | Phone that remembers | Redux holds the care desk and the slower reads. Both are written to versioned localStorage, shared across tabs of this browser, and cleared on log out. A reload opens on the saved copy. Private file links stay in memory only |
 | Accounts and files | Email, password, and Google. Family code joins the phone. Photos and documents in a private bucket, opened with a 30-minute link |

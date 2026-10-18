@@ -41,7 +41,7 @@ flowchart LR
 | Nest | Milestone M16, after submission |
 | Alerts | Firebase Cloud Messaging. Check-in text and caretaker text stay generic |
 | Language | Hindi in the Kamla demo. The profile can also be English, Bengali, Marathi, Gujarati, Punjabi, Tamil, Telugu, Kannada, or Malayalam. The Live prompt and the server's own phrases follow that choice. Submission text is English |
-| Nearby help | Places API (New) for hospitals, pharmacies, parks, and restaurants. Helplines 112, 108, and 14567, and trusted contacts, do not depend on Places. The parent taps Call. Position is one rounded point, or the city on the desk |
+| Nearby help | Places API (New) for hospitals, pharmacies, grocery stores, parks, and restaurants. A lookup from the parent's phone is stored for the care desk. Helplines 112, 108, and 14567, and trusted contacts, do not depend on Places. The parent taps Call. Position is one rounded point, or the city on the desk |
 | Family members | One caretaker account, up to 10 households, each with its own desk and family code |
 | Research numbers | Holt-Lunstad 2015, WHO 2025, and LASI, each labeled as someone else's research |
 

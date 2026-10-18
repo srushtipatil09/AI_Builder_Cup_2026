@@ -23,6 +23,7 @@ export type PhoneWords = {
   close: string;
   hospital: string;
   pharmacy: string;
+  grocery: string;
   people: string;
   park: string;
   food: string;
@@ -59,6 +60,7 @@ const hindi: PhoneWords = {
   close: "बंद करें",
   hospital: "अस्पताल",
   pharmacy: "दवा की दुकान",
+  grocery: "किराना",
   people: "अपने लोग",
   park: "पार्क",
   food: "खाना",
@@ -98,6 +100,7 @@ export const LANGUAGES: Language[] = [
       close: "Close",
       hospital: "Hospitals",
       pharmacy: "Medical shops",
+      grocery: "Grocery stores",
       people: "My people",
       park: "Parks",
       food: "Food",
@@ -135,6 +138,7 @@ export const LANGUAGES: Language[] = [
       close: "বন্ধ করুন",
       hospital: "হাসপাতাল",
       pharmacy: "ওষুধের দোকান",
+      grocery: "মুদির দোকান",
       people: "আপনজন",
       park: "পার্ক",
       food: "খাবার",
@@ -172,6 +176,7 @@ export const LANGUAGES: Language[] = [
       close: "बंद करा",
       hospital: "रुग्णालय",
       pharmacy: "औषधांचे दुकान",
+      grocery: "किराणा दुकान",
       people: "आपली माणसं",
       park: "बाग",
       food: "जेवण",
@@ -209,6 +214,7 @@ export const LANGUAGES: Language[] = [
       close: "બંધ કરો",
       hospital: "હોસ્પિટલ",
       pharmacy: "દવાની દુકાન",
+      grocery: "કરિયાણાની દુકાન",
       people: "પોતાના લોકો",
       park: "બગીચો",
       food: "જમવાનું",
@@ -246,6 +252,7 @@ export const LANGUAGES: Language[] = [
       close: "ਬੰਦ ਕਰੋ",
       hospital: "ਹਸਪਤਾਲ",
       pharmacy: "ਦਵਾਈ ਦੀ ਦੁਕਾਨ",
+      grocery: "ਕਰਿਆਨੇ ਦੀ ਦੁਕਾਨ",
       people: "ਆਪਣੇ ਲੋਕ",
       park: "ਪਾਰਕ",
       food: "ਖਾਣਾ",
@@ -283,6 +290,7 @@ export const LANGUAGES: Language[] = [
       close: "மூட",
       hospital: "மருத்துவமனை",
       pharmacy: "மருந்துக்கடை",
+      grocery: "மளிகைக் கடை",
       people: "நம்மவர்கள்",
       park: "பூங்கா",
       food: "சாப்பாடு",
@@ -320,6 +328,7 @@ export const LANGUAGES: Language[] = [
       close: "మూసివేయండి",
       hospital: "ఆసుపత్రి",
       pharmacy: "మందుల షాపు",
+      grocery: "కిరాణా దుకాణం",
       people: "మనవాళ్ళు",
       park: "పార్కు",
       food: "భోజనం",
@@ -357,6 +366,7 @@ export const LANGUAGES: Language[] = [
       close: "ಮುಚ್ಚಿ",
       hospital: "ಆಸ್ಪತ್ರೆ",
       pharmacy: "ಔಷಧಿ ಅಂಗಡಿ",
+      grocery: "ದಿನಸಿ ಅಂಗಡಿ",
       people: "ನಮ್ಮವರು",
       park: "ಉದ್ಯಾನ",
       food: "ಊಟ",
@@ -394,6 +404,7 @@ export const LANGUAGES: Language[] = [
       close: "അടയ്ക്കുക",
       hospital: "ആശുപത്രി",
       pharmacy: "മരുന്നുകട",
+      grocery: "പലചരക്ക് കട",
       people: "സ്വന്തക്കാർ",
       park: "പാർക്ക്",
       food: "ഭക്ഷണം",

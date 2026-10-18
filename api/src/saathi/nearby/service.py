@@ -1,4 +1,4 @@
-"""What is near the parent: hospitals, parks, restaurants, pharmacies, trusted people, and helplines.
+"""What is near the parent: hospitals, parks, restaurants, pharmacies, grocery stores, trusted people, and helplines.
 
 Places come from the Google Places API (New). The API needs `places.googleapis.com` enabled on the Cloud project.
 If it is not enabled, or the call fails, the answer is an empty list with `available: false`; the helplines and the
@@ -36,6 +36,7 @@ KINDS: dict[str, dict] = {
     "pharmacy": {"types": ["pharmacy"], "label": "Medical shops", "query": "pharmacy"},
     "park": {"types": ["park"], "label": "Parks", "query": "park"},
     "restaurant": {"types": ["restaurant"], "label": "Food", "query": "restaurant"},
+    "grocery": {"types": ["grocery_store"], "label": "Grocery stores", "query": "grocery store"},
 }
 SEARCH_RADIUS_M = 5000
 # Each lookup is a paid Places call. Places near a home rarely change; an hour keeps "open now" close to true.
@@ -99,6 +100,7 @@ def save_spot(household_id: str, lat: float, lng: float) -> Spot:
     """One rounded point. Rounded to three decimals (about 100 m) before it is stored."""
     spot = Spot(lat=round(lat, 3), lng=round(lng, 3), updatedAt=datetime.now(timezone.utc).isoformat())
     get_repository().doc_set(_path(household_id), spot.model_dump(), merge=False)
+    clear_checks(household_id)
     return spot
 
 
@@ -112,6 +114,40 @@ def get_spot(household_id: str) -> Optional[Spot]:
 
 def delete_spot(household_id: str) -> None:
     get_repository().doc_delete(_path(household_id))
+    clear_checks(household_id)
+
+
+def _check_path(household_id: str, kind: str) -> str:
+    return f"households/{household_id}/nearbyChecks/{kind}"
+
+
+def save_check(household_id: str, kind: str, places: list[Place], spot: Optional[Spot], city: str) -> str:
+    """The list the parent just opened. The care desk reads this instead of looking again."""
+    checked_at = datetime.now(timezone.utc).isoformat()
+    get_repository().doc_set(
+        _check_path(household_id, kind),
+        {
+            "places": [p.model_dump() for p in places],
+            "checkedAt": checked_at,
+            "city": city,
+            "locationSet": bool(spot),
+        },
+        merge=False,
+    )
+    return checked_at
+
+
+def get_check(household_id: str, kind: str) -> Optional[dict]:
+    row = get_repository().doc_get(_check_path(household_id, kind))
+    if not row or "places" not in row:
+        return None
+    return row
+
+
+def clear_checks(household_id: str) -> None:
+    repo = get_repository()
+    for kind in KINDS:
+        repo.doc_delete(_check_path(household_id, kind))
 
 
 def _authorized_session():
@@ -188,8 +224,12 @@ def is_late(now: Optional[datetime] = None) -> bool:
     return hour >= 21 or hour < 5
 
 
-def overview(household_id: str, desk: Desk, kind: str = "all") -> dict:
-    """What the parent's phone and the care desk show. `kind` is one of KINDS, people, helplines, or all."""
+def overview(household_id: str, desk: Desk, kind: str = "all", remember: bool = False) -> dict:
+    """What the parent's phone and the care desk show. `kind` is one of KINDS, people, helplines, or all.
+
+    `remember` is the parent's own lookup. That list is written to Firestore. The care desk reads it back,
+    so the family sees the places the parent just opened.
+    """
     spot = get_spot(household_id)
     city = desk.profile.city
     out: dict = {
@@ -197,12 +237,20 @@ def overview(household_id: str, desk: Desk, kind: str = "all") -> dict:
         "helplines": HELPLINES,
         "people": trusted_nearby(desk),
         "places": {},
+        "checked": {},
         "available": True,
     }
     wanted = list(KINDS) if kind == "all" else [kind] if kind in KINDS else []
     for k in wanted:
+        saved = None if remember else get_check(household_id, k)
+        if saved is not None:
+            out["places"][k] = saved.get("places") or []
+            out["checked"][k] = saved.get("checkedAt") or ""
+            continue
         places, ok = find_places(k, spot, city)
         out["places"][k] = [p.model_dump() for p in places]
+        if remember and ok:
+            out["checked"][k] = save_check(household_id, k, places, spot, city)
         if not ok:
             out["available"] = False
     return out

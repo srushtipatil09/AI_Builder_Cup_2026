@@ -282,7 +282,7 @@ export const cancelAsk = (id: string, proposalId: string) => postJson(`${hh(id)}
 
 // ---- Nearby help ----
 
-export type NearbyKind = "hospital" | "pharmacy" | "park" | "restaurant";
+export type NearbyKind = "hospital" | "pharmacy" | "grocery" | "park" | "restaurant";
 
 export type NearbyItem = {
   name: string;
@@ -303,10 +303,12 @@ export type Nearby = {
   people: NearbyItem[];
   places: Partial<Record<NearbyKind, NearbyItem[]>>;
   available: boolean;
+  // When the parent opened this list. The care desk shows that saved copy.
+  checked?: Partial<Record<NearbyKind, string>>;
 };
 
-export const fetchNearby = (id: string, kind: NearbyKind | "people" | "helplines" | "all" = "all") =>
-  getJson<Nearby>(`${hh(id)}/nearby?kind=${kind}`, id);
+export const fetchNearby = (id: string, kind: NearbyKind | "people" | "helplines" | "all" = "all", remember = false) =>
+  getJson<Nearby>(`${hh(id)}/nearby?kind=${kind}${remember ? "&remember=true" : ""}`, id);
 
 export async function saveLocation(id: string, lat: number, lng: number): Promise<void> {
   await postJsonMethod("PUT", `${hh(id)}/location`, id, { lat, lng });

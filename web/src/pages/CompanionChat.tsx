@@ -675,7 +675,7 @@ export function CompanionChat({ demo, name, householdId }: Props) {
 
       <button className="ghost nearby-open" type="button" onClick={() => { setNearbyCard(null); setNearbyOpen(true); }}>
         {said(w.nearby)}
-        <span className="control-en">Nearby help: hospital, park, people, food</span>
+        <span className="control-en">Nearby help: hospital, grocery, park, people, food</span>
       </button>
       {!demo && hhRef.current && !locationAsked ? (
         <p className="push-opt">
