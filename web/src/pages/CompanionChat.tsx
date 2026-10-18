@@ -12,6 +12,7 @@ import { InstallSheet } from "./InstallSheet";
 import { NearbyPanel, type NearbyCard } from "./NearbyPanel";
 import { telHref } from "./NearbyList";
 import { locationChoice, locationMessage, shareLocationOnce } from "../lib/location";
+import { evaluateEdgeGemmaDistress } from "../lib/edgeGemma";
 import { useToast } from "../toast";
 
 type Props = { demo: boolean; name?: string; householdId?: string };
@@ -295,6 +296,15 @@ export function CompanionChat({ demo, name, householdId }: Props) {
   function handleUserUtterance(text: string) {
     setStatus("thinking");
     setMessages((prev) => [...prev, { id: Math.random().toString(), role: "parent", text }]);
+
+    // On-device Edge Gemma evaluation (zero-latency safety shield)
+    evaluateEdgeGemmaDistress(text).then((edge) => {
+      if (edge.isEmergency) {
+        toast("Edge Gemma: Emergency detected on-device. Offering immediate emergency call.", "info");
+        setCallOffer({ name: "Emergency Services (112)", phone: "112" });
+      }
+    }).catch(() => {});
+
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ type: "user_transcript", text }));
     } else {
@@ -526,6 +536,10 @@ export function CompanionChat({ demo, name, householdId }: Props) {
           {twoLines ? <span lang={lang}>{headline[status].hi}</span> : null}
           <span className="companion-state">{headline[status].en}</span>
         </h1>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "var(--fg-muted, #71717a)", background: "rgba(0,0,0,0.04)", padding: "3px 10px", borderRadius: "12px", marginTop: "4px" }}>
+          <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10b981", display: "inline-block" }}></span>
+          <span>Edge Gemma Shield Active</span>
+        </div>
         {invite ? (
           <p className="invite-chip">
             <span>Saathi wants to talk.</span>

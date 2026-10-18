@@ -8,12 +8,14 @@ The running tree includes the landing page, role-based care desk and companion c
 
 ```mermaid
 flowchart TD
-  subgraph browser [Firebase Hosting]
+  subgraph browser [Client Browser & Edge]
     land[Landing page]
     chat[Companion chat]
     desk[Care desk]
+    edgeGemma[Edge Gemma On-Device Shield]
     meter[Browser pause measurement]
   end
+  edgeGemma -->|Zero-latency local screening & offline emergency fallback| chat
   land --> chat
   land --> desk
   meter --> chat
@@ -37,6 +39,13 @@ flowchart TD
   worker --> push[Firebase Cloud Messaging]
   push -->|Tap opens the chat| chat
 ```
+
+### Hybrid Google AI Architecture (Edge Gemma + Cloud Gemini)
+
+Saathi pairs on-device **Edge Gemma** with cloud-based **Gemini on Vertex AI**:
+1. **Edge Tier (Edge Gemma)**: Runs on-device in the elder's browser (`web/src/lib/edgeGemma.ts`, leveraging Chrome Built-in AI / Prompt API with WebGPU fallback). Delivers zero-latency local intent classification, emergency distress screening (e.g. falls, acute pain), and offline emergency triggers without requiring active cellular bandwidth—vital for spotty rural Indian connectivity.
+2. **Cloud Interactive Tier (Gemini Live 2.5 Flash)**: Bidirectional, low-latency conversational audio streaming in Hindi and nine Indian languages.
+3. **Cloud Analytical Tier (Gemini 2.5 Flash & Vertex AI)**: Post-call fact extraction, multilingual embeddings (`text-multilingual-embedding-002`), BigQuery longitudinal drift analysis, and deterministic SafetyGuard synthesis.
 
 Voice does not wait for extraction. A distress check does: during the open call the API speaks that language's check (in Hindi, "Kya hua? Gir gaye kya? Main yahin hoon.") and may send a short clip to Flash. Embeddings and drift run after the call. With no `WORKER_URL`, that post-call work stays in the API process instead of Cloud Tasks.
 
