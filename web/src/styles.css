@@ -1562,6 +1562,26 @@ input[aria-invalid="true"] {
   font-size: 0.88rem;
 }
 
+.shield-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px auto 0;
+  color: var(--ink);
+  font-size: 1.05rem;
+}
+
+.shield-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.shield-note-on .shield-dot {
+  background: var(--teal);
+}
+
 /* Install sheet: Chrome's beforeinstallprompt, or iPhone instructions */
 
 .install-sheet {
@@ -1830,6 +1850,25 @@ input[aria-invalid="true"] {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
+}
+
+.cost-note {
+  width: min(1140px, calc(100% - 48px));
+  margin: 8px auto 0;
+  padding: 22px 26px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+}
+
+.cost-note h2 {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+}
+
+.cost-note p {
+  margin: 0;
+  max-width: 68ch;
 }
 
 .promise {
@@ -6474,6 +6513,20 @@ button.orb:disabled {
 .doc-label .optional { color: var(--muted); font-weight: 400; }
 .doc-submit { width: auto; min-width: 140px; margin: 0; }
 .doc-library-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.evidence-list { margin-top: 8px; }
+.evidence-list summary { cursor: pointer; font-weight: 700; }
+.evidence-list ul { margin: 8px 0 0; padding-left: 1.2rem; }
+.evidence-list li { margin: 4px 0; }
+.medgemma-preview { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; padding: 14px 16px; border-radius: 14px; background: var(--teal-soft); border: 1px solid #c4dcd6; }
+.medgemma-preview p { margin: 6px 0 0; max-width: 62ch; color: var(--ink); font-size: 0.95rem; line-height: 1.45; }
+.medgemma-result { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--cream); }
+.medgemma-result-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.medgemma-result h4 { margin: 2px 0 0; }
+.medgemma-kicker { margin: 0; color: var(--muted); font-size: 0.85rem; font-weight: 700; }
+.medgemma-doctor { margin: 2px 0 0; color: var(--muted); }
+.medgemma-summary p { margin: 4px 0 0; }
+.medgemma-summary p + p { color: var(--muted); }
+.medgemma-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .doc-empty { color: var(--muted); font-size: 0.92rem; }
 .doc-meta span { opacity: 1; color: var(--muted); }
 

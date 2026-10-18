@@ -335,12 +335,12 @@ export const invitationEvent = (id: string, invitationId: string, event: "played
 
 // ---- Demo household only ----
 
-export const seedDemoHistory = (scenario: "stable" | "changing" | "fasting" | "family") =>
+export const seedDemoHistory = (scenario: "stable" | "changing" | "fasting" | "family" | "story") =>
   postJson(`/demo/seed`, "demo-kamla-sharma", { household: "demo-kamla-sharma", scenario });
 export const runSeededSession = () => postJson<{ sessionId: string }>(`/demo/run-seeded-session`, "demo-kamla-sharma", { household: "demo-kamla-sharma" });
 export const simulateInactivity = () =>
   postJson<{ label: string; invitation: string }>(`/demo/simulate-inactivity`, "demo-kamla-sharma", { household: "demo-kamla-sharma" });
-export const simulateCheckin = (outcome: "unanswered" | "device_unavailable") =>
+export const simulateCheckin = (outcome: "unanswered" | "device_unavailable" | "quiet") =>
   postJson<{ label: string; events: { type: string }[] }>(`/demo/simulate-checkin`, "demo-kamla-sharma", { household: "demo-kamla-sharma", outcome });
 
 export const contactFamily = (id: string) => postJson(`${hh(id)}/contact-family`, id);

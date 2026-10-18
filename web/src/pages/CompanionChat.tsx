@@ -5,7 +5,7 @@ import { nextDelay } from "../lib/activity";
 import { completeSession, contactFamily, invitationEvent, nextInvitation, pausedForMs, sendHeartbeat, simulateInactivity, textTurn } from "../lib/api";
 import { enableParentPush, pushMessage } from "../lib/push";
 import { readSession } from "../session";
-import { languageFor } from "../lib/languages";
+import { LanguageOptions, languageFor } from "../lib/languages";
 import { useAppDispatch } from "../store";
 import { nearbyForget, nearbyFound } from "../store/reads";
 import { InstallSheet } from "./InstallSheet";
@@ -36,6 +36,8 @@ export function CompanionChat({ demo, name, householdId }: Props) {
   const hhRef = useRef("");
   hhRef.current = demo ? "demo-kamla-sharma" : householdId || "";
   const sessionIdRef = useRef<string>(`sess-${Math.random().toString(36).slice(2, 10)}`);
+  const parentWordsRef = useRef(0);
+  const [shield, setShield] = useState<"words" | "browser">("words");
   // The check-in Saathi started: shown as a banner, and answered by speaking, Later, or a blocked microphone.
   const [invite, setInvite] = useState<{ id: string; reason: string } | null>(null);
   const inviteRef = useRef<{ id: string; reason: string } | null>(null);
@@ -296,14 +298,20 @@ export function CompanionChat({ demo, name, householdId }: Props) {
   function handleUserUtterance(text: string) {
     setStatus("thinking");
     setMessages((prev) => [...prev, { id: Math.random().toString(), role: "parent", text }]);
+    parentWordsRef.current += text.trim().split(/\s+/).filter(Boolean).length;
 
-    // On-device Edge Gemma evaluation (zero-latency safety shield)
     evaluateEdgeGemmaDistress(text).then((edge) => {
-      if (edge.isEmergency) {
-        toast("Edge Gemma: Emergency detected on-device. Offering immediate emergency call.", "info");
-        setCallOffer({ name: "Emergency Services (112)", phone: "112" });
-      }
-    }).catch(() => {});
+      const browserAnswered = edge.engine === "edge-gemma-builtin";
+      setShield(browserAnswered ? "browser" : "words");
+      if (!edge.isEmergency) return;
+      toast(
+        browserAnswered
+          ? "The browser model marked this as urgent. You can call 112. Saathi does not place the call."
+          : "A distress word was heard on this phone. You can call 112. This works with no network. Saathi does not place the call.",
+        "info",
+      );
+      setCallOffer({ name: "112", phone: "112" });
+    }).catch(() => setShield("words"));
 
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ type: "user_transcript", text }));
@@ -323,11 +331,16 @@ export function CompanionChat({ demo, name, householdId }: Props) {
   function stopSession() {
     if (startedAtRef.current && audioRef.current) {
       const gap = audioRef.current.medianGap();
+      const spoken = audioRef.current.spokenMs();
+      const words = parentWordsRef.current;
+      const speakingRate = spoken >= 3000 && words >= 3 ? Math.round(words / (spoken / 60000)) : undefined;
       completeSession(sessionIdRef.current, hhRef.current, {
         duration_seconds: (Date.now() - startedAtRef.current) / 1000,
         response_gap_ms: gap,
-        quality_flags: gap === undefined ? ["no_turns_measured"] : [],
+        speaking_rate_wpm: speakingRate,
+        quality_flags: gap === undefined && speakingRate === undefined ? ["no_turns_measured"] : [],
       }).catch(() => {});
+      parentWordsRef.current = 0;
       startedAtRef.current = 0;
       sessionIdRef.current = `sess-${Math.random().toString(36).slice(2, 10)}`;
     }
@@ -536,10 +549,10 @@ export function CompanionChat({ demo, name, householdId }: Props) {
           {twoLines ? <span lang={lang}>{headline[status].hi}</span> : null}
           <span className="companion-state">{headline[status].en}</span>
         </h1>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "var(--fg-muted, #71717a)", background: "rgba(0,0,0,0.04)", padding: "3px 10px", borderRadius: "12px", marginTop: "4px" }}>
-          <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10b981", display: "inline-block" }}></span>
-          <span>Edge Gemma Shield Active</span>
-        </div>
+        <p className={shield === "browser" ? "shield-note shield-note-on" : "shield-note"}>
+          <span className="shield-dot" aria-hidden="true" />
+          {shield === "browser" ? "Browser model answered on this phone" : "On-phone word check"}
+        </p>
         {invite ? (
           <p className="invite-chip">
             <span>Saathi wants to talk.</span>
@@ -585,9 +598,9 @@ export function CompanionChat({ demo, name, householdId }: Props) {
             </li>
             <li>
               <button className="ghost" type="button" onClick={playDistressClip}>
-                Play sample fall clip
+                Play a loud sound
               </button>
-              <span>Sample recording demonstrating automatic fall check and caregiver alert.</span>
+              <span>Saathi asks if they are all right. A loud sound is not recorded as a fall.</span>
             </li>
             <li>
               <button className="ghost" type="button" onClick={playDoorClip}>
@@ -600,6 +613,21 @@ export function CompanionChat({ demo, name, householdId }: Props) {
                 Play sample conversation
               </button>
               <span>Sample conversation demonstrating live memory updates and family recall.</span>
+            </li>
+            <li>
+              <button className="ghost" type="button" onClick={() => handleUserUtterance("Bachao, gir gayi")}>
+                Say a distress word
+              </button>
+              <span>Offers 112 on this phone with no network. The badge stays “On-phone word check” unless a browser model answers.</span>
+            </li>
+            <li>
+              <label className="field">
+                Phone language
+                <select value={language.name} onChange={(event) => setLanguage(languageFor(event.target.value))}>
+                  <LanguageOptions />
+                </select>
+              </label>
+              <span>Hindi is the Live voice this demo was tested with. Another choice changes the words on this phone.</span>
             </li>
           </ul>
         </details>

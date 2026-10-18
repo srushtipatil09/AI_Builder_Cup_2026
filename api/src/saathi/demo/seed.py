@@ -12,7 +12,7 @@ from saathi.memory.vectors import FamilyEpisodeVectorIndex
 from saathi.pipeline import evaluate_and_publish, local_date_of, save_daily_record
 from saathi.providers.firestore import get_repository
 
-SCENARIOS = ("stable", "changing", "fasting", "family")
+SCENARIOS = ("stable", "changing", "fasting", "family", "story")
 DAYS = 16
 
 # Ordinary day-to-day wobble around 450 ms, fixed so every run gives the same answer.
@@ -35,8 +35,10 @@ def scenario_records(scenario: str, end: Optional[date] = None) -> list[DailyMet
             family_contact=(n % 3 != 0),
             mood="Okay" if n % 4 == 0 else None,
         )
-        if scenario == "changing" and n >= 13:
+        if scenario in ("changing", "story") and n >= 13:
             rec.response_gap_ms = 1300.0 + WOBBLE[i]
+            # Same person, later days: pauses lengthen and the pace drops against their own earlier days.
+            rec.speaking_rate_wpm = 74.0 + WOBBLE[i] / 25
             if n in (14, 15):
                 rec.meals_reported, rec.meals_skipped = 2, 1
         if scenario == "fasting" and n >= 14:
@@ -44,7 +46,7 @@ def scenario_records(scenario: str, end: Optional[date] = None) -> list[DailyMet
                 rec.meals_reported, rec.meals_skipped, rec.is_fasting = 2, 1, True
             else:
                 rec.is_ill = True
-        if scenario == "family":
+        if scenario in ("family", "story"):
             rec.family_contact = n < 12
         records.append(rec)
     return records
@@ -63,7 +65,7 @@ def seed_household(household_id: str, scenario: str) -> dict:
 
     shift = None
     evidence = [f"daily:{r.local_date}" for r in records[-3:]]
-    if scenario == "family":
+    if scenario in ("family", "story"):
         idx = FamilyEpisodeVectorIndex(household_id)
         early = FamilyEpisode(
             id="seed-family-2", person_name="Rahul", relation="Son", reported_last_contact="today",

@@ -1,6 +1,6 @@
 """Load a labeled synthetic history into the demo household through the API.
 
-Usage: python scripts/seed_demo.py [--api URL] [--scenario stable|changing|fasting|family]
+Usage: python scripts/seed_demo.py [--api URL] [--scenario stable|changing|fasting|family|story]
 """
 
 import argparse

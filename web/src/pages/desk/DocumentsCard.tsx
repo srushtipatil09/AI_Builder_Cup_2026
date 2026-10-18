@@ -273,9 +273,9 @@ function Library({ categories, files, householdId, onChanged, desk, setDesk, aut
     try {
       const res = await analyzeDoctorReportWithMedGemma(docName, "prescriptions", author || "Caretaker");
       setAnalysis(res);
-      toast("MedGemma analyzed doctor report successfully!", "ok");
+      toast("Preview ready. Confirm if you want it on the desk.", "ok");
     } catch {
-      toast("Could not analyze report with MedGemma.", "bad");
+      toast("The preview did not open. Try again.", "bad");
     } finally {
       setAnalyzing(false);
     }
@@ -283,7 +283,7 @@ function Library({ categories, files, householdId, onChanged, desk, setDesk, aut
 
   function applyMedGemmaToDesk() {
     if (!analysis || !desk || !setDesk) {
-      toast("MedGemma preview generated. Open Routine tab to view active schedule.", "info");
+      toast("Preview is ready. Confirm to keep it on the desk.", "info");
       setAnalysis(null);
       return;
     }
@@ -297,7 +297,7 @@ function Library({ categories, files, householdId, onChanged, desk, setDesk, aut
       memories: [...desk.memories, ...newMemories],
     });
 
-    toast(`Applied ${toAdd.length} routines & ${newMemories.length} doctor advice notes to Care Desk!`, "ok");
+    toast(`Added ${toAdd.length} routine${toAdd.length === 1 ? "" : "s"} and ${newMemories.length} note${newMemories.length === 1 ? "" : "s"} to the desk.`, "ok");
     setAnalysis(null);
   }
 
@@ -334,73 +334,67 @@ function Library({ categories, files, householdId, onChanged, desk, setDesk, aut
         <span className={files.length === 0 ? "doc-count" : "doc-count doc-count-on"}>{files.length === 0 ? "None yet" : `${files.length} saved`}</span>
       </div>
 
-      <div style={{ background: "linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%)", border: "1px solid #bae6fd", borderRadius: "12px", padding: "12px 14px", marginBottom: "16px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
-          <div>
-            <strong style={{ display: "flex", alignItems: "center", gap: "6px", color: "#0369a1", fontSize: "13px" }}>
-              <span>🩺 MedGemma Clinical Report Mapper</span>
-            </strong>
-            <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#334155" }}>
-              Translate doctor prescriptions & lab reports into plain summaries and auto-map routines into Care Desk.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="primary"
-            style={{ fontSize: "11px", padding: "5px 12px", whiteSpace: "nowrap" }}
-            onClick={() => void runMedGemma("Dr. Mehta Prescription - Cardiology")}
-            disabled={analyzing}
-          >
-            {analyzing ? "Analyzing…" : "✨ Test MedGemma Sample Report"}
-          </button>
+      <div className="medgemma-preview">
+        <div>
+          <h4 className="doc-step-title">MedGemma preview</h4>
+          <p>
+            A doctor&rsquo;s note, in a few lines the family can read, and a routine you can keep. Open a prepared note to see how that looks. A live reader stays billed the whole time it is on, so this preview keeps the layout ready. Confirm before anything is saved.
+          </p>
         </div>
+        <button
+          type="button"
+          className="primary"
+          onClick={() => void runMedGemma("Dr. Mehta Prescription - Cardiology")}
+          disabled={analyzing}
+        >
+          {analyzing ? "Preparing…" : "Open preview"}
+        </button>
       </div>
 
       {analysis ? (
-        <div style={{ background: "#ffffff", border: "2px solid #0284c7", borderRadius: "12px", padding: "16px", marginBottom: "18px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.08)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
+        <article className="medgemma-result" aria-label="MedGemma preview">
+          <div className="medgemma-result-head">
             <div>
-              <span style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#0284c7" }}>MedGemma Clinical Extraction</span>
-              <h4 style={{ margin: "2px 0", fontSize: "15px", color: "#0f172a" }}>{analysis.reportTitle}</h4>
-              {analysis.doctorName ? <p style={{ margin: 0, fontSize: "11px", color: "#64748b" }}>{analysis.doctorName}</p> : null}
+              <p className="medgemma-kicker">Prepared note</p>
+              <h4>{analysis.reportTitle}</h4>
+              {analysis.doctorName ? <p className="medgemma-doctor">{analysis.doctorName}</p> : null}
             </div>
-            <button className="ghost" type="button" onClick={() => setAnalysis(null)} style={{ fontSize: "12px", padding: "2px 6px" }}>
-              ✕ Close
+            <button className="ghost" type="button" onClick={() => setAnalysis(null)}>
+              Close
             </button>
           </div>
 
-          <div style={{ background: "#f8fafc", padding: "10px 12px", borderRadius: "8px", marginBottom: "10px" }}>
-            <strong style={{ fontSize: "11px", color: "#1e293b", display: "block", marginBottom: "4px" }}>Plain-Language Summary for Family:</strong>
-            <p style={{ margin: 0, fontSize: "12px", color: "#334155", lineHeight: 1.4 }}>{analysis.plainSummary}</p>
-            <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#475569", fontStyle: "italic" }}>{analysis.hindiSummary}</p>
+          <div className="medgemma-summary">
+            <strong>For the family</strong>
+            <p>{analysis.plainSummary}</p>
+            <p lang="hi">{analysis.hindiSummary}</p>
           </div>
 
-          <strong style={{ fontSize: "11px", color: "#1e293b", display: "block", marginBottom: "6px" }}>Extracted Prescriptions to Map to Schedule:</strong>
-          <ul style={{ listStyle: "none", padding: 0, margin: "0 0 12px", display: "flex", flexDirection: "column", gap: "6px" }}>
-            {analysis.prescribedRoutines.map((r, i) => (
-              <li key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f0fdf4", border: "1px solid #bbf7d0", padding: "6px 10px", borderRadius: "6px", fontSize: "11px" }}>
-                <div>
-                  <strong style={{ color: "#166534" }}>{r.name}</strong> ({r.dose}) · <span style={{ color: "#15803d" }}>{r.schedule} at {r.time}</span>
-                  <div style={{ color: "#374151", fontSize: "10px" }}>{r.note}</div>
-                </div>
-                <span style={{ background: "#dcfce7", color: "#166534", padding: "2px 6px", borderRadius: "8px", fontSize: "9px", textTransform: "capitalize" }}>{r.kind}</span>
-              </li>
-            ))}
-          </ul>
+          <div>
+            <strong>Routines you can add</strong>
+            <ul className="rows">
+              {analysis.prescribedRoutines.map((r, i) => (
+                <li key={`${r.name}-${i}`}>
+                  <span className="row-main">
+                    <strong>{r.name}{r.dose ? ` · ${r.dose}` : ""}</strong>
+                    <span>{r.schedule} at {r.time}{r.note ? ` · ${r.note}` : ""}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
 
-          <p style={{ fontSize: "10px", color: "#64748b", margin: "0 0 12px" }}>
-            ⚠️ <em>{analysis.disclaimer}</em>
-          </p>
+          <p className="alert-meta">{analysis.disclaimer}</p>
 
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button type="button" className="primary" onClick={applyMedGemmaToDesk} style={{ fontSize: "12px", padding: "6px 14px" }}>
-              ✓ Confirm & Add to Care Desk Schedule
+          <div className="medgemma-actions">
+            <button type="button" className="primary" onClick={applyMedGemmaToDesk}>
+              Confirm and add to the desk
             </button>
-            <button type="button" className="ghost" onClick={() => setAnalysis(null)} style={{ fontSize: "12px", padding: "6px 12px" }}>
+            <button type="button" className="ghost" onClick={() => setAnalysis(null)}>
               Dismiss
             </button>
           </div>
-        </div>
+        </article>
       ) : null}
 
       {files.length === 0 ? (
@@ -430,7 +424,7 @@ function Library({ categories, files, householdId, onChanged, desk, setDesk, aut
                 </div>
                 <div className="doc-actions">
                   <button className="ghost" type="button" onClick={() => void runMedGemma(f.label || f.name)}>
-                    ✨ MedGemma Map
+                    Preview
                   </button>
                   <button className="ghost" type="button" onClick={() => void open(f)}>
                     Open

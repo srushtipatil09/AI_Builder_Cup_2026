@@ -139,7 +139,7 @@ def simulate_inactivity(body: SimulateInactivity):
 
 class SimulateCheckin(BaseModel):
     household: str = "demo-kamla-sharma"
-    outcome: str = "unanswered"  # or "device_unavailable"
+    outcome: str = "unanswered"  # or "device_unavailable" or "quiet"
 
 
 @router.post("/simulate-checkin")
@@ -150,10 +150,21 @@ def simulate_checkin(body: SimulateCheckin):
 
     if not body.household.startswith("demo-"):
         raise HTTPException(status_code=400, detail="Only demo households can use the demo clock.")
-    if body.outcome not in ("unanswered", "device_unavailable"):
-        raise HTTPException(status_code=400, detail="Outcome must be unanswered or device_unavailable.")
+    if body.outcome not in ("unanswered", "device_unavailable", "quiet"):
+        raise HTTPException(status_code=400, detail="Outcome must be unanswered, device_unavailable, or quiet.")
     repo = get_repository()
     now = datetime.now(timezone.utc)
+    if body.outcome == "quiet":
+        from saathi.scheduling.service import in_quiet_hours
+
+        desk = repo.get_desk(body.household, fresh=True)
+        if desk is None:
+            raise HTTPException(status_code=404, detail="This demo household has no desk yet.")
+        desk.profile.quietHours = "13:00-15:00"
+        repo.save_desk(body.household, desk)
+        skipped = in_quiet_hours("14:00", desk.profile.quietHours)
+        note = "Quiet hours are 1 pm to 3 pm. A check-in at 2 pm does not start."
+        return {"label": note if skipped else "The quiet-hours check did not apply.", "invitation": "", "events": [{"type": "check_in_skipped_quiet_hours" if skipped else "check_in_due"}]}
     key = f"demo-{body.outcome}-{uuid.uuid4().hex[:6]}"
     past = (now - timedelta(minutes=16)).isoformat()
     if body.outcome == "unanswered":

@@ -195,7 +195,7 @@ In danger, Saathi says to call 112 first and offers that call. A hospital is a p
 
 Gemini Flash writes observations with quotes. Unknown stays unknown. Negation stays negation. A statement about someone else does not become a personal fact.
 
-The browser measures the gap from the parent's last loud microphone frame to the first reply audio, and sends the median as `response_gap_ms`. Gemini Live does not provide that number. The live chat does not estimate speaking rate. A session flagged `noisy`, `short`, `no_turns_measured`, or `mic_blocked`, or shorter than 20 seconds, is not treated as a confident pause. A missing duration is still accepted when none of those flags is set.
+The browser measures the gap from the parent's last loud microphone frame to the first reply audio, and sends the median as `response_gap_ms`. Gemini Live does not provide that number. Speaking pace is the parent's words over the time those frames were loud, sent as `speaking_rate_wpm` when the call has at least three seconds of speech and three words. The care desk draws both on the same days, each against this person's earlier days, and writes the two averages in one sentence. Ask Saathi includes the same pause and pace when it answers how the parent has been. The Story demo loads the slower recent days and the two family quotes together. A session flagged `noisy`, `short`, `no_turns_measured`, or `mic_blocked`, or shorter than 20 seconds, is not treated as a confident pause. A missing duration is still accepted when none of those flags is set.
 
 BigQuery compares this person with their own earlier days. Recent days are D-2 through D. The baseline is D-13 through D-3. At least 7 baseline days are required. A follow-up for response gap needs z at least 2 in the slower direction on two successive dates, and a baseline spread of at least 0.25 seconds. Meals, mood, and social contact are counts and dates, not one blended score. A named fast does not become a nutrition alert. Until the baseline is long enough, the desk says **Learning usual routine.**
 
@@ -205,7 +205,7 @@ BigQuery compares this person with their own earlier days. Recent days are D-2 t
 | --- | --- | --- |
 | Level 1 | An isolated change | A quiet line on the desk |
 | Level 2 | The drift rule, the family-episode shift, or two real unanswered invitations | One notice and a human next step |
-| Level 3 | A present-tense request for help, Contact family, or the distress rule | An immediate notice. The copy says to contact local emergency services |
+| Level 3 | A present-tense request for help, Contact family, or the distress rule | An immediate notice. The copy says to contact local emergency services. After a drift flag or a level-3 notice, the desk shows a Tonight card: 112, Elderline 14567, and the trusted contact who lives nearby. The parent taps Call. Nothing dials by itself |
 
 "I did not fall" is not Level 3. A blocked microphone is "device unavailable", not "she ignored the check-in."
 

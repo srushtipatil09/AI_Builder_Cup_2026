@@ -175,7 +175,7 @@ export function demoDesk(): Desk {
       city: "Varanasi",
       persona: "Saathi",
       checkIn: "",
-      quietHours: "",
+      quietHours: "13:00-15:00",
     },
     people: [{ id: "rahul", name: "Rahul", relation: "Son", city: "Bengaluru" }],
     memories: [],
@@ -184,7 +184,10 @@ export function demoDesk(): Desk {
       { id: "bp", kind: "medicine", name: "BP tablet", dose: "", schedule: "Daily", time: soon(20), note: "" },
       { id: "walk", kind: "exercise", name: "Evening walk", dose: "20 minutes", schedule: "Daily", time: "18:00", note: "" },
     ],
-    contacts: [{ id: "rahul", name: "Rahul", relation: "Son, caretaker", phone: "", local: false }],
+    contacts: [
+      { id: "rahul", name: "Rahul", relation: "Son, caretaker", phone: "", local: false },
+      { id: "gate", name: "Sharma ji", relation: "Neighbor, lives nearby", phone: "", local: true },
+    ],
   };
 }
 

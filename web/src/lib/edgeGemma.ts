@@ -1,9 +1,9 @@
 /**
- * Edge Gemma — On-Device Inference Adapter & Offline Safety Shield.
+ * On-phone distress check.
  *
- * Provides local, private LLM execution on the elder's device when internet
- * connectivity is intermittent or offline, using Chrome Built-in AI (Prompt API / Gemini Nano & Gemma)
- * or WebGPU/WASM fallback.
+ * A word list runs with no network and can offer 112. The badge may name a browser
+ * model only when Chrome's built-in language model actually returns an answer.
+ * WebGPU being present is not that model.
  */
 
 export interface EdgeGemmaAssessment {
@@ -23,7 +23,7 @@ const EMERGENCY_KEYWORDS = [
 ];
 
 /**
- * Checks whether on-device Edge Gemma capabilities exist in the client browser.
+ * True only when Chrome's built-in language model reports it can answer.
  */
 export async function isEdgeGemmaAvailable(): Promise<boolean> {
   if (typeof window === "undefined") return false;
@@ -33,11 +33,10 @@ export async function isEdgeGemmaAvailable(): Promise<boolean> {
       const capabilities = await (window as any).ai.languageModel.capabilities();
       return capabilities.available === "readily" || capabilities.available === "after-download";
     } catch {
-      // Fall through to WebGPU check
+      return false;
     }
   }
-  // Check WebGPU availability for MediaPipe Gemma Web
-  return "gpu" in navigator;
+  return false;
 }
 
 /**
@@ -51,7 +50,7 @@ export async function evaluateEdgeGemmaDistress(phrase: string): Promise<EdgeGem
   if (typeof window !== "undefined" && "ai" in window && "languageModel" in (window as any).ai) {
     try {
       const session = await (window as any).ai.languageModel.create({
-        systemPrompt: "You are Edge Gemma, an on-device safety classifier for older adults in India. Respond strictly in JSON: {\"emergency\": boolean, \"action\": \"call_112\" | \"call_108\" | \"none\"}",
+        systemPrompt: "You classify a spoken line from an older adult in India. Respond strictly in JSON: {\"emergency\": boolean, \"action\": \"call_112\" | \"call_108\" | \"none\"}",
       });
       const raw = await session.prompt(`Classify: "${phrase}"`);
       const parsed = JSON.parse(raw);
@@ -73,7 +72,7 @@ export async function evaluateEdgeGemmaDistress(phrase: string): Promise<EdgeGem
 
   return {
     isEmergency,
-    suggestedAction: isEmergency ? (normalized.includes("dard") || normalized.includes("chest") ? "call_108" : "call_112") : "none",
+    suggestedAction: isEmergency ? "call_112" : "none",
     confidence: isEmergency ? 0.9 : 0.2,
     offlineReady: true,
     engine: "heuristic-fallback",

@@ -12,10 +12,10 @@ flowchart TD
     land[Landing page]
     chat[Companion chat]
     desk[Care desk]
-    edgeGemma[Edge Gemma On-Device Shield]
+    edgeGemma[On-phone word check]
     meter[Browser pause measurement]
   end
-  edgeGemma -->|Zero-latency local screening & offline emergency fallback| chat
+  edgeGemma -->|Distress word offers 112 with no network| chat
   land --> chat
   land --> desk
   meter --> chat
@@ -40,13 +40,12 @@ flowchart TD
   push -->|Tap opens the chat| chat
 ```
 
-### Multi-Tier Google AI Architecture (Edge Gemma + MedGemma + Cloud Gemini)
+### Models in this prototype
 
-Saathi pairs specialized Google AI models across the client edge and cloud tiers:
-1. **Edge Tier (Edge Gemma)**: Runs on-device in the elder's browser (`web/src/lib/edgeGemma.ts`, leveraging Chrome Built-in AI / Prompt API with WebGPU fallback). Delivers zero-latency local intent classification, emergency distress screening (e.g. falls, acute pain), and offline emergency triggers without requiring active cellular bandwidth—vital for spotty rural Indian connectivity.
-2. **Clinical Grounding Tier (MedGemma)**: Operates on the Care Desk (`web/src/lib/medGemma.ts`) to read, summarize, and map doctor prescriptions and lab reports into active Care Desk routines and memory facts, translating dense clinical shorthand into clear family summaries without altering physician dosages.
-3. **Cloud Interactive Tier (Gemini Live 2.5 Flash)**: Bidirectional, low-latency conversational audio streaming in Hindi and nine Indian languages.
-4. **Cloud Analytical Tier (Gemini 2.5 Flash & Vertex AI)**: Post-call fact extraction, multilingual embeddings (`text-multilingual-embedding-002`), BigQuery longitudinal drift analysis, and deterministic SafetyGuard synthesis.
+1. **On-phone check** (`web/src/lib/edgeGemma.ts`): a distress word offers 112 with no network. The phone names a browser model only when Chrome's built-in language model actually returns an answer. WebGPU being present is not that model.
+2. **MedGemma, prototype only** (`web/src/lib/medGemma.ts`): the planned reader for one uploaded prescription. On Model Garden that endpoint is billed the whole time it is deployed, about $2.30 an hour in us-central1 for the 4B quickstart, including idle time. It is not deployed. The care desk shows a sample layout and does not read the file. A caretaker still confirms any routine before it is saved.
+3. **Gemini Live 2.5 Flash**: bidirectional spoken audio in Hindi and nine Indian languages. This is the live model.
+4. **Gemini 2.5 Flash and Vertex**: post-call extraction, embeddings (`text-multilingual-embedding-002`), BigQuery drift against this person's own earlier days, and SafetyGuard.
 
 Voice does not wait for extraction. A distress check does: during the open call the API speaks that language's check (in Hindi, "Kya hua? Gir gaye kya? Main yahin hoon.") and may send a short clip to Flash. Embeddings and drift run after the call. With no `WORKER_URL`, that post-call work stays in the API process instead of Cloud Tasks.
 

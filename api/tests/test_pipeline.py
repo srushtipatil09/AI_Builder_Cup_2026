@@ -20,11 +20,29 @@ from saathi.taskqueue import build_task, task_name
 
 def test_drift_fixtures_disagree_as_expected() -> None:
     assert evaluate_drift_rule(scenario_records("stable")).is_candidate is False
-    changing = evaluate_drift_rule(scenario_records("changing"))
+    changing_rows = scenario_records("changing")
+    changing = evaluate_drift_rule(changing_rows)
     assert changing.is_candidate and changing.metric_name == "response_gap_ms"
+    base_pace = sum(r.speaking_rate_wpm or 0 for r in changing_rows[:12]) / 12
+    recent_pace = sum(r.speaking_rate_wpm or 0 for r in changing_rows[-3:]) / 3
+    assert recent_pace < base_pace - 20
     fasting = evaluate_drift_rule(scenario_records("fasting"))
     assert fasting.is_candidate is False and fasting.meal_followup is False
     assert fasting.context_notes, "the fast or illness context is stored"
+
+
+def test_story_seed_slows_speech_and_drops_family_contact() -> None:
+    rows = scenario_records("story")
+    base = sum(r.speaking_rate_wpm or 0 for r in rows[:12]) / 12
+    recent = sum(r.speaking_rate_wpm or 0 for r in rows[-3:]) / 3
+    assert recent < base - 20
+    assert rows[1].family_contact is True
+    assert rows[-1].family_contact is False
+    from saathi.asks.answer import pace_fact_line
+
+    line = pace_fact_line([r.model_dump() for r in rows])
+    assert "words per minute" in line
+    assert "seconds" in line
 
 
 def test_drift_needs_a_week_of_baseline() -> None:

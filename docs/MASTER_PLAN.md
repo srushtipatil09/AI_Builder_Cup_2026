@@ -32,7 +32,7 @@ flowchart LR
 | After the call | One Cloud Task per session, then the private worker. Scheduler once a minute for due work. No second Pub/Sub path |
 | Memory | Firestore, including caretaker facts. Family episodes also get a Vertex embedding and a Firestore vector index |
 | Drift | SQL in BigQuery. Recent 3 local days against the prior 11. At least 7 baseline days |
-| Speech timing | The browser sends the wait from the parent's last loud frame to the first reply audio. Live does not emit that pause. Speaking rate is a stored field the live chat does not fill |
+| Speech timing | The browser sends the wait from the parent's last loud frame to the first reply audio, and a speaking pace from the parent's words over that loud time. Live does not emit either number |
 | Safety | A Python check on every family-facing sentence. Failure falls back to a sentence built from stored facts |
 | Agent | Three tools in the worker. The default path runs them in a fixed order. ADK is optional (`saathi[adk]`) and falls back to that order. Agent Engine hosting is out |
 | Cost | Request-billed Cloud Run at zero instances. Live capped at 240 seconds. Flash for everything after the call. Explicit cache only at 4,096 tokens or more, and the Live path does not create one. Firestore vectors, not a Vector Search replica. BigQuery on-demand, 100 MiB byte cap. No GPU |

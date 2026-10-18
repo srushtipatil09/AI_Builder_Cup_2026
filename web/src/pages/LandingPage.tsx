@@ -86,6 +86,14 @@ export function LandingPage() {
         ))}
       </section>
 
+      <section className="cost-note" aria-labelledby="cost-title">
+        <h2 id="cost-title">Left off when nobody is talking</h2>
+        <p>
+          Cloud Run stays at zero instances when idle. A Live call stops at 4 minutes. MedGemma is not left running:
+          that machine is about $2.30 an hour in us-central1 even when unused, so this prototype keeps a prepared preview instead.
+        </p>
+      </section>
+
       <section id="languages" className="languages" aria-labelledby="languages-title">
         <header className="languages-head">
           <p className="eyebrow">New: more languages</p>

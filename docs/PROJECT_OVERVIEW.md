@@ -30,7 +30,7 @@ flowchart TD
     subgraph Client ["Frontend & Edge (Firebase Hosting / On-Device)"]
         Chat["Companion Chat (/app)"]
         Desk["Care Desk (/care)"]
-        EdgeGemma["Edge Gemma (On-Device Shield)"]
+        EdgeGemma["On-phone word check"]
     end
 
     subgraph Ingestion ["Cloud Run (API Service)"]
@@ -78,14 +78,14 @@ flowchart TD
 ### A. Gemini & Gemma (Multi-Tier Google AI Ecosystem)
 Saathi pairs specialized Google AI models tailored to latency, safety, and domain requirements:
 
-1. **Edge Gemma (`web/src/lib/edgeGemma.ts` — On-Device Edge Inference)**:
-   - **Zero-Latency Offline Safety Net**: Runs locally on the elder's device (via Chrome Built-in AI / Prompt API or WebGPU). Detects critical distress keywords (e.g. falls, chest pain) and offers emergency 112/108 assistance instantly—even when network connectivity is lost in rural Indian environments.
-   - **Edge Privacy Shield**: Screens private queries locally before opening cloud audio sockets.
+1. **On-phone word check (`web/src/lib/edgeGemma.ts`)**:
+   - A distress word offers 112 with no network.
+   - The badge names a browser model only when Chrome's built-in language model actually returns an answer. WebGPU being present is not that model.
 
-2. **MedGemma (`web/src/lib/medGemma.ts` — Clinical Report & Prescription Mapping)**:
-   - **Clinical Document Grounding**: Reads uploaded doctor prescriptions, lab results, and discharge summaries on the Care Desk.
-   - **Plain-Language Summaries**: Translates dense medical shorthand into clear explanations for adult children in English and Hindi.
-   - **Auto-Mapping to Active Schedule**: Extracts physician-prescribed medicines, dosages, meal timings, and lifestyle recommendations directly into Saathi's Care Desk routines and memory facts with caretaker confirmation.
+2. **MedGemma (`web/src/lib/medGemma.ts`) — prototype, not deployed**:
+   - The planned reader for one uploaded prescription.
+   - On Model Garden that endpoint is billed the whole time it is deployed, about $2.30 an hour in us-central1 for the 4B quickstart, including idle time. It is not deployed.
+   - The care desk shows a sample layout and does not read the file. A caretaker still confirms any routine before it is saved.
 
 3. **Gemini Live (`gemini-live-2.5-flash-native-audio`)**:
    - **Real-Time Voice Streaming**: Connects directly via bidirectional WebSockets. Audio captured at 16 kHz PCM is streamed to Gemini Live, which returns natural 24 kHz spoken audio streamed gapless to the browser.

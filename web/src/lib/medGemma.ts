@@ -1,13 +1,11 @@
 /**
- * MedGemma — Clinical Report Summarization & Routine Mapping Engine.
+ * MedGemma sample layout.
  *
- * Grounded medical AI specialized in reading doctor prescriptions, lab reports,
- * and discharge summaries uploaded to the Care Desk.
- *
- * Strictly adheres to SafetyGuard:
- * - Summarizes and maps what a licensed physician wrote.
- * - Does not invent new diagnoses or change medication dosages.
- * - Automatically populates Care Desk routines and family memories with caretaker confirmation.
+ * A live Model Garden endpoint stays billed the whole time it is deployed
+ * (about $2.30 an hour in us-central1 for the 4B quickstart, including idle time).
+ * That endpoint is not deployed. This function does not read the uploaded file.
+ * It returns a labeled sample so the care desk can show the layout. The caretaker
+ * still confirms anything before it is saved.
  */
 
 import type { Medicine, Memory } from "../desk";
@@ -30,7 +28,6 @@ export async function analyzeDoctorReportWithMedGemma(
   _category: string = "prescriptions",
   _authorName: string = "MedGemma"
 ): Promise<MedGemmaReportAnalysis> {
-  // Simulate rapid on-device / backend MedGemma inference latency
   await new Promise((resolve) => setTimeout(resolve, 450));
 
   const lower = (fileName || "").toLowerCase();
@@ -65,7 +62,7 @@ export async function analyzeDoctorReportWithMedGemma(
         "Doctor advised maintaining 2 liters daily water intake.",
         "Next fasting blood glucose review scheduled in 6 weeks.",
       ],
-      disclaimer: "Extracted directly from doctor's lab notes. Non-prescriptive routine mapping.",
+      disclaimer: "Prepared preview for the family. Confirm before adding it to the desk.",
     };
   }
 
@@ -107,7 +104,7 @@ export async function analyzeDoctorReportWithMedGemma(
       "Doctor recorded blood pressure is stable at 134/86 mmHg.",
       "Advice: Avoid pickles, papad, and high-sodium snacks.",
     ],
-    disclaimer: "Extracted directly from physician's prescription. Preserves doctor's original dosage.",
+    disclaimer: "Prepared preview for the family. Confirm before adding it to the desk.",
   };
 }
 
@@ -127,8 +124,8 @@ export function mapAnalysisToDeskRecords(
 
   const newMemories: Memory[] = analysis.clinicalObservations.map((obs, i) => ({
     id: `mem-medgemma-${Date.now()}-${i}`,
-    text: `[Doctor Note] ${obs}`,
-    author: `${author} (via MedGemma)`,
+    text: `[Sample layout] ${obs}`,
+    author,
     addedAt: timestamp,
   }));
 
