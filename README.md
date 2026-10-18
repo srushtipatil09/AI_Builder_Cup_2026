@@ -4,8 +4,7 @@
 
 The parent never types. Saathi sends a gentle notification, then talks with them in Hindi (nine more languages are selectable), remembers their family, and confirms their routine from what they say. The family sees what changed over the weeks, in plain words, without any diagnosis or dose advice.
 
-[Live app](https://saathi-511717.web.app) · [Try it in 2 minutes](#try-it-in-2-minutes-for-judges) · [Results](#results) · [Architecture](#how-it-runs) · Theme: **Sustainability and Social Impact** · Google Cloud AI Builder Cup 2026
-<!-- Add before submitting: the 3-minute demo video link and the deck PDF link in the line above. -->
+[Live app](https://saathi-511717.web.app) · [Demo video](https://drive.google.com/file/d/1BYQ_IL3YEwDRZ6upRgihbk1uq7Pawfjr/view?usp=drivesdk) · [Pitch deck](Pitch%20Desk.pdf) · [Try it in 2 minutes](#try-it-in-2-minutes-for-judges) · [Results](#results) · [Architecture](#how-it-runs) · Theme: **Sustainability and Social Impact** · Google Cloud AI Builder Cup 2026
 
 <p align="center">
   <img src="docs/images/phone-talk.jpg" alt="The parent's phone while Saathi is listening, with Stop, Pause and Contact family buttons" width="240">
@@ -217,7 +216,7 @@ A live MedGemma endpoint (the care desk keeps a sample layout, because the endpo
 | Phone reliability | A native Android wrapper for background reminders and notification delivery |
 | Reach | Weekday reminders, Live voices checked with native speakers beyond Hindi and Marathi, native-script distress and safety checks, and a pilot with an NGO or community health worker |
 
-The deck PDF and the three-minute video are the files that go with the form.
+The [deck PDF](Pitch%20Desk.pdf) and the [three-minute video](https://drive.google.com/file/d/1BYQ_IL3YEwDRZ6upRgihbk1uq7Pawfjr/view?usp=drivesdk) are the files that go with the form.
 
 ## What the judges score
 
@@ -232,7 +231,7 @@ Weights and the pieces of this repository that answer them:
 | 25% | Innovation | A closed phone does not listen: a notification, then speech. A Roman-script Hindi or English distress word offers 112 with no network. A reminder is saved only after a spoken yes and confirmed only by a later spoken "I have done it". Drift uses the person's own baseline and does not treat a named fast as a missed meal. SafetyGuard replaces any diagnosis, dose, or counselling order. Late at night the prompt drops memories and a park is refused. |
 | 10% | User experience | One app, two fronts chosen by role. The parent sees Talk, Stop, Pause, Contact family, and Nearby help, with optional captions. The care desk has five tabs on a phone and a computer and opens on the copy already saved in the browser. A family code joins the phone. Chrome gets an install sheet; iPhone gets Add to Home Screen steps. Copy stays plain: "Not yet confirmed" until the parent says they have done it. |
 
-Try it at https://saathi-511717.web.app. The Kamla Sharma phone and the caretaker demo need no account. Both are labeled synthetic.
+Try it at https://saathi-511717.web.app, or watch the [demo video](https://drive.google.com/file/d/1BYQ_IL3YEwDRZ6upRgihbk1uq7Pawfjr/view?usp=drivesdk). The Kamla Sharma phone and the caretaker demo need no account. Both are labeled synthetic.
 
 ## Deploy
 

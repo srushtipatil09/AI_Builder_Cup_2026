@@ -4,6 +4,8 @@
 **Hackathon**: AI Builder Cup 2026 (Sustainability & Social Impact)  
 **Project Leads**: Srushti Patil & Vibhuti Singh  
 **Live Application**: [https://saathi-511717.web.app](https://saathi-511717.web.app)  
+**Demo Video**: [Watch on Google Drive](https://drive.google.com/file/d/1BYQ_IL3YEwDRZ6upRgihbk1uq7Pawfjr/view?usp=drivesdk)  
+**Pitch Deck**: [Pitch Desk.pdf](../Pitch%20Desk.pdf)  
 **Public API Service**: [https://saathi-api-ikr6m7lina-uc.a.run.app](https://saathi-api-ikr6m7lina-uc.a.run.app)  
 **Private Worker Service**: [https://saathi-worker-ikr6m7lina-uc.a.run.app](https://saathi-worker-ikr6m7lina-uc.a.run.app)  
 
