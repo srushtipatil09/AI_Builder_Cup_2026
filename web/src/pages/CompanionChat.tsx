@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { LiveAudio, toBase64 } from "../lib/liveAudio";
 import { currentIdToken } from "../lib/firebase";
 import { nextDelay } from "../lib/activity";
-import { completeSession, contactFamily, fetchDesk, invitationEvent, nextInvitation, pausedForMs, sendHeartbeat, simulateInactivity, textTurn } from "../lib/api";
+import { completeSession, contactFamily, fetchDesk, fetchOuting, invitationEvent, nextInvitation, pausedForMs, sendHeartbeat, simulateInactivity, textTurn, type Outing } from "../lib/api";
 import { enableParentPush, pushMessage } from "../lib/push";
 import { readSession } from "../session";
 import { LanguageOptions, languageFor } from "../lib/languages";
@@ -33,6 +33,7 @@ export function CompanionChat({ demo, name, householdId }: Props) {
   const [status, setStatus] = useState<"idle" | "connecting" | "listening" | "thinking" | "speaking" | "paused">("idle");
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatError, setChatError] = useState<string>("");
+  const [outing, setOuting] = useState<Outing | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<LiveAudio | null>(null);
@@ -71,6 +72,12 @@ export function CompanionChat({ demo, name, householdId }: Props) {
     fetchDesk(id, demo)
       .then((desk) => setPersona(desk.profile.persona === "Rakshak" ? "Rakshak" : "Saathi"))
       .catch(() => setPersona("Saathi"));
+  }, [demo, householdId]);
+
+  useEffect(() => {
+    const id = demo ? "demo-kamla-sharma" : householdId || "";
+    if (!id) return;
+    void fetchOuting(id).then(setOuting).catch(() => setOuting(null));
   }, [demo, householdId]);
 
   useEffect(() => {
@@ -579,6 +586,21 @@ export function CompanionChat({ demo, name, householdId }: Props) {
           </p>
         ) : null}
         {closedTalk != null ? <p className="talk-closed">{talkClosedLabel(closedTalk)}</p> : null}
+        {outing?.invitation ? (
+          <p className="outing-chip">
+            {outing.invitation}{" "}
+            <button
+              className="text-link"
+              type="button"
+              onClick={() => {
+                setNearbyCard({ kind: outing.placeKind || "park", items: [], positionShared: false });
+                setNearbyOpen(true);
+              }}
+            >
+              See nearby
+            </button>
+          </p>
+        ) : null}
         {invite ? (
           <p className="invite-chip">
             <span>Saathi wants to talk.</span>

@@ -31,6 +31,9 @@ _INSTRUCTION = (
     "Do not tell anyone to start, stop, or change a medicine. "
     "plainSummary and hindiSummary are a few lines for the family and must not contain milligram amounts. "
     "If a medicine name and amount are printed, put the amount only in dose, exactly as written. "
+    "Brushing, flossing, or a walk the page says daily is kind other or exercise and schedule Daily. "
+    "A filling, a cleaning, or any visit is kind other and schedule Once, never Daily. "
+    "Put a clock time only when the page prints one. "
     "If the page is not a note or cannot be read, set source to unreadable and leave routines empty."
 )
 

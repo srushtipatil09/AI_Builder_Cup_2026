@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deleteLocation, type NearbyKind } from "../../lib/api";
+import { deleteLocation, fetchOuting, type NearbyKind, type Outing } from "../../lib/api";
 import { useAppDispatch, useAppSelector } from "../../store";
 import { loadNearby, nearbyAllFromCache, nearbyForget, nearbyFromCache } from "../../store/reads";
 import { NearbyList } from "../NearbyList";
@@ -24,6 +24,7 @@ export function NearbyCard({ householdId, name, city: deskCity = "", contactsKey
   // Places stay on screen while only the people list is being read again.
   const data = nearbyAllFromCache(record) ?? nearbyFromCache(record, "people");
   const [error, setError] = useState(false);
+  const [outing, setOuting] = useState<Outing | null>(null);
   const [open, setOpen] = useState<NearbyKind>("hospital");
   const toast = useToast();
 
@@ -42,6 +43,11 @@ export function NearbyCard({ householdId, name, city: deskCity = "", contactsKey
   useEffect(() => {
     if (householdId) load();
   }, [householdId, load]);
+
+  useEffect(() => {
+    if (!householdId) return;
+    void fetchOuting(householdId).then(setOuting).catch(() => setOuting(null));
+  }, [householdId]);
 
   // A new city (with no shared position) means new places; a changed contact list only means new people.
   const seen = useRef({ city: deskCity, contactsKey });
@@ -77,6 +83,7 @@ export function NearbyCard({ householdId, name, city: deskCity = "", contactsKey
         Saathi shows it with a Call button. A list they open on the phone is kept here. Trusted contacts who live nearby come first. These are places and numbers, not
         medical advice.
       </p>
+      {outing?.invitation ? <p className="outing-chip">{outing.invitation}</p> : null}
       <p className="nearby-source">
         {data?.location.set
           ? `Using ${who}'s phone position, shared once${data.location.updatedAt ? ` on ${new Date(data.location.updatedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : ""}.`

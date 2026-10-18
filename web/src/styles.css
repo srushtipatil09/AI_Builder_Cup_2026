@@ -6527,6 +6527,19 @@ button.orb:disabled {
 .evidence-list li { margin: 4px 0; }
 .medgemma-preview { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; padding: 14px 16px; border-radius: 14px; background: var(--teal-soft); border: 1px solid #c4dcd6; }
 .medgemma-preview p { margin: 6px 0 0; max-width: 62ch; color: var(--ink); font-size: 0.95rem; line-height: 1.45; }
+.gemini-mark { margin-right: 8px; flex: none; }
+.suggested-reminders { margin: 0; padding: 0; border: 0; display: grid; gap: 10px; }
+.suggested-reminders legend { font-weight: 700; }
+.suggested-reminders p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+.suggested-reminders ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.suggested-reminders li { display: grid; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.suggested-reminders label { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.suggested-reminders label span { display: grid; }
+.suggested-time { font-size: 0.92rem; }
+.outing-chip { margin: 8px 0 0; padding: 10px 14px; border-radius: 14px; background: var(--sand); color: var(--ink); font-size: 0.95rem; line-height: 1.4; }
+.outing-chip button { margin-left: 8px; }
+.read-sheet { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; padding: 24px 16px; background: rgb(30 22 10 / 0.45); }
+.read-sheet .medgemma-result { width: min(100%, 560px); max-height: min(88vh, 720px); overflow: auto; background: var(--paper); box-shadow: 0 24px 60px -24px rgb(30 22 10 / 0.55); }
 .medgemma-result { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--cream); }
 .medgemma-result-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .medgemma-result h4 { margin: 2px 0 0; }

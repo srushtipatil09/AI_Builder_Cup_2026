@@ -7,6 +7,7 @@ from saathi.auth.firebase import ensure_household_access, get_current_actor, is_
 from saathi.contracts.desk import Desk
 from saathi.contracts.identity import ActorContext
 from saathi.nearby import service
+from saathi.nearby.calendar import coming_up
 from saathi.providers.firestore import get_repository
 
 router = APIRouter(prefix="/api/v1/households/{household_id}", tags=["nearby"])
@@ -35,6 +36,13 @@ def remove_location(household_id: str, actor: ActorContext = Depends(get_current
     ensure_household_access(actor, household_id, allow_family_code=True)
     service.delete_spot(household_id)
     return {"status": "deleted"}
+
+
+@router.get("/outing")
+def get_outing(household_id: str, actor: ActorContext = Depends(get_current_actor)) -> dict:
+    """The next festival, and one place the parent already looked up. No new Places search."""
+    ensure_household_access(actor, household_id, allow_family_code=True)
+    return coming_up(household_id, service.is_late())
 
 
 @router.get("/nearby")

@@ -307,6 +307,18 @@ export type Nearby = {
   checked?: Partial<Record<NearbyKind, string>>;
 };
 
+export type Outing = {
+  name: string;
+  date: string;
+  line: string;
+  placeName: string;
+  placeKind: string;
+  late: boolean;
+  invitation: string;
+};
+
+export const fetchOuting = (id: string) => getJson<Outing>(`${hh(id)}/outing`, id);
+
 export const fetchNearby = (id: string, kind: NearbyKind | "people" | "helplines" | "all" = "all", remember = false) =>
   getJson<Nearby>(`${hh(id)}/nearby?kind=${kind}${remember ? "&remember=true" : ""}`, id);
 
@@ -506,7 +518,11 @@ export async function fileLink(householdId: string, fileId: string): Promise<Fil
     headers: await getAuthHeaders(householdId),
   });
   if (!res.ok) throw new Error(`Failed to open file: ${res.statusText}`);
-  return res.json();
+  const link = (await res.json()) as FileLink;
+  // The API returns a path on its own host. On the hosted site that path would otherwise open
+  // the website, which has no file, so the thumbnail and the new tab stay blank.
+  const url = link.url.startsWith("/") && API_ORIGIN ? `${API_ORIGIN}${link.url}` : link.url;
+  return { ...link, url };
 }
 
 export async function deleteFile(householdId: string, fileId: string): Promise<void> {

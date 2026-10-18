@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type DragEvent, type FormEvent } from "react";
 import { deleteFile, readSampleNote, readStoredNote, uploadFile, type FileCategory, type StoredFile } from "../../lib/api";
 import { useAppDispatch, useAppSelector } from "../../store";
-import { fileLinksForget, fileUrl, linkUsable, loadCategories, loadFileLink, loadFiles } from "../../store/reads";
+import { fileLinksForget, linkUsable, loadCategories, loadFileLink, loadFiles } from "../../store/reads";
 import { useToast } from "../../toast";
-import type { Desk } from "../../desk";
+import { newId, type Desk, type Medicine } from "../../desk";
 import { analyzeDoctorReportWithMedGemma, mapAnalysisToDeskRecords, type MedGemmaReportAnalysis } from "../../lib/medGemma";
+import { suggestReminders, type SuggestedReminder } from "../../lib/remindersFromPage";
 
 type Props = {
   householdId: string;
@@ -31,6 +32,22 @@ const FALLBACK_CATEGORIES: FileCategory[] = [
 
 const LINK_REFRESH_MS = 25 * 60 * 1000;
 const NO_FILES: StoredFile[] = [];
+
+function GeminiMark() {
+  const id = useId().replace(/:/g, "");
+  return (
+    <svg className="gemini-mark" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+      <defs>
+        <linearGradient id={id} x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0" stopColor="#1a73e8" />
+          <stop offset="0.55" stopColor="#9b72cb" />
+          <stop offset="1" stopColor="#d96570" />
+        </linearGradient>
+      </defs>
+      <path fill={`url(#${id})`} d="M12 1.6 14.2 9 21.6 12 14.2 15 12 22.4 9.8 15 2.4 12 9.8 9 12 1.6z" />
+    </svg>
+  );
+}
 
 function sizeLabel(bytes: number) {
   return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -76,6 +93,40 @@ function Thumb({ householdId, file }: { householdId: string; file: StoredFile })
     );
   }
   return src ? <img className="doc-thumb" src={src} alt="" /> : <span className="doc-thumb" aria-hidden="true" />;
+}
+
+// A real link, so the browser opens the file on the API host. A button that waits, then calls window.open, is blocked.
+function OpenFile({ householdId, fileId }: { householdId: string; fileId: string }) {
+  const dispatch = useAppDispatch();
+  const toast = useToast();
+  const url = useFileLink(householdId, fileId);
+  if (url) {
+    return (
+      <a className="ghost" href={url} target="_blank" rel="noopener noreferrer">
+        Open
+      </a>
+    );
+  }
+  return (
+    <button
+      className="ghost"
+      type="button"
+      onClick={() => {
+        const tab = window.open("about:blank", "_blank");
+        void dispatch(loadFileLink({ householdId, fileId }))
+          .unwrap()
+          .then((link) => {
+            if (tab) tab.location.replace(link.url);
+          })
+          .catch(() => {
+            tab?.close();
+            toast("Could not open that file. Try again.", "bad");
+          });
+      }}
+    >
+      Open
+    </button>
+  );
 }
 
 const IMAGE_TYPES = "image/jpeg,image/png,image/webp";
@@ -268,6 +319,22 @@ function Library({ categories, files, householdId, demo, onChanged, desk, setDes
   const [filter, setFilter] = useState("all");
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<MedGemmaReportAnalysis | null>(null);
+  const [suggestions, setSuggestions] = useState<SuggestedReminder[]>([]);
+  const closeRead = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    setSuggestions(analysis ? suggestReminders(analysis.prescribedRoutines) : []);
+  }, [analysis]);
+
+  useEffect(() => {
+    if (!analysis) return;
+    closeRead.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAnalysis(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [analysis]);
 
   const readable = (file: StoredFile) =>
     (file.category === "prescriptions" || file.category === "medical_reports") &&
@@ -329,9 +396,20 @@ function Library({ categories, files, householdId, demo, onChanged, desk, setDes
       setAnalysis(null);
       return;
     }
-    const { newMedicines, newMemories } = mapAnalysisToDeskRecords(analysis, author || "Caretaker");
-    const existingNames = new Set(desk.medicines.map((m) => m.name.toLowerCase()));
-    const toAdd = newMedicines.filter((m) => !existingNames.has(m.name.toLowerCase()));
+    const { newMemories } = mapAnalysisToDeskRecords(analysis, author || "Caretaker");
+    const have = new Set(desk.medicines.map((m) => `${m.name.toLowerCase()}|${m.time}`));
+    const toAdd: Medicine[] = suggestions
+      .filter((s) => s.on && s.time && !have.has(`${s.name.toLowerCase()}|${s.time}`))
+      .map((s) => ({
+        id: newId(),
+        kind: s.kind,
+        name: s.name,
+        dose: s.dose,
+        schedule: s.schedule,
+        date: s.schedule === "Once" ? s.date : "",
+        time: s.time,
+        note: s.note,
+      }));
 
     setDesk({
       ...desk,
@@ -339,7 +417,12 @@ function Library({ categories, files, householdId, demo, onChanged, desk, setDes
       memories: [...desk.memories, ...newMemories],
     });
 
-    toast(`Added ${toAdd.length} routine${toAdd.length === 1 ? "" : "s"} and ${newMemories.length} note${newMemories.length === 1 ? "" : "s"} to the desk.`, "ok");
+    toast(
+      toAdd.length
+        ? `Added ${toAdd.length} reminder${toAdd.length === 1 ? "" : "s"} and ${newMemories.length} note${newMemories.length === 1 ? "" : "s"}.`
+        : "No new reminders. The notes were kept.",
+      "ok",
+    );
     setAnalysis(null);
   }
 
@@ -347,15 +430,6 @@ function Library({ categories, files, householdId, demo, onChanged, desk, setDes
   const counts = categories.map((c) => ({ c, n: files.filter((f) => f.category === c.id).length })).filter((x) => x.n > 0);
   const active = filter !== "all" && !counts.some((x) => x.c.id === filter) ? "all" : filter;
   const shown = active === "all" ? files : files.filter((f) => f.category === active);
-
-  async function open(file: StoredFile) {
-    try {
-      const url = await dispatch(fileUrl(householdId, file.id));
-      window.open(url, "_blank", "noopener");
-    } catch {
-      toast("Could not open that file. Try again.", "bad");
-    }
-  }
 
   async function remove(file: StoredFile) {
     if (!window.confirm(`Delete ${file.label || file.name}? This cannot be undone.`)) return;
@@ -386,6 +460,7 @@ function Library({ categories, files, householdId, demo, onChanged, desk, setDes
         <div className="medgemma-actions">
           {demo ? (
             <button type="button" className="primary" onClick={() => void readSample()} disabled={analyzing}>
+              <GeminiMark />
               {analyzing ? "Reading…" : "Read the sample page"}
             </button>
           ) : null}
@@ -401,14 +476,20 @@ function Library({ categories, files, householdId, demo, onChanged, desk, setDes
       </div>
 
       {analysis ? (
-        <article className="medgemma-result" aria-label={analysis.source === "page" ? "Read from this page" : "Prepared note"}>
+        <div className="read-sheet" role="presentation" onClick={(event) => event.target === event.currentTarget && setAnalysis(null)}>
+        <article
+          className="medgemma-result"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="read-title"
+        >
           <div className="medgemma-result-head">
             <div>
               <p className="medgemma-kicker">{analysis.source === "page" ? "From this page" : analysis.source === "unreadable" ? "Could not read" : "Prepared note"}</p>
-              <h4>{analysis.reportTitle}</h4>
+              <h4 id="read-title">{analysis.reportTitle}</h4>
               {analysis.doctorName ? <p className="medgemma-doctor">{analysis.doctorName}</p> : null}
             </div>
-            <button className="ghost" type="button" onClick={() => setAnalysis(null)}>
+            <button ref={closeRead} className="ghost" type="button" onClick={() => setAnalysis(null)}>
               Close
             </button>
           </div>
@@ -419,20 +500,41 @@ function Library({ categories, files, householdId, demo, onChanged, desk, setDes
             {analysis.hindiSummary ? <p lang="hi">{analysis.hindiSummary}</p> : null}
           </div>
 
-          {analysis.prescribedRoutines.length > 0 ? (
-          <div>
-            <strong>{analysis.source === "page" ? "As written on the page" : "Routines you can add"}</strong>
-            <ul className="rows">
-              {analysis.prescribedRoutines.map((r, i) => (
-                <li key={`${r.name}-${i}`}>
-                  <span className="row-main">
-                    <strong>{r.name}{r.dose ? ` · ${r.dose}` : ""}</strong>
-                    <span>{r.schedule} at {r.time}{r.note ? ` · ${r.note}` : ""}</span>
-                  </span>
+          {suggestions.length > 0 ? (
+          <fieldset className="suggested-reminders">
+            <legend>Suggested reminders</legend>
+            <p>Tick the ones to add. A clock time that was not printed on the page is only a suggestion.</p>
+            <ul>
+              {suggestions.map((item) => (
+                <li key={item.id}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={item.on}
+                      onChange={(event) =>
+                        setSuggestions((rows) => rows.map((row) => (row.id === item.id ? { ...row, on: event.target.checked } : row)))
+                      }
+                    />
+                    <span>
+                      <strong>{item.name}</strong>
+                      <span>{item.schedule === "Daily" ? "Every day" : `Once, ${item.date}`}</span>
+                    </span>
+                  </label>
+                  <label className="suggested-time">
+                    Time
+                    <input
+                      type="time"
+                      value={item.time}
+                      onChange={(event) =>
+                        setSuggestions((rows) => rows.map((row) => (row.id === item.id ? { ...row, time: event.target.value } : row)))
+                      }
+                    />
+                  </label>
+                  <p>{item.hint}{item.note ? ` ${item.note}` : ""}</p>
                 </li>
               ))}
             </ul>
-          </div>
+          </fieldset>
           ) : null}
 
           <p className="alert-meta">{analysis.disclaimer}</p>
@@ -440,7 +542,7 @@ function Library({ categories, files, householdId, demo, onChanged, desk, setDes
           <div className="medgemma-actions">
             {analysis.source === "unreadable" ? null : (
             <button type="button" className="primary" onClick={applyMedGemmaToDesk}>
-              Confirm and add to the desk
+              {suggestions.some((item) => item.on) ? "Add the ticked reminders" : "Confirm and add to the desk"}
             </button>
             )}
             <button type="button" className="ghost" onClick={() => setAnalysis(null)}>
@@ -448,6 +550,7 @@ function Library({ categories, files, householdId, demo, onChanged, desk, setDes
             </button>
           </div>
         </article>
+        </div>
       ) : null}
 
       {files.length === 0 ? (
@@ -478,12 +581,11 @@ function Library({ categories, files, householdId, demo, onChanged, desk, setDes
                 <div className="doc-actions">
                   {readable(f) ? (
                     <button className="ghost" type="button" onClick={() => void readPage(f)} disabled={analyzing}>
+                      <GeminiMark />
                       {analyzing ? "Reading…" : "Read this page"}
                     </button>
                   ) : null}
-                  <button className="ghost" type="button" onClick={() => void open(f)}>
-                    Open
-                  </button>
+                  <OpenFile householdId={householdId} fileId={f.id} />
                   <button className="ghost" type="button" onClick={() => void remove(f)}>
                     Delete
                   </button>
