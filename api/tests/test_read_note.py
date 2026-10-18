@@ -14,7 +14,7 @@ def test_a_dose_stays_on_the_routine_and_leaves_the_family_summary() -> None:
     prepared = prepare_page_read(PageRead(
         reportTitle="Follow-up",
         plainSummary="Continue Telmisartan 40 mg every morning and walk.",
-        hindiSummary="",
+        localSummary="",
         prescribedRoutines=[PageRoutine(kind="medicine", name="Telmisartan", dose="40mg", time="08:30")],
         clinicalObservations=["Blood pressure written as 134/86."],
         source="page",
@@ -38,3 +38,17 @@ def test_a_diagnosis_is_replaced_and_an_unreadable_page_adds_nothing() -> None:
     assert blank.source == "unreadable"
     assert blank.prescribedRoutines == []
     assert "Nothing was added" in blank.plainSummary
+
+
+def test_the_second_summary_follows_the_parent_language() -> None:
+    tamil = prepare_page_read(PageRead(plainSummary="Walk every morning.", localSummary="தினமும் காலை நடக்கவும்.", source="page"), "Tamil")
+    assert tamil.localLanguage == "Tamil"
+    assert tamil.localSummary
+
+    english = prepare_page_read(PageRead(plainSummary="Walk every morning.", localSummary="Walk every morning.", source="page"), "English")
+    assert english.localLanguage == ""
+    assert english.localSummary == ""
+
+    blank = prepare_page_read(PageRead(source="unreadable"), "Bengali")
+    assert blank.localLanguage == "Bengali"
+    assert "পড়া যায়নি" in blank.localSummary

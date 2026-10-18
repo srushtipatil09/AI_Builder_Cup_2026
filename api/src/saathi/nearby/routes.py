@@ -42,7 +42,11 @@ def remove_location(household_id: str, actor: ActorContext = Depends(get_current
 def get_outing(household_id: str, actor: ActorContext = Depends(get_current_actor)) -> dict:
     """The next festival, and one place the parent already looked up. No new Places search."""
     ensure_household_access(actor, household_id, allow_family_code=True)
-    return coming_up(household_id, service.is_late())
+    body = coming_up(household_id, service.is_late())
+    asked = service.last_asked(household_id)
+    if asked:
+        body["asked"] = asked
+    return body
 
 
 @router.get("/nearby")

@@ -6,6 +6,7 @@ import { useToast } from "../../toast";
 import { newId, type Desk, type Medicine } from "../../desk";
 import { analyzeDoctorReportWithMedGemma, mapAnalysisToDeskRecords, type MedGemmaReportAnalysis } from "../../lib/medGemma";
 import { suggestReminders, type SuggestedReminder } from "../../lib/remindersFromPage";
+import { languageFor } from "../../lib/languages";
 
 type Props = {
   householdId: string;
@@ -483,72 +484,88 @@ function Library({ categories, files, householdId, demo, onChanged, desk, setDes
           aria-modal="true"
           aria-labelledby="read-title"
         >
-          <div className="medgemma-result-head">
-            <div>
-              <p className="medgemma-kicker">{analysis.source === "page" ? "From this page" : analysis.source === "unreadable" ? "Could not read" : "Prepared note"}</p>
+          <header className="read-head">
+            <div className="read-head-text">
+              <p className={`read-kicker read-kicker-${analysis.source ?? "page"}`}>
+                {analysis.source === "page" ? "From this page" : analysis.source === "unreadable" ? "Could not read" : "Prepared note"}
+              </p>
               <h4 id="read-title">{analysis.reportTitle}</h4>
-              {analysis.doctorName ? <p className="medgemma-doctor">{analysis.doctorName}</p> : null}
+              {analysis.doctorName ? <p className="read-doctor">{analysis.doctorName}</p> : null}
             </div>
-            <button ref={closeRead} className="ghost" type="button" onClick={() => setAnalysis(null)}>
-              Close
+            <button ref={closeRead} className="read-close" type="button" aria-label="Close" onClick={() => setAnalysis(null)}>
+              <span aria-hidden="true">×</span>
             </button>
+          </header>
+
+          <div className="read-body">
+            <section className="read-summary" aria-labelledby="read-family">
+              <h5 id="read-family">For the family</h5>
+              <p>{analysis.plainSummary}</p>
+              {analysis.localSummary && analysis.localLanguage ? (
+                <div className="read-local">
+                  <span className="read-lang">{languageFor(analysis.localLanguage).native}</span>
+                  <p lang={languageFor(analysis.localLanguage).code}>{analysis.localSummary}</p>
+                </div>
+              ) : null}
+            </section>
+
+            {suggestions.length > 0 ? (
+            <fieldset className="suggested-reminders">
+              <legend>Suggested reminders</legend>
+              <p className="suggested-intro">Tick the ones to add. A clock time that was not printed on the page is only a suggestion.</p>
+              <ul>
+                {suggestions.map((item) => (
+                  <li key={item.id} className={item.on ? "suggested-row suggested-row-on" : "suggested-row"}>
+                    <label className="suggested-pick">
+                      <input
+                        type="checkbox"
+                        checked={item.on}
+                        onChange={(event) =>
+                          setSuggestions((rows) => rows.map((row) => (row.id === item.id ? { ...row, on: event.target.checked } : row)))
+                        }
+                      />
+                      <span className="suggested-text">
+                        <strong>{item.name}</strong>
+                        <span className="suggested-when">{item.schedule === "Daily" ? "Every day" : `Once, ${item.date}`}</span>
+                      </span>
+                    </label>
+                    <label className="suggested-time">
+                      <span className="visually-hidden">Time for {item.name}</span>
+                      <input
+                        type="time"
+                        value={item.time}
+                        disabled={!item.on}
+                        onChange={(event) =>
+                          setSuggestions((rows) => rows.map((row) => (row.id === item.id ? { ...row, time: event.target.value } : row)))
+                        }
+                      />
+                    </label>
+                    <p className="suggested-hint">
+                      {item.hint}
+                      {item.note ? <span className="suggested-note"> Page says: “{item.note}”</span> : null}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </fieldset>
+            ) : null}
+
+            <p className="read-disclaimer">{analysis.disclaimer}</p>
           </div>
 
-          <div className="medgemma-summary">
-            <strong>For the family</strong>
-            <p>{analysis.plainSummary}</p>
-            {analysis.hindiSummary ? <p lang="hi">{analysis.hindiSummary}</p> : null}
-          </div>
-
-          {suggestions.length > 0 ? (
-          <fieldset className="suggested-reminders">
-            <legend>Suggested reminders</legend>
-            <p>Tick the ones to add. A clock time that was not printed on the page is only a suggestion.</p>
-            <ul>
-              {suggestions.map((item) => (
-                <li key={item.id}>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={item.on}
-                      onChange={(event) =>
-                        setSuggestions((rows) => rows.map((row) => (row.id === item.id ? { ...row, on: event.target.checked } : row)))
-                      }
-                    />
-                    <span>
-                      <strong>{item.name}</strong>
-                      <span>{item.schedule === "Daily" ? "Every day" : `Once, ${item.date}`}</span>
-                    </span>
-                  </label>
-                  <label className="suggested-time">
-                    Time
-                    <input
-                      type="time"
-                      value={item.time}
-                      onChange={(event) =>
-                        setSuggestions((rows) => rows.map((row) => (row.id === item.id ? { ...row, time: event.target.value } : row)))
-                      }
-                    />
-                  </label>
-                  <p>{item.hint}{item.note ? ` ${item.note}` : ""}</p>
-                </li>
-              ))}
-            </ul>
-          </fieldset>
-          ) : null}
-
-          <p className="alert-meta">{analysis.disclaimer}</p>
-
-          <div className="medgemma-actions">
-            {analysis.source === "unreadable" ? null : (
-            <button type="button" className="primary" onClick={applyMedGemmaToDesk}>
-              {suggestions.some((item) => item.on) ? "Add the ticked reminders" : "Confirm and add to the desk"}
-            </button>
-            )}
+          <footer className="read-foot">
             <button type="button" className="ghost" onClick={() => setAnalysis(null)}>
               Dismiss
             </button>
-          </div>
+            {analysis.source === "unreadable" ? null : (
+            <button type="button" className="primary" onClick={applyMedGemmaToDesk}>
+              {(() => {
+                const n = suggestions.filter((item) => item.on).length;
+                return n ? `Add ${n} reminder${n === 1 ? "" : "s"}` : "Confirm and add to the desk";
+              })()}
+            </button>
+            )}
+          </footer>
         </article>
         </div>
       ) : null}

@@ -34,8 +34,11 @@ type Props = {
 // Lists come from the store; the server (and the paid Places lookup behind it) is asked only when the copy is old.
 export function NearbyPanel({ householdId, onClose, card, demo = false, language = LANGUAGES[0] }: Props) {
   const dispatch = useAppDispatch();
-  const initial = tabs.find((t) => t.id === card?.kind)?.id ?? "hospital";
+  const knownTab = tabs.find((t) => t.id === card?.kind)?.id;
+  const voicedPlace = card && !knownTab && card.items.length > 0 ? card : null;
+  const initial = knownTab ?? "hospital";
   const [tab, setTab] = useState<NearbyTab>(initial);
+  const [showAsked, setShowAsked] = useState(Boolean(voicedPlace));
   const [failed, setFailed] = useState(false);
   const [asking, setAsking] = useState(false);
   const toast = useToast();
@@ -49,6 +52,7 @@ export function NearbyPanel({ householdId, onClose, card, demo = false, language
   useEffect(() => {
     setFailed(false);
     // Late at night the park tab only says "tomorrow morning", so nothing is looked up.
+    if (showAsked) return;
     if (tab === "park" && isLateNow()) return;
     dispatch(loadNearby({ householdId, tab, remember: true }))
       .unwrap()
@@ -56,7 +60,7 @@ export function NearbyPanel({ householdId, onClose, card, demo = false, language
         // A skipped read (the copy is fresh, or the same read is already on its way) is not a failure.
         if (err?.name !== "ConditionError") setFailed(true);
       });
-  }, [dispatch, householdId, tab]);
+  }, [dispatch, householdId, tab, showAsked]);
 
   // Escape closes the sheet, like the Close button.
   useEffect(() => {
@@ -112,7 +116,10 @@ export function NearbyPanel({ householdId, onClose, card, demo = false, language
               role="tab"
               aria-selected={tab === t.id}
               className={tab === t.id ? "nearby-tab nearby-tab-on" : "nearby-tab"}
-              onClick={() => setTab(t.id)}
+              onClick={() => {
+                setShowAsked(false);
+                setTab(t.id);
+              }}
             >
               {said(w[t.word] as string)}
               <small>{t.en}</small>
@@ -142,7 +149,12 @@ export function NearbyPanel({ householdId, onClose, card, demo = false, language
           </div>
         ) : null}
 
-        {tab === "park" && late ? (
+        {showAsked && voicedPlace ? (
+          <>
+            <p className="nearby-hint">Saathi looked up a {voicedPlace.kind}.</p>
+            <NearbyList items={voicedPlace.items} directions large empty="Nothing found near you." />
+          </>
+        ) : tab === "park" && late ? (
           <p className="nearby-empty">
             {said(w.parkLate)} It is late. A park is better in the morning.
           </p>

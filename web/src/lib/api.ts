@@ -315,6 +315,7 @@ export type Outing = {
   placeKind: string;
   late: boolean;
   invitation: string;
+  asked?: { query: string; name: string; checkedAt: string };
 };
 
 export const fetchOuting = (id: string) => getJson<Outing>(`${hh(id)}/outing`, id);

@@ -90,6 +90,42 @@ def test_parent_grocery_lookup_is_what_the_caretaker_sees(monkeypatch) -> None:
     assert calls == ["grocery"]
 
 
+def test_a_recent_saved_list_is_reused_for_a_spoken_question(monkeypatch) -> None:
+    household = "hh-nearby-saved"
+    service._cache.clear()
+    get_repository().save_desk(household, _desk())
+    service.save_check(household, "grocery", [service.Place(name="Ramesh Kirana")], None, "Varanasi")
+
+    def boom(*_args):
+        raise RuntimeError("Places should not be called")
+
+    monkeypatch.setattr(service, "_places_call", boom)
+    places, ok, source = service.ask_places(household, _desk(), "grocery")
+    assert ok is True and source == "saved"
+    assert places[0]["name"] == "Ramesh Kirana"
+
+
+def test_a_temple_question_uses_one_text_search_and_then_the_saved_list(monkeypatch) -> None:
+    household = "hh-nearby-temple"
+    service._cache.clear()
+    get_repository().save_desk(household, _desk())
+    calls = []
+
+    def fake(query, _spot, _city):
+        calls.append(query)
+        return [service.Place(name="Kashi Vishwanath")]
+
+    monkeypatch.setattr(service, "_search_text", fake)
+    places, ok, source = service.ask_any_place(household, _desk(), "mandir")
+    assert ok is True and source == "places" and calls == ["temple"]
+    assert places[0]["name"] == "Kashi Vishwanath"
+    monkeypatch.setattr(service, "_search_text", lambda *_a: (_ for _ in ()).throw(RuntimeError("should reuse")))
+    service._cache.clear()
+    again, ok_again, source_again = service.ask_any_place(household, _desk(), "temple")
+    assert ok_again is True and source_again == "saved"
+    assert again[0]["name"] == "Kashi Vishwanath"
+
+
 def test_phone_is_safe_for_a_tel_link() -> None:
     assert service.clean_phone("+91 (98765) 43-210; rm") == "+919876543210"
     assert service.clean_phone("javascript:alert(1)") == "1"

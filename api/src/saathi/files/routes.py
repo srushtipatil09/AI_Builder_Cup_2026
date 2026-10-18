@@ -357,9 +357,11 @@ async def read_stored_note(
     data = await asyncio.get_running_loop().run_in_executor(None, _download)
     if not data:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found.")
+    desk = get_repository().get_desk(household_id)
+    language = desk.profile.language if desk else ""
     record_extraction()
     try:
-        return await asyncio.get_running_loop().run_in_executor(None, read_page, data, content_type)
+        return await asyncio.get_running_loop().run_in_executor(None, read_page, data, content_type, language)
     except Exception as exc:
         logger.warning("Page read failed for %s (%s)", file_id, exc)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "This page could not be read.") from exc

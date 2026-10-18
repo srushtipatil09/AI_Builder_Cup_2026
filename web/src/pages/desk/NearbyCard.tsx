@@ -84,6 +84,11 @@ export function NearbyCard({ householdId, name, city: deskCity = "", contactsKey
         medical advice.
       </p>
       {outing?.invitation ? <p className="outing-chip">{outing.invitation}</p> : null}
+      {outing?.asked?.name ? (
+        <p className="nearby-source">
+          {who} asked for a {outing.asked.query}. Nearest: {outing.asked.name}.
+        </p>
+      ) : null}
       <p className="nearby-source">
         {data?.location.set
           ? `Using ${who}'s phone position, shared once${data.location.updatedAt ? ` on ${new Date(data.location.updatedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : ""}.`

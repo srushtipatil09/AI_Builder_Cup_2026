@@ -190,9 +190,10 @@ def read_sample_note() -> PageRead:
         raise HTTPException(status_code=429, detail="The daily reading limit is reached. Try again tomorrow.")
     if not _SAMPLE_NOTE.is_file():
         raise HTTPException(status_code=404, detail="The sample page is not in this build.")
+    desk = get_repository().get_desk("demo-kamla-sharma")
     record_extraction()
     try:
-        return read_page(_SAMPLE_NOTE.read_bytes(), "image/png")
+        return read_page(_SAMPLE_NOTE.read_bytes(), "image/png", desk.profile.language if desk else "")
     except Exception as exc:
         logger.warning("Sample page read failed (%s)", exc)
         raise HTTPException(status_code=502, detail="This page could not be read.") from exc

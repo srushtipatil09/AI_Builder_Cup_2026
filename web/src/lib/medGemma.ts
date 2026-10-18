@@ -14,7 +14,9 @@ export interface MedGemmaReportAnalysis {
   reportTitle: string;
   doctorName?: string;
   plainSummary: string;
-  hindiSummary: string;
+  // The same lines in the parent's language. Empty when the parent uses English.
+  localSummary: string;
+  localLanguage?: string;
   prescribedRoutines: Omit<Medicine, "id">[];
   clinicalObservations: string[];
   disclaimer: string;
@@ -39,7 +41,8 @@ export async function analyzeDoctorReportWithMedGemma(
       doctorName: "Dr. V. Sharma, MD (Internal Medicine)",
       plainSummary:
         "HbA1c is 7.2% (stable control). Fasting blood sugar is 128 mg/dL. Dr. Sharma advised continuing post-meal walking and morning tablets with regular hydration.",
-      hindiSummary:
+      localLanguage: "Hindi",
+      localSummary:
         "ब्लड शुगर रिपोर्ट सामान्य नियंत्रण में है (HbA1c 7.2%)। डॉक्टर ने भोजन के बाद हल्की वॉक और नियमित दवा जारी रखने की सलाह दी है।",
       prescribedRoutines: [
         {
@@ -74,7 +77,8 @@ export async function analyzeDoctorReportWithMedGemma(
     doctorName: "Dr. A. Mehta, MBBS, MD (Cardiology)",
     plainSummary:
       "Blood pressure measured at 134/86 mmHg (well managed). Morning BP medication continued as prescribed. Recommended light stretching, low-sodium home food, and a follow-up in 2 months.",
-    hindiSummary:
+    localLanguage: "Hindi",
+    localSummary:
       "ब्लड प्रेशर सामान्य सीमा में है (134/86)। सुबह की बीपी की गोली जारी रखने, भोजन में नमक कम करने और 2 महीने बाद पुनः जांच कराने का परामर्श है।",
     prescribedRoutines: [
       {
