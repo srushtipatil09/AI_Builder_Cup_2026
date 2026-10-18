@@ -75,14 +75,19 @@ flowchart TD
 
 ## 3. How We Leverage Key Google Technologies
 
-### A. Gemini & Gemma (Hybrid Cloud + Edge AI)
-Saathi pairs cloud-hosted Gemini models on Vertex AI with on-device Edge Gemma models:
+### A. Gemini & Gemma (Multi-Tier Google AI Ecosystem)
+Saathi pairs specialized Google AI models tailored to latency, safety, and domain requirements:
 
 1. **Edge Gemma (`web/src/lib/edgeGemma.ts` — On-Device Edge Inference)**:
    - **Zero-Latency Offline Safety Net**: Runs locally on the elder's device (via Chrome Built-in AI / Prompt API or WebGPU). Detects critical distress keywords (e.g. falls, chest pain) and offers emergency 112/108 assistance instantly—even when network connectivity is lost in rural Indian environments.
    - **Edge Privacy Shield**: Screens private queries locally before opening cloud audio sockets.
 
-2. **Gemini Live (`gemini-live-2.5-flash-native-audio`)**:
+2. **MedGemma (`web/src/lib/medGemma.ts` — Clinical Report & Prescription Mapping)**:
+   - **Clinical Document Grounding**: Reads uploaded doctor prescriptions, lab results, and discharge summaries on the Care Desk.
+   - **Plain-Language Summaries**: Translates dense medical shorthand into clear explanations for adult children in English and Hindi.
+   - **Auto-Mapping to Active Schedule**: Extracts physician-prescribed medicines, dosages, meal timings, and lifestyle recommendations directly into Saathi's Care Desk routines and memory facts with caretaker confirmation.
+
+3. **Gemini Live (`gemini-live-2.5-flash-native-audio`)**:
    - **Real-Time Voice Streaming**: Connects directly via bidirectional WebSockets. Audio captured at 16 kHz PCM is streamed to Gemini Live, which returns natural 24 kHz spoken audio streamed gapless to the browser.
    - **Zero-Wait Context Injection**: Before the opening word is spoken, the API pre-populates Gemini Live's system prompt with the household's profile, loved ones, custom memories, routine reminders, recent conversation summaries, and active family threads.
    - **Conversational Function Calling (Tools)**: Gemini Live executes tools on the fly:
@@ -92,7 +97,7 @@ Saathi pairs cloud-hosted Gemini models on Vertex AI with on-device Edge Gemma m
      - `offer_call`: Generates one-tap calling buttons for trusted family or emergency helplines.
    - **Natural Barge-In**: Instant response cutoff when the user speaks over the companion.
 
-3. **Gemini Flash (`gemini-2.5-flash`)**:
+4. **Gemini Flash (`gemini-2.5-flash`)**:
    - **Post-Call Fact Extraction**: Once the voice socket closes, Gemini Flash asynchronously parses the conversation to extract structured observations (meals, sleep, pain mentions), reminder statuses, and emotional sentiment. Evaluated at 100% (30/30) accuracy across conversational edge cases.
    - **Sound & Distress Classification**: When sudden loud audio spikes occur, Flash evaluates the audio snippet to distinguish benign sounds (door slamming) from potential distress events, triggering caregiver checks.
    - **"Ask Saathi" Grounded Q&A**: Caregivers can ask plain-text questions on the Care Desk; Gemini Flash drafts answers strictly grounded in stored Firestore logs, passed through clinical SafetyGuard checks.

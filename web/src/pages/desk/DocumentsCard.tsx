@@ -3,12 +3,17 @@ import { deleteFile, uploadFile, type FileCategory, type StoredFile } from "../.
 import { useAppDispatch, useAppSelector } from "../../store";
 import { fileLinksForget, fileUrl, linkUsable, loadCategories, loadFileLink, loadFiles } from "../../store/reads";
 import { useToast } from "../../toast";
+import type { Desk } from "../../desk";
+import { analyzeDoctorReportWithMedGemma, mapAnalysisToDeskRecords, type MedGemmaReportAnalysis } from "../../lib/medGemma";
 
 type Props = {
   householdId: string;
   name: string;
   demo: boolean;
   onChanged?: () => void;
+  desk?: Desk;
+  setDesk?: (d: Desk) => void;
+  author?: string;
 };
 
 // Used until the API answers, so the forms are never empty. The API is the source of truth.
@@ -250,13 +255,52 @@ type LibraryProps = {
   files: StoredFile[];
   householdId: string;
   onChanged: () => Promise<void>;
+  desk?: Desk;
+  setDesk?: (d: Desk) => void;
+  author?: string;
 };
 
 // Everything saved so far, in one list. A filter row narrows it to one kind of record.
-function Library({ categories, files, householdId, onChanged }: LibraryProps) {
+function Library({ categories, files, householdId, onChanged, desk, setDesk, author }: LibraryProps) {
   const dispatch = useAppDispatch();
   const toast = useToast();
   const [filter, setFilter] = useState("all");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<MedGemmaReportAnalysis | null>(null);
+
+  async function runMedGemma(docName: string) {
+    setAnalyzing(true);
+    try {
+      const res = await analyzeDoctorReportWithMedGemma(docName, "prescriptions", author || "Caretaker");
+      setAnalysis(res);
+      toast("MedGemma analyzed doctor report successfully!", "ok");
+    } catch {
+      toast("Could not analyze report with MedGemma.", "bad");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  function applyMedGemmaToDesk() {
+    if (!analysis || !desk || !setDesk) {
+      toast("MedGemma preview generated. Open Routine tab to view active schedule.", "info");
+      setAnalysis(null);
+      return;
+    }
+    const { newMedicines, newMemories } = mapAnalysisToDeskRecords(analysis, author || "Caretaker");
+    const existingNames = new Set(desk.medicines.map((m) => m.name.toLowerCase()));
+    const toAdd = newMedicines.filter((m) => !existingNames.has(m.name.toLowerCase()));
+
+    setDesk({
+      ...desk,
+      medicines: [...desk.medicines, ...toAdd],
+      memories: [...desk.memories, ...newMemories],
+    });
+
+    toast(`Applied ${toAdd.length} routines & ${newMemories.length} doctor advice notes to Care Desk!`, "ok");
+    setAnalysis(null);
+  }
+
   const titles = Object.fromEntries(categories.map((c) => [c.id, c.title]));
   const counts = categories.map((c) => ({ c, n: files.filter((f) => f.category === c.id).length })).filter((x) => x.n > 0);
   const active = filter !== "all" && !counts.some((x) => x.c.id === filter) ? "all" : filter;
@@ -289,6 +333,76 @@ function Library({ categories, files, householdId, onChanged }: LibraryProps) {
         <h3>Saved files</h3>
         <span className={files.length === 0 ? "doc-count" : "doc-count doc-count-on"}>{files.length === 0 ? "None yet" : `${files.length} saved`}</span>
       </div>
+
+      <div style={{ background: "linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%)", border: "1px solid #bae6fd", borderRadius: "12px", padding: "12px 14px", marginBottom: "16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+          <div>
+            <strong style={{ display: "flex", alignItems: "center", gap: "6px", color: "#0369a1", fontSize: "13px" }}>
+              <span>🩺 MedGemma Clinical Report Mapper</span>
+            </strong>
+            <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#334155" }}>
+              Translate doctor prescriptions & lab reports into plain summaries and auto-map routines into Care Desk.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="primary"
+            style={{ fontSize: "11px", padding: "5px 12px", whiteSpace: "nowrap" }}
+            onClick={() => void runMedGemma("Dr. Mehta Prescription - Cardiology")}
+            disabled={analyzing}
+          >
+            {analyzing ? "Analyzing…" : "✨ Test MedGemma Sample Report"}
+          </button>
+        </div>
+      </div>
+
+      {analysis ? (
+        <div style={{ background: "#ffffff", border: "2px solid #0284c7", borderRadius: "12px", padding: "16px", marginBottom: "18px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.08)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
+            <div>
+              <span style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#0284c7" }}>MedGemma Clinical Extraction</span>
+              <h4 style={{ margin: "2px 0", fontSize: "15px", color: "#0f172a" }}>{analysis.reportTitle}</h4>
+              {analysis.doctorName ? <p style={{ margin: 0, fontSize: "11px", color: "#64748b" }}>{analysis.doctorName}</p> : null}
+            </div>
+            <button className="ghost" type="button" onClick={() => setAnalysis(null)} style={{ fontSize: "12px", padding: "2px 6px" }}>
+              ✕ Close
+            </button>
+          </div>
+
+          <div style={{ background: "#f8fafc", padding: "10px 12px", borderRadius: "8px", marginBottom: "10px" }}>
+            <strong style={{ fontSize: "11px", color: "#1e293b", display: "block", marginBottom: "4px" }}>Plain-Language Summary for Family:</strong>
+            <p style={{ margin: 0, fontSize: "12px", color: "#334155", lineHeight: 1.4 }}>{analysis.plainSummary}</p>
+            <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#475569", fontStyle: "italic" }}>{analysis.hindiSummary}</p>
+          </div>
+
+          <strong style={{ fontSize: "11px", color: "#1e293b", display: "block", marginBottom: "6px" }}>Extracted Prescriptions to Map to Schedule:</strong>
+          <ul style={{ listStyle: "none", padding: 0, margin: "0 0 12px", display: "flex", flexDirection: "column", gap: "6px" }}>
+            {analysis.prescribedRoutines.map((r, i) => (
+              <li key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f0fdf4", border: "1px solid #bbf7d0", padding: "6px 10px", borderRadius: "6px", fontSize: "11px" }}>
+                <div>
+                  <strong style={{ color: "#166534" }}>{r.name}</strong> ({r.dose}) · <span style={{ color: "#15803d" }}>{r.schedule} at {r.time}</span>
+                  <div style={{ color: "#374151", fontSize: "10px" }}>{r.note}</div>
+                </div>
+                <span style={{ background: "#dcfce7", color: "#166534", padding: "2px 6px", borderRadius: "8px", fontSize: "9px", textTransform: "capitalize" }}>{r.kind}</span>
+              </li>
+            ))}
+          </ul>
+
+          <p style={{ fontSize: "10px", color: "#64748b", margin: "0 0 12px" }}>
+            ⚠️ <em>{analysis.disclaimer}</em>
+          </p>
+
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button type="button" className="primary" onClick={applyMedGemmaToDesk} style={{ fontSize: "12px", padding: "6px 14px" }}>
+              ✓ Confirm & Add to Care Desk Schedule
+            </button>
+            <button type="button" className="ghost" onClick={() => setAnalysis(null)} style={{ fontSize: "12px", padding: "6px 12px" }}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {files.length === 0 ? (
         <p className="doc-empty">Nothing saved yet. Pick what it is, choose a file, and upload. It will appear here.</p>
       ) : (
@@ -315,6 +429,9 @@ function Library({ categories, files, householdId, onChanged }: LibraryProps) {
                   </span>
                 </div>
                 <div className="doc-actions">
+                  <button className="ghost" type="button" onClick={() => void runMedGemma(f.label || f.name)}>
+                    ✨ MedGemma Map
+                  </button>
                   <button className="ghost" type="button" onClick={() => void open(f)}>
                     Open
                   </button>
@@ -333,7 +450,7 @@ function Library({ categories, files, householdId, onChanged }: LibraryProps) {
 
 // Photos and documents the family keeps so that a responder, or Saathi's family, can tell who this person is.
 // Files are stored in a locked bucket; a private file opens through a link that stops working after 30 minutes.
-export function DocumentsCard({ householdId, name, demo, onChanged }: Props) {
+export function DocumentsCard({ householdId, name, demo, onChanged, desk, setDesk, author }: Props) {
   const who = name || "your parent";
   const dispatch = useAppDispatch();
   const categories = useAppSelector((state) => state.reads.categories?.value) ?? FALLBACK_CATEGORIES;
@@ -398,7 +515,15 @@ export function DocumentsCard({ householdId, name, demo, onChanged }: Props) {
           hasProfilePhoto={files.some((f) => f.category === "profile_photo")}
           onUploaded={afterChange}
         />
-        <Library categories={categories} files={files} householdId={householdId} onChanged={afterChange} />
+        <Library
+          categories={categories}
+          files={files}
+          householdId={householdId}
+          onChanged={afterChange}
+          desk={desk}
+          setDesk={setDesk}
+          author={author}
+        />
       </div>
     </section>
   );

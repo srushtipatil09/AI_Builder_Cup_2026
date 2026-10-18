@@ -437,6 +437,9 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
               householdId={householdId}
               name={name}
               demo={demo}
+              desk={desk}
+              setDesk={setDesk}
+              author={author}
             />
           </>
         ) : null}
