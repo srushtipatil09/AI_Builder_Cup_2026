@@ -7,6 +7,7 @@ from saathi.auth.firebase import ensure_household_access, get_current_actor, is_
 from saathi.contracts.desk import Desk
 from saathi.contracts.identity import ActorContext
 from saathi.nearby import service
+from saathi.nearby.calendar import coming_up
 from saathi.providers.firestore import get_repository
 
 router = APIRouter(prefix="/api/v1/households/{household_id}", tags=["nearby"])
@@ -37,11 +38,30 @@ def remove_location(household_id: str, actor: ActorContext = Depends(get_current
     return {"status": "deleted"}
 
 
+@router.get("/outing")
+def get_outing(household_id: str, actor: ActorContext = Depends(get_current_actor)) -> dict:
+    """The next festival, and one place the parent already looked up. No new Places search."""
+    ensure_household_access(actor, household_id, allow_family_code=True)
+    body = coming_up(household_id, service.is_late())
+    asked = service.last_asked(household_id)
+    if asked:
+        body["asked"] = asked
+    return body
+
+
 @router.get("/nearby")
-def get_nearby(household_id: str, kind: str = "all", actor: ActorContext = Depends(get_current_actor)) -> dict:
-    """Places near the saved position (or the desk's city), the trusted people, and the helplines."""
+def get_nearby(
+    household_id: str,
+    kind: str = "all",
+    remember: bool = False,
+    actor: ActorContext = Depends(get_current_actor),
+) -> dict:
+    """Places near the saved position (or the desk's city), the trusted people, and the helplines.
+
+    remember=1 is the parent's phone. That lookup is stored. The care desk reads the stored list.
+    """
     ensure_household_access(actor, household_id, allow_family_code=True)
     if kind not in ("all", "people", "helplines", *service.KINDS):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unknown kind.")
     desk = get_repository().get_desk(household_id) or Desk()
-    return service.overview(household_id, desk, kind)
+    return service.overview(household_id, desk, kind, remember=remember)

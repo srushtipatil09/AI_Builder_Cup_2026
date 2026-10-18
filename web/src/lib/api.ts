@@ -1,5 +1,6 @@
 import { currentIdToken } from "./firebase";
 import type { Desk } from "../desk";
+import type { MedGemmaReportAnalysis } from "./medGemma";
 import type { FamilyLink } from "../family";
 import { readSession } from "../session";
 
@@ -281,7 +282,7 @@ export const cancelAsk = (id: string, proposalId: string) => postJson(`${hh(id)}
 
 // ---- Nearby help ----
 
-export type NearbyKind = "hospital" | "pharmacy" | "park" | "restaurant";
+export type NearbyKind = "hospital" | "pharmacy" | "grocery" | "park" | "restaurant";
 
 export type NearbyItem = {
   name: string;
@@ -302,10 +303,25 @@ export type Nearby = {
   people: NearbyItem[];
   places: Partial<Record<NearbyKind, NearbyItem[]>>;
   available: boolean;
+  // When the parent opened this list. The care desk shows that saved copy.
+  checked?: Partial<Record<NearbyKind, string>>;
 };
 
-export const fetchNearby = (id: string, kind: NearbyKind | "people" | "helplines" | "all" = "all") =>
-  getJson<Nearby>(`${hh(id)}/nearby?kind=${kind}`, id);
+export type Outing = {
+  name: string;
+  date: string;
+  line: string;
+  placeName: string;
+  placeKind: string;
+  late: boolean;
+  invitation: string;
+  asked?: { query: string; name: string; checkedAt: string };
+};
+
+export const fetchOuting = (id: string) => getJson<Outing>(`${hh(id)}/outing`, id);
+
+export const fetchNearby = (id: string, kind: NearbyKind | "people" | "helplines" | "all" = "all", remember = false) =>
+  getJson<Nearby>(`${hh(id)}/nearby?kind=${kind}${remember ? "&remember=true" : ""}`, id);
 
 export async function saveLocation(id: string, lat: number, lng: number): Promise<void> {
   await postJsonMethod("PUT", `${hh(id)}/location`, id, { lat, lng });
@@ -335,12 +351,12 @@ export const invitationEvent = (id: string, invitationId: string, event: "played
 
 // ---- Demo household only ----
 
-export const seedDemoHistory = (scenario: "stable" | "changing" | "fasting" | "family") =>
+export const seedDemoHistory = (scenario: "stable" | "changing" | "fasting" | "family" | "story") =>
   postJson(`/demo/seed`, "demo-kamla-sharma", { household: "demo-kamla-sharma", scenario });
 export const runSeededSession = () => postJson<{ sessionId: string }>(`/demo/run-seeded-session`, "demo-kamla-sharma", { household: "demo-kamla-sharma" });
 export const simulateInactivity = () =>
   postJson<{ label: string; invitation: string }>(`/demo/simulate-inactivity`, "demo-kamla-sharma", { household: "demo-kamla-sharma" });
-export const simulateCheckin = (outcome: "unanswered" | "device_unavailable") =>
+export const simulateCheckin = (outcome: "unanswered" | "device_unavailable" | "quiet") =>
   postJson<{ label: string; events: { type: string }[] }>(`/demo/simulate-checkin`, "demo-kamla-sharma", { household: "demo-kamla-sharma", outcome });
 
 export const contactFamily = (id: string) => postJson(`${hh(id)}/contact-family`, id);
@@ -477,12 +493,37 @@ export async function uploadFile(
 // A link that opens the file. A private file's link carries a key that stops working after 30 minutes.
 export type FileLink = { url: string; expiresAt?: string | null; expiresInSeconds?: number | null };
 
+export async function readSampleNote(): Promise<MedGemmaReportAnalysis> {
+  const res = await apiFetch(`${BASE_URL}/demo/read-sample`, { method: "POST" });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(detail.detail || "This page could not be read.");
+  }
+  return res.json();
+}
+
+export async function readStoredNote(householdId: string, fileId: string): Promise<MedGemmaReportAnalysis> {
+  const res = await apiFetch(`${BASE_URL}/households/${encodeURIComponent(householdId)}/files/${fileId}/read`, {
+    method: "POST",
+    headers: await getAuthHeaders(householdId),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(detail.detail || "This page could not be read.");
+  }
+  return res.json();
+}
+
 export async function fileLink(householdId: string, fileId: string): Promise<FileLink> {
   const res = await apiFetch(`${BASE_URL}/households/${encodeURIComponent(householdId)}/files/${fileId}/link`, {
     headers: await getAuthHeaders(householdId),
   });
   if (!res.ok) throw new Error(`Failed to open file: ${res.statusText}`);
-  return res.json();
+  const link = (await res.json()) as FileLink;
+  // The API returns a path on its own host. On the hosted site that path would otherwise open
+  // the website, which has no file, so the thumbnail and the new tab stay blank.
+  const url = link.url.startsWith("/") && API_ORIGIN ? `${API_ORIGIN}${link.url}` : link.url;
+  return { ...link, url };
 }
 
 export async function deleteFile(householdId: string, fileId: string): Promise<void> {

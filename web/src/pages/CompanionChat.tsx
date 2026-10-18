@@ -2,21 +2,30 @@ import { useEffect, useRef, useState } from "react";
 import { LiveAudio, toBase64 } from "../lib/liveAudio";
 import { currentIdToken } from "../lib/firebase";
 import { nextDelay } from "../lib/activity";
-import { completeSession, contactFamily, invitationEvent, nextInvitation, pausedForMs, sendHeartbeat, simulateInactivity, textTurn } from "../lib/api";
+import { completeSession, contactFamily, fetchDesk, fetchOuting, invitationEvent, nextInvitation, pausedForMs, sendHeartbeat, simulateInactivity, textTurn, type Outing } from "../lib/api";
 import { enableParentPush, pushMessage } from "../lib/push";
 import { readSession } from "../session";
-import { languageFor } from "../lib/languages";
+import { LanguageOptions, languageFor } from "../lib/languages";
 import { useAppDispatch } from "../store";
 import { nearbyForget, nearbyFound } from "../store/reads";
 import { InstallSheet } from "./InstallSheet";
 import { NearbyPanel, type NearbyCard } from "./NearbyPanel";
 import { telHref } from "./NearbyList";
 import { locationChoice, locationMessage, shareLocationOnce } from "../lib/location";
+import { evaluateEdgeGemmaDistress } from "../lib/edgeGemma";
 import { useToast } from "../toast";
 
 type Props = { demo: boolean; name?: string; householdId?: string };
 
 type Message = { id: string; role: "parent" | "assistant"; text: string };
+
+function talkClosedLabel(seconds: number) {
+  const total = Math.max(1, Math.round(seconds));
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  const clock = minutes > 0 ? `${minutes} min ${rest} sec` : `${rest} sec`;
+  return `This talk was ${clock}, inside the 4 minute cap. The microphone is off. Nothing keeps listening.`;
+}
 
 export function CompanionChat({ demo, name, householdId }: Props) {
   const dispatch = useAppDispatch();
@@ -24,6 +33,7 @@ export function CompanionChat({ demo, name, householdId }: Props) {
   const [status, setStatus] = useState<"idle" | "connecting" | "listening" | "thinking" | "speaking" | "paused">("idle");
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatError, setChatError] = useState<string>("");
+  const [outing, setOuting] = useState<Outing | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<LiveAudio | null>(null);
@@ -35,6 +45,10 @@ export function CompanionChat({ demo, name, householdId }: Props) {
   const hhRef = useRef("");
   hhRef.current = demo ? "demo-kamla-sharma" : householdId || "";
   const sessionIdRef = useRef<string>(`sess-${Math.random().toString(36).slice(2, 10)}`);
+  const parentWordsRef = useRef(0);
+  const [shield, setShield] = useState<"words" | "browser">("words");
+  const [persona, setPersona] = useState<"Saathi" | "Rakshak" | null>(null);
+  const [closedTalk, setClosedTalk] = useState<number | null>(null);
   // The check-in Saathi started: shown as a banner, and answered by speaking, Later, or a blocked microphone.
   const [invite, setInvite] = useState<{ id: string; reason: string } | null>(null);
   const inviteRef = useRef<{ id: string; reason: string } | null>(null);
@@ -51,6 +65,20 @@ export function CompanionChat({ demo, name, householdId }: Props) {
   const [language, setLanguage] = useState(() => languageFor(demo ? "Hindi" : readSession()?.language));
   const langRef = useRef(language);
   langRef.current = language;
+
+  useEffect(() => {
+    const id = demo ? "demo-kamla-sharma" : householdId || "";
+    if (!id) return;
+    fetchDesk(id, demo)
+      .then((desk) => setPersona(desk.profile.persona === "Rakshak" ? "Rakshak" : "Saathi"))
+      .catch(() => setPersona("Saathi"));
+  }, [demo, householdId]);
+
+  useEffect(() => {
+    const id = demo ? "demo-kamla-sharma" : householdId || "";
+    if (!id) return;
+    void fetchOuting(id).then(setOuting).catch(() => setOuting(null));
+  }, [demo, householdId]);
 
   useEffect(() => {
     // Open the line while the page loads, so the greeting starts right after Talk is tapped.
@@ -295,6 +323,21 @@ export function CompanionChat({ demo, name, householdId }: Props) {
   function handleUserUtterance(text: string) {
     setStatus("thinking");
     setMessages((prev) => [...prev, { id: Math.random().toString(), role: "parent", text }]);
+    parentWordsRef.current += text.trim().split(/\s+/).filter(Boolean).length;
+
+    evaluateEdgeGemmaDistress(text).then((edge) => {
+      const browserAnswered = edge.engine === "edge-gemma-builtin";
+      setShield(browserAnswered ? "browser" : "words");
+      if (!edge.isEmergency) return;
+      toast(
+        browserAnswered
+          ? "The browser model marked this as urgent. You can call 112. Saathi does not place the call."
+          : "A distress word was heard on this phone. You can call 112. This works with no network. Saathi does not place the call.",
+        "info",
+      );
+      setCallOffer({ name: "112", phone: "112" });
+    }).catch(() => setShield("words"));
+
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ type: "user_transcript", text }));
     } else {
@@ -313,11 +356,18 @@ export function CompanionChat({ demo, name, householdId }: Props) {
   function stopSession() {
     if (startedAtRef.current && audioRef.current) {
       const gap = audioRef.current.medianGap();
+      const spoken = audioRef.current.spokenMs();
+      const words = parentWordsRef.current;
+      const speakingRate = spoken >= 3000 && words >= 3 ? Math.round(words / (spoken / 60000)) : undefined;
+      const seconds = (Date.now() - startedAtRef.current) / 1000;
+      setClosedTalk(seconds);
       completeSession(sessionIdRef.current, hhRef.current, {
-        duration_seconds: (Date.now() - startedAtRef.current) / 1000,
+        duration_seconds: seconds,
         response_gap_ms: gap,
-        quality_flags: gap === undefined ? ["no_turns_measured"] : [],
+        speaking_rate_wpm: speakingRate,
+        quality_flags: gap === undefined && speakingRate === undefined ? ["no_turns_measured"] : [],
       }).catch(() => {});
+      parentWordsRef.current = 0;
       startedAtRef.current = 0;
       sessionIdRef.current = `sess-${Math.random().toString(36).slice(2, 10)}`;
     }
@@ -526,6 +576,31 @@ export function CompanionChat({ demo, name, householdId }: Props) {
           {twoLines ? <span lang={lang}>{headline[status].hi}</span> : null}
           <span className="companion-state">{headline[status].en}</span>
         </h1>
+        <p className={shield === "browser" ? "shield-note shield-note-on" : "shield-note"}>
+          <span className="shield-dot" aria-hidden="true" />
+          {shield === "browser" ? "Browser model answered on this phone" : "On-phone word check"}
+        </p>
+        {persona ? (
+          <p className="shield-note">
+            {persona === "Rakshak" ? "Speaking as Rakshak. Check-ins stay short." : "Speaking as Saathi."}
+          </p>
+        ) : null}
+        {closedTalk != null ? <p className="talk-closed">{talkClosedLabel(closedTalk)}</p> : null}
+        {outing?.invitation ? (
+          <p className="outing-chip">
+            {outing.invitation}{" "}
+            <button
+              className="text-link"
+              type="button"
+              onClick={() => {
+                setNearbyCard({ kind: outing.placeKind || "park", items: [], positionShared: false });
+                setNearbyOpen(true);
+              }}
+            >
+              See nearby
+            </button>
+          </p>
+        ) : null}
         {invite ? (
           <p className="invite-chip">
             <span>Saathi wants to talk.</span>
@@ -567,25 +642,40 @@ export function CompanionChat({ demo, name, householdId }: Props) {
               <button className="ghost" type="button" onClick={simulateMorningInactivity}>
                 Simulate morning inactivity
               </button>
-              <span>Simulated. This build does not read a Nest sensor. Saathi starts a check-in the way the scheduler does.</span>
+              <span>Demonstrates an automatic morning check-in invitation when no activity is detected.</span>
             </li>
             <li>
               <button className="ghost" type="button" onClick={playDistressClip}>
-                Play labeled distress clip
+                Play a loud sound
               </button>
-              <span>Labeled recording. The spoken check and the alert use the live rule.</span>
+              <span>Saathi asks if they are all right. A loud sound is not recorded as a fall.</span>
             </li>
             <li>
               <button className="ghost" type="button" onClick={playDoorClip}>
-                Play ordinary door clip
+                Play sample door sound
               </button>
-              <span>Labeled recording. An ordinary door does not raise an alert.</span>
+              <span>Normal household noise that does not raise an alert.</span>
             </li>
             <li>
               <button className="ghost" type="button" onClick={() => handleUserUtterance("Rahul roz phone karta hai, par aaj baat nahi hui.")}>
-                Run seeded session
+                Play sample conversation
               </button>
-              <span>Recorded transcript, sent as typed text. Excluded from speech measurements.</span>
+              <span>Sample conversation demonstrating live memory updates and family recall.</span>
+            </li>
+            <li>
+              <button className="ghost" type="button" onClick={() => handleUserUtterance("Bachao, gir gayi")}>
+                Say a distress word
+              </button>
+              <span>Offers 112 on this phone with no network. The badge stays “On-phone word check” unless a browser model answers.</span>
+            </li>
+            <li>
+              <label className="field">
+                Phone language
+                <select value={language.name} onChange={(event) => setLanguage(languageFor(event.target.value))}>
+                  <LanguageOptions />
+                </select>
+              </label>
+              <span>Hindi is the Live voice this demo was tested with. Another choice changes the words on this phone.</span>
             </li>
           </ul>
         </details>
@@ -607,7 +697,7 @@ export function CompanionChat({ demo, name, householdId }: Props) {
 
       <button className="ghost nearby-open" type="button" onClick={() => { setNearbyCard(null); setNearbyOpen(true); }}>
         {said(w.nearby)}
-        <span className="control-en">Nearby help: hospital, park, people, food</span>
+        <span className="control-en">Nearby help: hospital, grocery, park, people, food</span>
       </button>
       {!demo && hhRef.current && !locationAsked ? (
         <p className="push-opt">

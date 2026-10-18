@@ -126,7 +126,7 @@ export function FamilySwitcher({ members, activeId, demo, loadError, onSwitch, o
         </ul>
 
         {demo ? (
-          <p className="note">The demo has one synthetic family member. Create an account to add your own.</p>
+          <p className="note">The demo includes a sample family member. Create an account to invite your family.</p>
         ) : adding ? (
           <form className="members-add" onSubmit={(e) => void submit(e)} noValidate>
             <label className="field" htmlFor="member-name">

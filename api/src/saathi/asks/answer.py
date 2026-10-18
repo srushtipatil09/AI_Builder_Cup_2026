@@ -43,6 +43,28 @@ def _local_day(iso: str) -> str:
         return ""
 
 
+def pace_fact_line(metrics: list[dict]) -> str:
+    """One plain comparison of this person's recent pause and pace with their own earlier days."""
+    rows = sorted((m for m in metrics if m.get("local_date")), key=lambda m: str(m["local_date"]))
+    paced = [m for m in rows if m.get("speaking_rate_wpm") is not None and m.get("response_gap_ms") is not None]
+    if len(paced) < 8:
+        return ""
+    earlier, recent = paced[:-3], paced[-3:]
+
+    def mean(group: list[dict], key: str) -> float:
+        return sum(float(m[key]) for m in group) / len(group)
+
+    earlier_pause = mean(earlier, "response_gap_ms") / 1000
+    recent_pause = mean(recent, "response_gap_ms") / 1000
+    earlier_pace = mean(earlier, "speaking_rate_wpm")
+    recent_pace = mean(recent, "speaking_rate_wpm")
+    return (
+        "Compared with their own earlier days: pause before replying "
+        f"{earlier_pause:.1f} seconds then {recent_pause:.1f} seconds; "
+        f"speaking pace {earlier_pace:.0f} words per minute then {recent_pace:.0f}."
+    )
+
+
 def gather_facts(household_id: str, days: int, now: datetime | None = None) -> tuple[str, list[str]]:
     """The facts for one household and window as text, plus the dates covered. Reads this household only."""
     repo = get_repository()
@@ -70,6 +92,10 @@ def gather_facts(household_id: str, days: int, now: datetime | None = None) -> t
                 parts.append(f"mentioned discomfort: {d.get('what') or d.get('symptom') or d}")
         if m:
             parts.append(f"meals reported {m.get('meals_reported')}, meals skipped {m.get('meals_skipped')}, family contact {m.get('family_contact')}")
+            if m.get("response_gap_ms") is not None:
+                parts.append(f"pause before replying {float(m['response_gap_ms']) / 1000:.1f} seconds")
+            if m.get("speaking_rate_wpm") is not None:
+                parts.append(f"speaking pace {float(m['speaking_rate_wpm']):.0f} words per minute")
         lines.append(f"{date}: " + "; ".join(str(p) for p in parts))
 
     alerts = [
@@ -88,6 +114,10 @@ def gather_facts(household_id: str, days: int, now: datetime | None = None) -> t
     drift = repo.doc_get(f"{base}/driftResults/latest") or {}
     if drift.get("explanation"):
         lines.append(f"Routine note: {drift['explanation']}")
+    history = repo.col_query(f"{base}/dailyMetrics", order_by="local_date", descending=True, limit=16)
+    compared = pace_fact_line(history)
+    if compared:
+        lines.append(compared)
     return "\n".join(lines), dates
 
 

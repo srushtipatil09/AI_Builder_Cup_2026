@@ -25,7 +25,7 @@ type Message = {
 
 // Shown as one row on a phone, and grouped by what they change on a wide window.
 const groups = [
-  { title: "Ask", items: ["How has she been in the last 4 days?", "Did she eat well this week?"] },
+  { title: "Ask", items: ["How has she been in the last 4 days?", "Are the pauses longer than her earlier days?", "Did she eat well this week?"] },
   { title: "Memories", items: ["She likes the temple garden.", "She waters the rose plant every morning."] },
   { title: "People", items: ["Meena is her sister, not her daughter.", "Add Sunil, her nephew, in Lucknow."] },
   { title: "Check-in", items: ["Move the check-in to 9 in the morning.", "Quiet hours are 1 pm to 3 pm."] },

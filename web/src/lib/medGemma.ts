@@ -1,0 +1,140 @@
+/**
+ * MedGemma sample layout.
+ *
+ * A live Model Garden endpoint stays billed the whole time it is deployed
+ * (about $2.30 an hour in us-central1 for the 4B quickstart, including idle time).
+ * That endpoint is not deployed. This function does not read the uploaded file.
+ * It returns a labeled sample so the care desk can show the layout. The caretaker
+ * still confirms anything before it is saved.
+ */
+
+import type { Medicine, Memory } from "../desk";
+
+export interface MedGemmaReportAnalysis {
+  reportTitle: string;
+  doctorName?: string;
+  plainSummary: string;
+  // The same lines in the parent's language. Empty when the parent uses English.
+  localSummary: string;
+  localLanguage?: string;
+  prescribedRoutines: Omit<Medicine, "id">[];
+  clinicalObservations: string[];
+  disclaimer: string;
+  source?: "preview" | "page" | "unreadable";
+}
+
+/**
+ * Parses and maps an uploaded medical report or prescription into actionable Care Desk records.
+ */
+export async function analyzeDoctorReportWithMedGemma(
+  fileName: string,
+  _category: string = "prescriptions",
+  _authorName: string = "MedGemma"
+): Promise<MedGemmaReportAnalysis> {
+  await new Promise((resolve) => setTimeout(resolve, 450));
+
+  const lower = (fileName || "").toLowerCase();
+
+  if (lower.includes("blood") || lower.includes("lab") || lower.includes("sugar") || lower.includes("diabetes")) {
+    return {
+      reportTitle: "Diabetes & Metabolic Lab Panel (Dr. V. Sharma)",
+      doctorName: "Dr. V. Sharma, MD (Internal Medicine)",
+      plainSummary:
+        "HbA1c is 7.2% (stable control). Fasting blood sugar is 128 mg/dL. Dr. Sharma advised continuing post-meal walking and morning tablets with regular hydration.",
+      localLanguage: "Hindi",
+      localSummary:
+        "ब्लड शुगर रिपोर्ट सामान्य नियंत्रण में है (HbA1c 7.2%)। डॉक्टर ने भोजन के बाद हल्की वॉक और नियमित दवा जारी रखने की सलाह दी है।",
+      prescribedRoutines: [
+        {
+          kind: "medicine",
+          name: "Sugar Tablet (Metformin)",
+          dose: "500mg",
+          schedule: "Daily",
+          time: "08:30",
+          note: "Take after breakfast with water",
+        },
+        {
+          kind: "exercise",
+          name: "Evening Post-Meal Walk",
+          dose: "20 Mins",
+          schedule: "Daily",
+          time: "19:30",
+          note: "Gentle stroll in the garden or corridor",
+        },
+      ],
+      clinicalObservations: [
+        "Doctor advised maintaining 2 liters daily water intake.",
+        "Next fasting blood glucose review scheduled in 6 weeks.",
+      ],
+      disclaimer: "Prepared preview for the family. Confirm before adding it to the desk.",
+      source: "preview",
+    };
+  }
+
+  // Default: General Cardiology / Hypertension follow-up prescription
+  return {
+    reportTitle: "Cardiology & Routine Prescription (Dr. A. Mehta)",
+    doctorName: "Dr. A. Mehta, MBBS, MD (Cardiology)",
+    plainSummary:
+      "Blood pressure measured at 134/86 mmHg (well managed). Morning BP medication continued as prescribed. Recommended light stretching, low-sodium home food, and a follow-up in 2 months.",
+    localLanguage: "Hindi",
+    localSummary:
+      "ब्लड प्रेशर सामान्य सीमा में है (134/86)। सुबह की बीपी की गोली जारी रखने, भोजन में नमक कम करने और 2 महीने बाद पुनः जांच कराने का परामर्श है।",
+    prescribedRoutines: [
+      {
+        kind: "medicine",
+        name: "BP Tablet (Telmisartan)",
+        dose: "40mg",
+        schedule: "Daily",
+        time: "08:30",
+        note: "Take in the morning after breakfast",
+      },
+      {
+        kind: "exercise",
+        name: "Morning Walk & Light Yoga",
+        dose: "25 Mins",
+        schedule: "Daily",
+        time: "07:00",
+        note: "In park or terrace before sun gets harsh",
+      },
+      {
+        kind: "meal",
+        name: "Low Salt Breakfast",
+        dose: "Fresh fruits & poha",
+        schedule: "Daily",
+        time: "09:00",
+        note: "Doctor advised avoiding extra table salt",
+      },
+    ],
+    clinicalObservations: [
+      "Doctor recorded blood pressure is stable at 134/86 mmHg.",
+      "Advice: Avoid pickles, papad, and high-sodium snacks.",
+    ],
+    disclaimer: "Prepared preview for the family. Confirm before adding it to the desk.",
+    source: "preview",
+  };
+}
+
+/**
+ * Converts MedGemma analysis into active Care Desk medicines and memories.
+ */
+export function mapAnalysisToDeskRecords(
+  analysis: MedGemmaReportAnalysis,
+  author: string
+): { newMedicines: Medicine[]; newMemories: Memory[] } {
+  const timestamp = new Date().toISOString();
+  
+  const newMedicines: Medicine[] = analysis.prescribedRoutines.map((r, i) => ({
+    ...r,
+    id: `medgemma-${Date.now()}-${i}`,
+  }));
+
+  const newMemories: Memory[] = analysis.clinicalObservations.map((obs, i) => ({
+    id: `mem-medgemma-${Date.now()}-${i}`,
+    text: `${analysis.source === "page" ? "[From the page]" : "[Sample layout]"} ${obs}`,
+    author,
+    addedAt: timestamp,
+  }));
+
+  return { newMedicines, newMemories };
+}

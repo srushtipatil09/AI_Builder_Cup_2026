@@ -18,6 +18,8 @@ export class LiveAudio {
   gaps: number[] = [];
   private lastVoiceAt = 0;
   private waiting = false;
+  // Milliseconds of loud microphone frames, used with the parent's word count for speaking pace.
+  private loudMs = 0;
   onPlaybackEnd: () => void = () => {};
   // A sharp rise in microphone energy while Saathi is silent: about three seconds of audio for a label.
   onLoudSound: (clip: ArrayBuffer) => void = () => {};
@@ -30,6 +32,7 @@ export class LiveAudio {
   paused = false;
 
   async start(): Promise<void> {
+    this.loudMs = 0;
     this.ctx = new AudioContext({ latencyHint: "interactive" });
     await this.ctx.audioWorklet.addModule("/pcm-worklet.js");
     this.stream = await navigator.mediaDevices.getUserMedia({
@@ -44,6 +47,7 @@ export class LiveAudio {
       if (level > 0.02) {
         this.lastVoiceAt = performance.now();
         this.waiting = true;
+        this.loudMs += (pcm.byteLength / 2 / 16000) * 1000;
       }
       this.watchForImpact(pcm, level);
       this.onFrame(pcm);
@@ -122,6 +126,10 @@ export class LiveAudio {
   }
 
   // Median of the measured gaps, or undefined when no turn was heard.
+  spokenMs(): number {
+    return this.loudMs;
+  }
+
   medianGap(): number | undefined {
     if (this.gaps.length === 0) return undefined;
     const sorted = [...this.gaps].sort((a, b) => a - b);

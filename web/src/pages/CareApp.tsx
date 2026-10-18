@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { blankDesk, demoDesk, formatClock, formatQuiet, useDesk, type Desk } from "../desk";
 import { useFamilyLink } from "../family";
-import { useHealth, useMedia } from "../health";
+import { useMedia } from "../health";
 import { activeHouseholdId, readSession, writeSession, type HouseholdSession } from "../session";
 import { addFamilyMember, type FamilyMember } from "../lib/api";
 import { useAppDispatch, useAppSelector } from "../store";
@@ -198,7 +198,6 @@ export function CareApp({ demo, onLeave }: Props) {
 }
 
 function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage, seedCity, memberCount, accountPhoto, onOpenMembers }: DeskProps) {
-  const health = useHealth();
   const caretaker = demo ? "Rahul" : session?.caretakerName || "";
   const storageKey = demo ? "saathi.desk.demo.v2" : `saathi.desk.${householdId || "local"}`;
   const { desk, setDesk, sync, syncedAt, syncError, retry } = useDesk(storageKey, () =>
@@ -275,7 +274,6 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
   const current = tabs.find((t) => t.id === active)!;
   const steps = setupSteps(desk, Boolean(family.link?.joinedAt), who);
   const doneCount = steps.filter((s) => s.done).length;
-  const healthClass = health.tone === "ok" ? "pill pill-ok" : health.tone === "wait" ? "pill pill-wait" : "pill";
   const phone = useMedia("(max-width: 1023px)");
 
   // A delete keeps the desk as it was for a few seconds, so "Undo" can put it back.
@@ -320,10 +318,6 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
         </div>
 
         <div className="care-side-foot">
-          <p role="status" className={healthClass}>
-            <span className="pill-dot" aria-hidden="true" />
-            {health.text}
-          </p>
           {!demo && session ? (
             <div className="care-me">
               <PersonAvatar name={caretaker || session.email} src={accountPhoto} className="avatar avatar-sm" />
@@ -443,6 +437,9 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
               householdId={householdId}
               name={name}
               demo={demo}
+              desk={desk}
+              setDesk={setDesk}
+              author={author}
             />
           </>
         ) : null}
@@ -453,6 +450,8 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
             demo={demo}
             name={name}
             medicines={desk.medicines}
+            contacts={desk.contacts}
+            language={desk.profile.language}
             onOpenReminders={() => choose("reminders")}
           /> : null}
         {active === "ask" ? <TellSaathiTab desk={desk} setDesk={setDesk} author={author} name={name} guideSlot={guideSlot} householdId={householdId} /> : null}

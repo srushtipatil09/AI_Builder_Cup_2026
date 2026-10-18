@@ -1,8 +1,8 @@
 # Deploy Saathi.
 #
-# Cloud project and Firebase project come from .env (GOOGLE_CLOUD_PROJECT, FIREBASE_PROJECT_ID).
-# Cloud Run, Artifact Registry, and Cloud Tasks use the Cloud project.
-# Hosting, Auth, and Firestore use the Firebase project.
+# One project, saathi-511717, for Cloud Run, Artifact Registry, Cloud Tasks,
+# Hosting, Auth, and Firestore. GOOGLE_CLOUD_PROJECT in .env overrides the default.
+# FIREBASE_PROJECT_ID is accepted only when it is that same project.
 #
 # The image is built with Cloud Build from api/Dockerfile and pushed to
 # us-central1-docker.pkg.dev/saathi-511717/saathi/api. One image, two services:
@@ -26,7 +26,7 @@ param(
     [ValidateSet("all", "web", "api")]
     [string]$Target = "all",
     [string]$GcpProject = "saathi-511717",
-    [string]$FirebaseProject = "saathi-5afcf",
+    [string]$FirebaseProject = "saathi-511717",
     [string]$Region = "us-central1",
     [string]$Tag = "latest",
     [switch]$SkipFirestore,
@@ -136,9 +136,16 @@ if (-not $PSBoundParameters.ContainsKey("GcpProject")) {
 if (-not $PSBoundParameters.ContainsKey("FirebaseProject")) {
     $FirebaseProject = Env-Or $DotEnv "FIREBASE_PROJECT_ID" $FirebaseProject
 }
+if ($FirebaseProject -ne $GcpProject) {
+    Write-Warning "FIREBASE_PROJECT_ID ($FirebaseProject) is not $GcpProject. Hosting, Auth, and Firestore use $GcpProject."
+    $FirebaseProject = $GcpProject
+}
 $ServiceAccount = "backend-dev@$GcpProject.iam.gserviceaccount.com"
 $Image = "$Region-docker.pkg.dev/$GcpProject/saathi/api:$Tag"
-$HostingUrl = "https://$FirebaseProject.web.app"
+$HostingUrl = Env-Or $DotEnv "WEB_ORIGIN" "https://$FirebaseProject.web.app"
+if (-not $HostingUrl.StartsWith("https://")) {
+    $HostingUrl = "https://$FirebaseProject.web.app"
+}
 
 Write-Host ""
 Write-Host "Saathi deploy"
@@ -346,22 +353,39 @@ if ($deployWeb) {
         $firebasePrefix = @("--yes", "firebase-tools")
     }
 
-    $only = "hosting"
-    if (-not $SkipFirestore) { $only = "hosting,firestore:rules,firestore:indexes" }
-    Write-Host "Deploying Firebase ($only) to $FirebaseProject ..."
+    Write-Host "Deploying Firebase Hosting to $FirebaseProject ..."
     if ($DryRun) {
-        Write-Host "$firebaseExe $($firebasePrefix -join ' ') deploy --only $only --project $FirebaseProject --non-interactive"
+        Write-Host "$firebaseExe $($firebasePrefix -join ' ') deploy --only hosting --project $FirebaseProject --non-interactive"
     }
     else {
         Push-Location $Root
         try {
-            & $firebaseExe @firebasePrefix deploy --only $only --project $FirebaseProject --non-interactive
+            & $firebaseExe @firebasePrefix deploy --only hosting --project $FirebaseProject --non-interactive
             if ($LASTEXITCODE -ne 0) {
-                throw "firebase deploy failed ($LASTEXITCODE). If this is an auth error, run: npx firebase-tools login"
+                throw "firebase deploy hosting failed ($LASTEXITCODE). If this is an auth error, run: npx firebase-tools login"
             }
         }
         finally {
             Pop-Location
+        }
+    }
+
+    if (-not $SkipFirestore) {
+        Write-Host "Deploying Firestore rules to $FirebaseProject ..."
+        if ($DryRun) {
+            Write-Host "$firebaseExe $($firebasePrefix -join ' ') deploy --only firestore:rules,firestore:indexes --project $FirebaseProject --non-interactive"
+        }
+        else {
+            Push-Location $Root
+            try {
+                & $firebaseExe @firebasePrefix deploy --only firestore:rules,firestore:indexes --project $FirebaseProject --non-interactive
+                if ($LASTEXITCODE -ne 0) {
+                    throw "firebase deploy firestore rules failed ($LASTEXITCODE)."
+                }
+            }
+            finally {
+                Pop-Location
+            }
         }
     }
     Write-Host "Site: $HostingUrl"

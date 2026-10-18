@@ -72,6 +72,8 @@ export function authMessage(err: unknown): string {
     case "auth/popup-closed-by-user":
     case "auth/cancelled-popup-request":
       return "Google sign-in was closed before it finished.";
+    case "auth/unauthorized-domain":
+      return "This domain (saathi-511717.web.app) is not authorized in Firebase. Add it in Firebase Console > Authentication > Settings > Authorized domains.";
     case "auth/network-request-failed":
       return "No connection. Check the network and try again.";
     default:

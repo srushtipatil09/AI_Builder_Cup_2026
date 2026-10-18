@@ -9,8 +9,8 @@
 #        saathi-tick       every minute, UTC   -> worker /internal/tick       (check-ins and due reminders)
 #        saathi-retention  daily 21:30 UTC     -> worker /internal/retention  (7-day transcripts, 30-day analytics)
 #   5. Moves an existing plain LINK_SIGNING_SECRET environment variable on the two services to the secret.
-#   6. The runtime account may use Firestore and send FCM in the Firebase project. Firestore lives there, not in
-#      the Cloud project; without this every Firestore call gets 403 and the services silently use memory.
+#   6. The runtime account may use Firestore and send FCM in saathi-511717. Cloud Run, Hosting,
+#      Auth, and Firestore are the same project; without these roles every Firestore call gets 403.
 #
 # Usage, from the repo root, after the services exist:
 #   powershell -File deployment/scripts/setup_cloud.ps1 -DryRun
@@ -20,7 +20,7 @@
 [CmdletBinding()]
 param(
     [string]$GcpProject = "saathi-511717",
-    [string]$FirebaseProject = "saathi-5afcf",
+    [string]$FirebaseProject = "saathi-511717",
     [string]$Region = "us-central1",
     [switch]$DryRun
 )
@@ -30,6 +30,10 @@ if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
     $PSNativeCommandUseErrorActionPreference = $false
 }
 
+if ($FirebaseProject -ne $GcpProject) {
+    Write-Warning "Firebase project $FirebaseProject is not $GcpProject. Using $GcpProject."
+    $FirebaseProject = $GcpProject
+}
 $ServiceAccount = "backend-dev@$GcpProject.iam.gserviceaccount.com"
 $Secret = "saathi-link-signing"
 
@@ -120,7 +124,7 @@ foreach ($service in @("saathi-api", "saathi-worker")) {
     }
 }
 
-# 6. Cross-project grants in the Firebase project.
+# 6. Firestore and FCM in the same project as Cloud Run.
 Run -Quiet @("projects", "add-iam-policy-binding", $FirebaseProject,
     "--member", "serviceAccount:$ServiceAccount", "--role", "roles/datastore.user", "--condition=None")
 Run -Quiet @("projects", "add-iam-policy-binding", $FirebaseProject,

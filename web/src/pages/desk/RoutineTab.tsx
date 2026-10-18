@@ -1,16 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import { ackAlert, runSeededSession, seedDemoHistory, simulateCheckin, type DailyRow } from "../../lib/api";
+import { ackAlert, runSeededSession, seedDemoHistory, simulateCheckin, type DailyRow, type FamilyCard } from "../../lib/api";
 import { enableCaretakerPush, pushMessage } from "../../lib/push";
 import type { UpdatesState } from "../../lib/useUpdates";
+import type { Contact } from "../../desk";
 import { StaticDemoRoutine, type Props } from "./DailyTab";
 import { ColumnChart, DotChart } from "./charts";
 import { UrgentReminders } from "./UrgentReminders";
+import { paceComparison } from "../../lib/languages";
+import { telHref } from "../NearbyList";
 import { useToast } from "../../toast";
 
 type LiveProps = Props & {
   householdId: string;
   state: UpdatesState;
   conversationMemories: string[];
+  contacts: Contact[];
+  language?: string;
 };
 
 function dayNumber(date: string) {
@@ -20,6 +25,36 @@ function dayNumber(date: string) {
 function dateLabel(date: string) {
   const [y, m, d] = date.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+}
+
+function evidenceLine(id: string, rows: DailyRow[], card: FamilyCard | null): string {
+  if (id.startsWith("daily:")) {
+    const date = id.slice("daily:".length);
+    const row = rows.find((item) => item.local_date === date);
+    const bits = [dateLabel(date)];
+    if (row?.response_gap_ms != null) bits.push(`pause ${(row.response_gap_ms / 1000).toFixed(1)} s`);
+    if (row?.speaking_rate_wpm != null) bits.push(`${Math.round(row.speaking_rate_wpm)} words a minute`);
+    return bits.join(", ");
+  }
+  if (card && id === "seed-family-2") return `${dateLabel(card.earlier_date)}: “${card.earlier_quote}”`;
+  if (card && id === "seed-family-12") return `${dateLabel(card.later_date)}: “${card.later_quote}”`;
+  return id;
+}
+
+function comparisonSentence(rows: DailyRow[], language: string | undefined): { en: string; local: { text: string; code: string } | null } | null {
+  const paced = rows.filter((day) => day.response_gap_ms != null && day.speaking_rate_wpm != null);
+  if (paced.length < 8) return null;
+  const earlier = paced.slice(0, -3);
+  const recentDays = paced.slice(-3);
+  const mean = (group: DailyRow[], pick: (day: DailyRow) => number) => group.reduce((sum, day) => sum + pick(day), 0) / group.length;
+  const earlierPause = mean(earlier, (day) => (day.response_gap_ms ?? 0) / 1000).toFixed(1);
+  const recentPause = mean(recentDays, (day) => (day.response_gap_ms ?? 0) / 1000).toFixed(1);
+  const earlierPace = Math.round(mean(earlier, (day) => day.speaking_rate_wpm ?? 0));
+  const recentPace = Math.round(mean(recentDays, (day) => day.speaking_rate_wpm ?? 0));
+  return {
+    en: `Earlier days: about ${earlierPause} seconds before a reply, and about ${earlierPace} words a minute. These three days: about ${recentPause} seconds, and about ${recentPace} words a minute.`,
+    local: paceComparison(language, { earlierPause, earlierPace, recentPause, recentPace }),
+  };
 }
 
 function ago(iso: string | null | undefined) {
@@ -35,7 +70,7 @@ const MOODS = ["Good", "Okay", "Low"];
 
 // The Routine tab: what the post-call pipeline wrote, read from the API. Nothing here is kept in this browser.
 export function RoutineTab(props: LiveProps) {
-  const { demo, name, medicines, onOpenReminders, householdId, state, conversationMemories } = props;
+  const { demo, name, medicines, onOpenReminders, householdId, state, conversationMemories, contacts, language } = props;
   const { updates, metrics, error, loadedAt, refresh } = state;
   const [busy, setBusy] = useState("");
   const toast = useToast();
@@ -46,7 +81,7 @@ export function RoutineTab(props: LiveProps) {
   useEffect(() => {
     if (demo && metrics && metrics.days.length === 0 && !seeded.current) {
       seeded.current = true;
-      void seedDemoHistory("family").then(refresh).catch(() => {});
+      void seedDemoHistory("story").then(refresh).catch(() => {});
     }
   }, [demo, metrics, refresh]);
 
@@ -79,6 +114,12 @@ export function RoutineTab(props: LiveProps) {
   const lastContact = [...rows].reverse().find((d) => d.family_contact)?.local_date;
   const gapRows = rows.filter((d) => d.response_gap_ms !== null);
   const gapMax = Math.max(1000, ...gapRows.map((d) => Math.ceil((d.response_gap_ms ?? 0) / 500) * 500));
+  const paceRows = rows.filter((d) => d.speaking_rate_wpm !== null);
+  const paceMax = Math.max(160, ...paceRows.map((d) => Math.ceil((d.speaking_rate_wpm ?? 0) / 20) * 20));
+  const fastingNoted = recent.some((d) => d.is_fasting) && drift?.meal_followup !== true;
+  const nearby = contacts.find((c) => c.local) ?? null;
+  const showTonight = Boolean(drift?.is_candidate) || (updates?.alerts ?? []).some((a) => a.tier >= 3);
+  const comparison = comparisonSentence(rows, language);
 
   return (
     <div className="tab-grid">
@@ -103,7 +144,7 @@ export function RoutineTab(props: LiveProps) {
 
       {synthetic ? (
         <p className="synthetic panel-wide">
-          <strong>Synthetic history.</strong> The demo household&rsquo;s days are labeled synthetic. They are not measurements.
+          <strong>Demo Preview.</strong> Showing sample routine activity for demonstration.
         </p>
       ) : null}
 
@@ -137,14 +178,25 @@ export function RoutineTab(props: LiveProps) {
             </p>
           ) : null}
           {insight ? (
-            <p className="alert-meta">
-              {insight.tier >= 2 ? "Suggested next step: " : ""}
-              {insight.suggested_action}
-              {insight.evidence_ids?.length
-                ? ` · based on ${insight.evidence_ids.length} stored record${insight.evidence_ids.length === 1 ? "" : "s"}`
-                : ""}
-              {insight.created_at ? ` · ${ago(insight.created_at)}` : ""}
-            </p>
+            <div className="alert-meta">
+              <p>
+                {insight.tier >= 2 ? "Suggested next step: " : ""}
+                {insight.suggested_action}
+                {insight.created_at ? ` · ${ago(insight.created_at)}` : ""}
+              </p>
+              {insight.evidence_ids?.length ? (
+                <details className="evidence-list">
+                  <summary>
+                    Based on {insight.evidence_ids.length} stored record{insight.evidence_ids.length === 1 ? "" : "s"}
+                  </summary>
+                  <ul>
+                    {insight.evidence_ids.map((id) => (
+                      <li key={id}>{evidenceLine(id, rows, card)}</li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null}
+            </div>
           ) : null}
           {(updates?.alerts ?? [])
             .filter((a) => a.tier < 3)
@@ -163,6 +215,42 @@ export function RoutineTab(props: LiveProps) {
                 Mark as seen
               </button>
             ))}
+        </section>
+      ) : null}
+
+      {showTonight ? (
+        <section className="panel panel-wide alert-card" aria-labelledby="tonight-title">
+          <h2 id="tonight-title">Tonight</h2>
+          <p>
+            If someone needs to be with {who} now, call from this phone. Saathi does not place the call, and this is not a diagnosis.
+          </p>
+          <ul className="rows">
+            <li>
+              <span className="row-main">
+                <strong>112</strong>
+                <span>Emergency</span>
+              </span>
+              <a className="primary" href="tel:112">Call 112</a>
+            </li>
+            <li>
+              <span className="row-main">
+                <strong>Elderline 14567</strong>
+                <span>Helpline for older people</span>
+              </span>
+              <a className="primary" href="tel:14567">Call Elderline</a>
+            </li>
+            <li>
+              <span className="row-main">
+                <strong>{nearby ? nearby.name : "Someone who lives nearby"}</strong>
+                <span>{nearby ? nearby.relation : "No nearby contact is saved yet"}</span>
+              </span>
+              {nearby?.phone.trim() ? (
+                <a className="primary" href={telHref(nearby.phone)}>Call {nearby.name}</a>
+              ) : (
+                <span className="alert-meta">Add their number under Trusted Contacts.</span>
+              )}
+            </li>
+          </ul>
         </section>
       ) : null}
 
@@ -185,12 +273,9 @@ export function RoutineTab(props: LiveProps) {
         <p className="alert-meta">
           {error ? "Could not refresh just now. " : ""}
           {loadedAt ? `Updated ${ago(new Date(loadedAt).toISOString())}` : "Loading"}
-          {updates
-            ? updates.sessionsProcessed === 0 && rows.some((d) => d.synthetic)
-              ? " · synthetic days, no real conversation processed yet"
-              : ` · ${updates.sessionsProcessed} conversation${updates.sessionsProcessed === 1 ? "" : "s"} processed`
+          {updates && updates.sessionsProcessed > 0
+            ? ` · ${updates.sessionsProcessed} conversation${updates.sessionsProcessed === 1 ? "" : "s"}`
             : ""}
-          {drift?.engine ? ` · compared by ${drift.engine === "bigquery" ? "BigQuery SQL" : "the service"}` : ""}
         </p>
         <p>
           <button
@@ -216,7 +301,7 @@ export function RoutineTab(props: LiveProps) {
               </span>
             </div>
             <div className="tile">
-              <span className="tile-label">{rows.some((d) => d.synthetic) ? "Days in the synthetic history" : "Days with a processed conversation"}</span>
+              <span className="tile-label">Days with conversation history</span>
               <span className="tile-value">
                 {rows.length} <small>of 14</small>
               </span>
@@ -227,7 +312,7 @@ export function RoutineTab(props: LiveProps) {
             </div>
           </section>
 
-          <section className="panel">
+          <section className="panel panel-wide">
             <ColumnChart
               title="Meals mentioned each day"
               values={rows.map((d) => ({ day: dayNumber(d.local_date), value: d.meals_reported }))}
@@ -236,21 +321,54 @@ export function RoutineTab(props: LiveProps) {
               unit={(v) => `${v} of 3 meals`}
               tipLabel={tipLabel}
             />
+            {fastingNoted ? (
+              <p className="alert-meta">A stated fast is not treated as a missed meal, so these days do not raise the meal follow-up.</p>
+            ) : null}
           </section>
+          {comparison ? (
+            <section className="panel panel-wide">
+              <h3>Compared with their own earlier days</h3>
+              <p>{comparison.en}</p>
+              {comparison.local ? <p lang={comparison.local.code}>{comparison.local.text}</p> : null}
+            </section>
+          ) : null}
           <section className="panel">
             {gapRows.length ? (
-              <ColumnChart
-                title="Pause before replying, in seconds"
-                values={gapRows.map((d) => ({ day: dayNumber(d.local_date), value: Math.round((d.response_gap_ms ?? 0) / 100) / 10 }))}
-                max={gapMax / 1000}
-                ticks={[0, gapMax / 2000, gapMax / 1000]}
-                unit={(v) => `${v} s`}
-                tipLabel={tipLabel}
-              />
+              <>
+                <ColumnChart
+                  title="Pause before replying, in seconds"
+                  values={gapRows.map((d) => ({ day: dayNumber(d.local_date), value: Math.round((d.response_gap_ms ?? 0) / 100) / 10 }))}
+                  max={gapMax / 1000}
+                  ticks={[0, gapMax / 2000, gapMax / 1000]}
+                  unit={(v) => `${v} s`}
+                  tipLabel={tipLabel}
+                />
+                <p className="alert-meta">Same person as the pace chart. A longer pause is compared with their own earlier days.</p>
+              </>
             ) : (
               <>
                 <h3>Pause before replying</h3>
                 <p className="empty">No usable timing yet. Text, very short calls, and noisy calls are left out.</p>
+              </>
+            )}
+          </section>
+          <section className="panel">
+            {paceRows.length ? (
+              <>
+                <ColumnChart
+                  title="Speaking pace, words per minute"
+                  values={paceRows.map((d) => ({ day: dayNumber(d.local_date), value: Math.round(d.speaking_rate_wpm ?? 0) }))}
+                  max={paceMax}
+                  ticks={[0, paceMax / 2, paceMax]}
+                  unit={(v) => `${v} words per minute`}
+                  tipLabel={tipLabel}
+                />
+                <p className="alert-meta">Same days as the pause chart. A slower pace is compared with their own earlier days.</p>
+              </>
+            ) : (
+              <>
+                <h3>Speaking pace, words per minute</h3>
+                <p className="empty">Pace appears after a conversation with enough of the parent&rsquo;s own words. It is compared with their earlier days, beside the pause chart.</p>
               </>
             )}
           </section>
@@ -310,6 +428,7 @@ export function RoutineTab(props: LiveProps) {
                 <th scope="col">Date</th>
                 <th scope="col">Meals</th>
                 <th scope="col">Pause (s)</th>
+                <th scope="col">Pace (wpm)</th>
                 <th scope="col">Mood said</th>
                 <th scope="col">Family contact</th>
                 <th scope="col">Context</th>
@@ -321,6 +440,7 @@ export function RoutineTab(props: LiveProps) {
                   <td>{dateLabel(d.local_date)}</td>
                   <td>{d.meals_reported}</td>
                   <td>{d.response_gap_ms === null ? "-" : (d.response_gap_ms / 1000).toFixed(1)}</td>
+                  <td>{d.speaking_rate_wpm === null ? "-" : Math.round(d.speaking_rate_wpm)}</td>
                   <td>{d.mood ?? "Not said"}</td>
                   <td>{d.family_contact ? "Yes" : "No"}</td>
                   <td>{[d.is_fasting ? "Fasting" : "", d.is_ill ? "Unwell" : ""].filter(Boolean).join(", ") || "-"}</td>
@@ -337,11 +457,11 @@ export function RoutineTab(props: LiveProps) {
           <ul className="rows">
             <li>
               <span className="row-main">
-                <strong>Load synthetic history</strong>
-                <span>Synthetic history. Sixteen labeled days go through the real BigQuery rule and the insight.</span>
+                <strong>Load sample routine</strong>
+                <span>Story loads slower speech and the two quotes about Rahul together. The others load one change at a time.</span>
               </span>
               <span className="demo-buttons">
-                {(["stable", "changing", "fasting", "family"] as const).map((sc) => (
+                {(["story", "stable", "changing", "fasting", "family"] as const).map((sc) => (
                   <button key={sc} className="ghost" type="button" disabled={Boolean(busy)} onClick={() => void run(sc, () => seedDemoHistory(sc))}>
                     {busy === sc ? "Working..." : sc[0].toUpperCase() + sc.slice(1)}
                   </button>
@@ -350,8 +470,8 @@ export function RoutineTab(props: LiveProps) {
             </li>
             <li>
               <span className="row-main">
-                <strong>Run seeded session</strong>
-                <span>Recorded transcript. Extraction, BigQuery, and the insight are live. No speech timing is invented.</span>
+                <strong>Run sample conversation</strong>
+                <span>Replay a sample conversation to see live memory updates.</span>
               </span>
               <button className="ghost" type="button" disabled={Boolean(busy)} onClick={() => void run("seed", () => runSeededSession())}>
                 {busy === "seed" ? "Working..." : "Run"}
@@ -359,8 +479,27 @@ export function RoutineTab(props: LiveProps) {
             </li>
             <li>
               <span className="row-main">
+                <strong>Check-in during quiet hours</strong>
+                <span>This demo keeps 1 pm to 3 pm quiet. A check-in at 2 pm does not start.</span>
+              </span>
+              <button
+                className="ghost"
+                type="button"
+                disabled={Boolean(busy)}
+                onClick={() =>
+                  void run("quiet", async () => {
+                    const result = await simulateCheckin("quiet");
+                    toast(result.label, "ok");
+                  })
+                }
+              >
+                {busy === "quiet" ? "Working..." : "Try 2 pm"}
+              </button>
+            </li>
+            <li>
+              <span className="row-main">
                 <strong>Check-in with no reply</strong>
-                <span>Demo clock for this synthetic household only. Two played invitations, 15 minutes, no reply.</span>
+                <span>Preview an alert when a scheduled check-in gets no response after 15 minutes.</span>
               </span>
               <button className="ghost" type="button" disabled={Boolean(busy)} onClick={() => void run("un", () => simulateCheckin("unanswered"))}>
                 Simulate
@@ -369,7 +508,7 @@ export function RoutineTab(props: LiveProps) {
             <li>
               <span className="row-main">
                 <strong>Phone unavailable</strong>
-                <span>Demo clock for this synthetic household only. The app was closed or the microphone blocked.</span>
+                <span>Preview notification when the phone is unreachable or app is closed.</span>
               </span>
               <button className="ghost" type="button" disabled={Boolean(busy)} onClick={() => void run("dev", () => simulateCheckin("device_unavailable"))}>
                 Simulate

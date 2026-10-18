@@ -2,7 +2,7 @@
 
 Decision record for the Sunday 18 Oct 2026 submission. Product detail is in [SPEC.md](SPEC.md). The system picture is in [ARCHITECTURE.md](ARCHITECTURE.md). The day-by-day order is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
-Owners: Vibhuti Singh and Srushti Patil. Theme: Sustainability and Social Impact. If the form also asks for a category, choose Social Good.
+Owners: Srushti Patil and Vibhuti Singh. Theme: Sustainability and Social Impact. If the form also asks for a category, choose Social Good.
 
 This file matches the locked choices in the planning notes. If an older note disagrees, follow this file for priority and claims, and follow SPEC.md for behavior.
 
@@ -32,7 +32,7 @@ flowchart LR
 | After the call | One Cloud Task per session, then the private worker. Scheduler once a minute for due work. No second Pub/Sub path |
 | Memory | Firestore, including caretaker facts. Family episodes also get a Vertex embedding and a Firestore vector index |
 | Drift | SQL in BigQuery. Recent 3 local days against the prior 11. At least 7 baseline days |
-| Speech timing | The browser sends the wait from the parent's last loud frame to the first reply audio. Live does not emit that pause. Speaking rate is a stored field the live chat does not fill |
+| Speech timing | The browser sends the wait from the parent's last loud frame to the first reply audio, and a speaking pace from the parent's words over that loud time. Live does not emit either number |
 | Safety | A Python check on every family-facing sentence. Failure falls back to a sentence built from stored facts |
 | Agent | Three tools in the worker. The default path runs them in a fixed order. ADK is optional (`saathi[adk]`) and falls back to that order. Agent Engine hosting is out |
 | Cost | Request-billed Cloud Run at zero instances. Live capped at 240 seconds. Flash for everything after the call. Explicit cache only at 4,096 tokens or more, and the Live path does not create one. Firestore vectors, not a Vector Search replica. BigQuery on-demand, 100 MiB byte cap. No GPU |
@@ -41,13 +41,13 @@ flowchart LR
 | Nest | Milestone M16, after submission |
 | Alerts | Firebase Cloud Messaging. Check-in text and caretaker text stay generic |
 | Language | Hindi in the Kamla demo. The profile can also be English, Bengali, Marathi, Gujarati, Punjabi, Tamil, Telugu, Kannada, or Malayalam. The Live prompt and the server's own phrases follow that choice. Submission text is English |
-| Nearby help | Places API (New) for hospitals, pharmacies, parks, and restaurants. Helplines 112, 108, and 14567, and trusted contacts, do not depend on Places. The parent taps Call. Position is one rounded point, or the city on the desk |
+| Nearby help | Places API (New) for hospitals, pharmacies, grocery stores, parks, and restaurants, and one text search when they name another place. A list from the last day is reused. The India holiday calendar answers a spoken festival question; the desk uses a built-in list and does not call Calendar. Helplines 112, 108, and 14567, and trusted contacts, do not depend on Places. The parent taps Call. Position is one rounded point, or the city on the desk |
 | Family members | One caretaker account, up to 10 households, each with its own desk and family code |
 | Research numbers | Holt-Lunstad 2015, WHO 2025, and LASI, each labeled as someone else's research |
 
 ## What the running app shows
 
-These are finished. A reviewer can do them on https://saathi-5afcf.web.app.
+These are finished. A reviewer can do them on https://saathi-511717.web.app.
 
 | # | Finished |
 | --- | --- |
@@ -67,7 +67,7 @@ These are finished. A reviewer can do them on https://saathi-5afcf.web.app.
 | 14 | The Kamla Sharma demo needs no account. A seeded session still runs if the mic is denied |
 | 15 | Chrome install sheet or iPhone Add to Home Screen instructions. A closed app does not take the microphone |
 | 16 | Push on the parent's phone and the caretaker's desk. The phone keeps the desk in Redux and localStorage |
-| 17 | Nearby help, ten languages, up to 10 family members, and Ask Saathi answers from stored facts |
+| 17 | Nearby help, including a named place and the next festival, ten languages, up to 10 family members, and Ask Saathi answers from stored facts |
 
 The English deck and the public video are the files that go with the form. They are not a missing product feature. Nest, pill recognition, gas, glass, and WhatsApp are not in this app.
 

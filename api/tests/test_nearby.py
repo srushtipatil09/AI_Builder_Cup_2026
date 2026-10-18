@@ -46,7 +46,7 @@ def test_overview_lists_places_people_and_helplines(monkeypatch) -> None:
     res = client.get(f"/api/v1/households/{HH}/nearby?kind=all")
     body = res.json()
     assert res.status_code == 200
-    assert set(body["places"]) == {"hospital", "pharmacy", "park", "restaurant"}
+    assert set(body["places"]) == {"hospital", "pharmacy", "grocery", "park", "restaurant"}
     assert body["people"][0]["name"] == "Meena" and body["people"][0]["nearby"] is True
     assert body["people"][0]["phone"] == "9876500000"
     assert {h["phone"] for h in body["helplines"]} >= {"112", "108"}
@@ -61,6 +61,69 @@ def test_lookup_failure_still_returns_helplines(monkeypatch) -> None:
     body = client.get(f"/api/v1/households/{HH}/nearby?kind=hospital").json()
     assert body["available"] is False and body["places"]["hospital"] == []
     assert body["helplines"]
+
+
+def test_parent_grocery_lookup_is_what_the_caretaker_sees(monkeypatch) -> None:
+    household = "hh-nearby-grocery"
+    calls = []
+
+    def fake(kind, _spot, _city):
+        calls.append(kind)
+        return [service.Place(name=f"Shop {kind}", phone="9876500000")]
+
+    monkeypatch.setattr(service, "_places_call", fake)
+    service._cache.clear()
+    get_repository().save_desk(household, _desk())
+    parent = client.get(f"/api/v1/households/{household}/nearby?kind=grocery&remember=true")
+    assert parent.status_code == 200
+    assert parent.json()["places"]["grocery"][0]["name"] == "Shop grocery"
+    assert parent.json()["checked"]["grocery"]
+
+    def boom(*_args):
+        raise RuntimeError("the caretaker should read the stored list")
+
+    monkeypatch.setattr(service, "_places_call", boom)
+    service._cache.clear()
+    desk = client.get(f"/api/v1/households/{household}/nearby?kind=grocery").json()
+    assert desk["places"]["grocery"][0]["name"] == "Shop grocery"
+    assert desk["checked"]["grocery"]
+    assert calls == ["grocery"]
+
+
+def test_a_recent_saved_list_is_reused_for_a_spoken_question(monkeypatch) -> None:
+    household = "hh-nearby-saved"
+    service._cache.clear()
+    get_repository().save_desk(household, _desk())
+    service.save_check(household, "grocery", [service.Place(name="Ramesh Kirana")], None, "Varanasi")
+
+    def boom(*_args):
+        raise RuntimeError("Places should not be called")
+
+    monkeypatch.setattr(service, "_places_call", boom)
+    places, ok, source = service.ask_places(household, _desk(), "grocery")
+    assert ok is True and source == "saved"
+    assert places[0]["name"] == "Ramesh Kirana"
+
+
+def test_a_temple_question_uses_one_text_search_and_then_the_saved_list(monkeypatch) -> None:
+    household = "hh-nearby-temple"
+    service._cache.clear()
+    get_repository().save_desk(household, _desk())
+    calls = []
+
+    def fake(query, _spot, _city):
+        calls.append(query)
+        return [service.Place(name="Kashi Vishwanath")]
+
+    monkeypatch.setattr(service, "_search_text", fake)
+    places, ok, source = service.ask_any_place(household, _desk(), "mandir")
+    assert ok is True and source == "places" and calls == ["temple"]
+    assert places[0]["name"] == "Kashi Vishwanath"
+    monkeypatch.setattr(service, "_search_text", lambda *_a: (_ for _ in ()).throw(RuntimeError("should reuse")))
+    service._cache.clear()
+    again, ok_again, source_again = service.ask_any_place(household, _desk(), "temple")
+    assert ok_again is True and source_again == "saved"
+    assert again[0]["name"] == "Kashi Vishwanath"
 
 
 def test_phone_is_safe_for_a_tel_link() -> None:

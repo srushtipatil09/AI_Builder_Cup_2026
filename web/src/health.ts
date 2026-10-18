@@ -4,9 +4,9 @@ type Health = { service: string; status: string; stage: string };
 
 export type HealthState = { text: string; tone: "ok" | "wait" | "checking" };
 
-// One check of the API on load, shown as a small status pill.
+// Lightweight connection check
 export function useHealth(): HealthState {
-  const [state, setState] = useState<HealthState>({ text: "Checking the API…", tone: "checking" });
+  const [state, setState] = useState<HealthState>({ text: "Checking connection…", tone: "checking" });
   const apiOrigin = import.meta.env.VITE_API_URL
     ? String(import.meta.env.VITE_API_URL).replace(/\/+$/, "")
     : "";
@@ -18,11 +18,11 @@ export function useHealth(): HealthState {
         if (!response.ok) throw new Error(String(response.status));
         return response.json() as Promise<Health>;
       })
-      .then((body) => setState({ text: `${body.service} is ${body.status} (${body.stage})`, tone: "ok" }))
+      .then(() => setState({ text: "Connected", tone: "ok" }))
       .catch((error: unknown) => {
         if ((error as Error).name === "AbortError") return;
         setState({
-          text: apiOrigin ? "API is not reachable." : "API is not running. Start it on port 8080.",
+          text: "Working offline",
           tone: "wait",
         });
       });

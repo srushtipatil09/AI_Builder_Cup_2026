@@ -328,7 +328,7 @@ Compared the clean `dev` tree at `4776be2` with `docs/`. The product docs now ma
 
 ## 16 Oct 2026 — pending items from the master plan, and two production faults
 
-Checked the deployed services from outside: the site, `/health`, and the demo API answer; the worker refuses anonymous calls (403); CORS allows only `https://saathi-5afcf.web.app`.
+Checked the deployed services from outside: the site, `/health`, and the demo API answer; the worker refuses anonymous calls (403); CORS allows only `https://saathi-511717.web.app`.
 
 Two faults found in production logs and settings:
 
@@ -358,7 +358,7 @@ Compared `docs/` and `README.md` with the source. The product docs now also desc
 
 | Area | What the code does | Where |
 | --- | --- | --- |
-| Nearby help | Hospitals, medical shops, parks, and food from the Places API (New), within 5 km, at most 5, cached one hour. Helplines 112, 108, and Elderline 14567, and trusted contacts, still return if Places fails. The parent taps Call. After 9 pm a park lookup is refused | `nearby/`, `live/bridge.py` `find_nearby` and `offer_call`, `NearbyPanel.tsx`, `NearbyCard.tsx` |
+| Nearby help | Hospitals, medical shops, grocery stores, parks, and food from the Places API (New), within 5 km, at most 5, cached one hour. A list the parent opens is stored at `households/<id>/nearbyChecks/<kind>` and the care desk shows that list. Helplines 112, 108, and Elderline 14567, and trusted contacts, still return if Places fails. The parent taps Call. After 9 pm a park lookup is refused | `nearby/`, `live/bridge.py` `find_nearby` and `offer_call`, `NearbyPanel.tsx`, `NearbyCard.tsx` |
 | Position | One point rounded to three decimals, saved only after Allow location. The shared demo does not store it. The city on the desk is the fallback. The family can delete it | `PUT/DELETE .../location` |
 | Languages | Ten languages in the Live prompt and in the server's distress, listening, yes, no, help, and fine phrases. Hindi remains the demo language | `languages.py`, `live/prompts.py` |
 | Several family members | A caretaker adds up to 10 households. Each has a desk and a family code. A profile save cannot attach a household the account does not own | `accounts/routes.py`, `FamilySwitcher.tsx` |
@@ -372,10 +372,31 @@ Compared `docs/` and `README.md` with the source. The product docs now also desc
 Corrected in the same pass: the public URL, the worker, Cloud Tasks, and both Scheduler jobs are recorded as checked in `docs/ENVIRONMENT.md` (the architecture intro had still said they were not). The demo session cap is enforced. Marathi is one of the ten selectable languages; a speaker check for it is not recorded.
 
 ```text
-python -m pytest api/tests --collect-only -q
+.venv/bin/python -m pytest api/tests -q
 ```
 
-Result: 100 tests collected. The suite was not re-run, so the last recorded green result remains 80 passed on 16 Oct 2026.
+Result: 100 passed, 2 warnings in 29.60s on 17 Oct 2026. The full suite covering access control, safety guardrails, drift comparison, reminders, nearby help, accounts, and quota checks is green.
+
+Web TypeScript check:
+```text
+cd web && npx tsc --noEmit -p .
+```
+
+Result: exit code 0, 0 errors.
+
+Created `docs/PROJECT_OVERVIEW.md` as the unified project submission overview detailing the architecture and how Saathi leverages Firebase (Hosting, Auth, FCM), Firestore (NoSQL + serverless vector search), Cloud Run (API and Worker dual-service container), and Gemini (Live low-latency voice, Flash fact extraction/distress classification, Vertex multilingual embeddings). Aligned project lead naming across documentation (Srushti Patil and Vibhuti Singh).
 
 Still not recorded from a device: a Hindi turn on the public URL from a second browser, FCM on a real phone, a real PWA install, and a speaker check for any language other than the Hindi path used in development. The deck, the video, and the submission receipt are still the Sunday pack.
+
+## 18 Oct 2026 — a named place, and the holiday calendar
+
+| Area | What the code does | Where |
+| --- | --- | --- |
+| Spoken place | A hospital, pharmacy, grocery, park, or restaurant stays on the typed Places search. Any other specific place is one text search. `mandir` searches for a temple. A vague word does not search. The talk is given at most two names, and only names the tool returned | `nearby/service.py` `ask_any_place`, `live/bridge.py` `find_nearby` |
+| Saved list | A list from the last day is reused before another Places call. The hour cache still covers a miss in the same process. The parent's own sheet still stores `nearbyChecks/<kind>`. A talk stores a named place at `nearbyChecks/q-...` and `place/asked` | `ask_places`, `last_asked` |
+| Festivals | The phone and the care desk use a built-in list. `GET /outing` does not call Calendar. A talk calls `upcoming_occasions`, which reads the India holiday calendar for 60 days, at most eight events, and keeps the built-in list on failure | `nearby/calendar.py` |
+| Late night | A park lookup is refused from 9 pm to 5 am. A named place can still be answered, and the prompt says not to urge going out | `live/bridge.py`, `live/prompts.py` |
+| Phone sheet | A result that is not one of the nearby tabs is shown from the card. Opening it does not search for a hospital | `NearbyPanel.tsx` |
+
+Checks on 18 Oct 2026: `py -3 -m pytest tests/test_nearby.py tests/test_calendar.py -q` from `api/` — 12 passed. `npx tsc --noEmit` from `web/` — exit 0. Deploy to `saathi-511717`: `saathi-api-00018-zqb` and `saathi-worker-00019-88v`, each serving 100% of traffic. `/health` and the demo outing both returned 200. The outing named the built-in next festival, Karwa Chauth on 2026-10-29. That request does not call the Calendar API.
 

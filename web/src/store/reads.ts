@@ -46,7 +46,7 @@ export type NearbyRecord = {
   location: Nearby["location"] | null;
   people: Stamped<NearbyItem[]> | null;
   helplines: Stamped<NearbyItem[]> | null;
-  places: Partial<Record<PlaceKind, Stamped<NearbyItem[]> & { available: boolean }>>;
+  places: Partial<Record<PlaceKind, Stamped<NearbyItem[]> & { available: boolean; checkedAt?: string }>>;
 };
 
 type ReadsState = {
@@ -58,7 +58,7 @@ type ReadsState = {
   links: Record<string, { url: string; expiresAt: number }>;
 };
 
-const PLACE_KINDS: PlaceKind[] = ["hospital", "pharmacy", "park", "restaurant"];
+const PLACE_KINDS: PlaceKind[] = ["hospital", "pharmacy", "grocery", "park", "restaurant"];
 
 const fresh = (at: number | undefined, limit: number, now = Date.now()) => Boolean(at) && now - (at ?? 0) < limit;
 
@@ -94,11 +94,13 @@ export function saveReadsCache(state: ReadsState): void {
 export function nearbyFromCache(record: NearbyRecord | undefined, tab: NearbyTab, now = Date.now()): Nearby | null {
   if (!record?.location) return null;
   const places: Nearby["places"] = {};
+  const checked: NonNullable<Nearby["checked"]> = {};
   let available = true;
   for (const kind of PLACE_KINDS) {
     const hit = record.places[kind];
     if (hit && fresh(hit.at, hit.available ? PLACES_FRESH_MS : FAILED_FRESH_MS, now)) {
       places[kind] = hit.value;
+      if (hit.checkedAt) checked[kind] = hit.checkedAt;
       if (!hit.available) available = false;
     }
   }
@@ -110,6 +112,7 @@ export function nearbyFromCache(record: NearbyRecord | undefined, tab: NearbyTab
     people: record.people?.value ?? [],
     helplines: record.helplines?.value ?? [],
     places,
+    checked,
     available: tab === "people" || tab === "helplines" ? true : available,
   };
 }
@@ -138,7 +141,12 @@ function mergeNearby(state: ReadsState, householdId: string, data: Nearby, at: n
     const items = data.places?.[kind];
     if (!items) continue;
     // The server marks the whole answer unavailable if any lookup failed; a list with places in it did not fail.
-    row.places[kind] = { value: items, at, available: data.available || items.length > 0 };
+    row.places[kind] = {
+      value: items,
+      at,
+      available: data.available || items.length > 0,
+      checkedAt: data.checked?.[kind],
+    };
   }
   state.nearby[householdId] = row;
 }
@@ -154,20 +162,22 @@ type ReadsRoot = { reads: ReadsState };
 
 export const loadNearby = createAsyncThunk(
   "reads/loadNearby",
-  async ({ householdId, tab }: { householdId: string; tab: NearbyTab | "all"; force?: boolean }) => {
+  async ({ householdId, tab, remember }: { householdId: string; tab: NearbyTab | "all"; force?: boolean; remember?: boolean }) => {
     try {
-      const data = await fetchNearby(householdId, tab);
+      const data = await fetchNearby(householdId, tab, remember);
       return { householdId, tab, data, at: Date.now() };
     } finally {
       inFlight.delete(`nearby:${householdId}:${tab}`);
     }
   },
   {
-    condition: ({ householdId, tab, force }, { getState }) => {
+    condition: ({ householdId, tab, force, remember }, { getState }) => {
       if (!householdId) return false;
       const record = (getState() as ReadsRoot).reads.nearby[householdId];
       const cached = tab === "all" ? nearbyAllFromCache(record) : nearbyFromCache(record, tab);
-      if (!force && cached) return false;
+      // The parent's sheet reuses a place list for six hours. The care desk always reads the copy
+      // the parent stored, so a lookup they just made is what the family sees.
+      if (!force && remember && cached) return false;
       return claim(`nearby:${householdId}:${tab}`);
     },
   },

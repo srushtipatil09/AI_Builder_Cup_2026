@@ -6,6 +6,33 @@ The expensive minute is an open voice session. Gemini Live runs only inside a fo
 
 This repository is the AI Builder Cup 2026 prototype. Live voice, Firestore, BigQuery drift, SafetyGuard, and the insight run against a real Google Cloud project. What is checked and what is not is in [docs/PROGRESS.md](docs/PROGRESS.md).
 
+## Try it in 2 minutes (for judges)
+
+Open https://saathi-511717.web.app. Neither demo asks for an email.
+
+1. **Kamla's phone** (`/app?demo=1`). Allow the microphone and press Talk. She is a synthetic 78-year-old in Varanasi. Hindi is the Live voice this demo was tested with. Press Stop when you are done. The microphone is off, and a closed tab does not keep listening.
+2. **Caretaker demo** (`/care?demo=1`). Open Routine for her own pause and speaking pace, and for the two quotes about her son Rahul. Ask Saathi a question from the examples. Under Photos and documents, **Read the sample page** copies a synthetic note once. Confirm before it is kept.
+
+### What needs a real email
+
+Log in or Create account, with an email and password, or with Google. That is your household, not the shared Kamla desk.
+
+- A care desk and a phone that stay yours after you leave
+- A family code that joins the parent's phone to that household
+- More than one family member (up to 10)
+- Saving a location once, so nearby places use that point instead of the city
+
+Google sign-up asks once who Saathi will talk with, the language, and the city. The account is not created until the agreement about what is kept is ticked: words for 7 days, summaries for 30.
+
+### What the demo does not do
+
+- It is one shared household. A change on the desk is saved, and the next visitor sees it. It is labeled synthetic.
+- Three Live sessions a visitor a day. Each talk stops at 4 minutes.
+- It does not add family members, does not keep a join, and does not store a location. Nearby help uses Varanasi.
+- Contact family on Kamla's phone does not notify a real person.
+- The other nine languages change the words on the phone. Hindi is the voice that was tested.
+- There is no Nest Home integration yet, and no model machine left running. The sample page is one Gemini Flash read, not a live MedGemma endpoint.
+
 ## What you open
 
 ```mermaid
@@ -52,6 +79,8 @@ Read the pictures and the rules in the docs:
 
 | Doc | Question it answers |
 | --- | --- |
+| [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md) | Executive summary, submission guide, and Google Cloud / Firebase integration breakdown |
+| [docs/CODEBASE_FACTS_OPTIMIZATIONS_AND_STACK.md](docs/CODEBASE_FACTS_OPTIMIZATIONS_AND_STACK.md) | Deep technical blueprint, Gen AI latency optimizations, and cost-saving architecture |
 | [docs/SPEC.md](docs/SPEC.md) | What are we building? |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How are we building it? |
 | [docs/MASTER_PLAN.md](docs/MASTER_PLAN.md) | What is locked, what is Sunday, what is later? |
@@ -63,8 +92,18 @@ Read the pictures and the rules in the docs:
 
 ## Run it locally
 
-Requires Python 3.12 and Node 22.
+Requires Python 3.12+ (or virtualenv) and Node 22+.
 
+Using Makefile:
+```bash
+make setup     # Install Python dev dependencies and web node modules
+make test      # Run all 100 unit and integration tests
+make api       # Start public API on port 8080
+make worker    # Start background worker on port 8081
+make web       # Start Vite dev server on port 5173
+```
+
+Or manually:
 ```bash
 python -m pip install -e "api[dev]"
 python -m pytest api/tests
@@ -84,13 +123,13 @@ Copy `.env.example` to `.env` when a Google Cloud project id exists. Do not comm
 
 ## What is finished
 
-The product below is in the running app at https://saathi-5afcf.web.app. Open it with no account and try the Kamla Sharma phone or the caretaker demo. Both households are synthetic and labeled.
+The product below is in the running app at https://saathi-511717.web.app. Open it with no account and try the Kamla Sharma phone or the caretaker demo. Both households are synthetic and labeled.
 
 Saathi already knows the household before the parent speaks. The Live prompt is filled with the preferred name, the language, the city, every person who matters, the memories the family saved and the corrections from earlier talks, every reminder, the last conversation summaries, topics the parent declined, and one family thread when a named person has gone quiet. That packet is ready when the greeting starts, so the reply does not wait for a database read in the middle of a sentence. Voice audio is a live stream, not a file uploaded after the parent stops. The line to Gemini Live opens as the chat page opens. Talk sends "start" on a connection that is already up, and the greeting begins then. Microphone audio is 16 kHz PCM sent as it is captured. Saathi's voice comes back as 24 kHz PCM and is played gapless. If the parent talks over Saathi, the queued audio is dropped. The browser's audio context asks for interactive latency. Extraction, embeddings, and the drift comparison run after the call ends, on the worker, and never sit on the voice path.
 
 | Capability | What a judge sees |
 | --- | --- |
-| Public app | https://saathi-5afcf.web.app, API `saathi-api`, private worker `saathi-worker` |
+| Public app | https://saathi-511717.web.app, API `saathi-api`, private worker `saathi-worker` |
 | Live conversation | Gemini Live `gemini-live-2.5-flash-native-audio`, voice Aoede, at most four minutes. Hindi in the Kamla demo. Nine more languages follow the profile: English, Bengali, Marathi, Gujarati, Punjabi, Tamil, Telugu, Kannada, Malayalam |
 | Full context on every turn | Name, people, memories, reminders, recent summaries, declined topics, and the family thread are in the system instruction before the first word |
 | Fast reply | Socket opened before Talk. PCM in and out with no upload step. Barge-in stops playback. Post-call work stays off this path |
@@ -105,31 +144,33 @@ Saathi already knows the household before the parent speaks. The Live prompt is 
 | Drift | BigQuery compares this person with their own earlier days. A named fast is not a nutrition alert. Eval of extraction: 30/30 labeled cases on `gemini-2.5-flash` |
 | SafetyGuard | Every sentence the family sees is checked. A diagnosis, a dose, or an order to enter counselling is replaced by a sentence built from the stored facts |
 | Insight | Three tools, in a fixed order, or an optional ADK agent that can only word the notice. The code chooses the tier and the evidence |
-| Nearby help | Hospitals, medical shops, parks, and food, plus trusted people and 112, 108, and Elderline 14567. The parent taps Call |
+| Nearby help | Hospitals, medical shops, grocery stores, parks, and food, plus any other place they name, trusted people, and 112, 108, and Elderline 14567. The parent taps Call. A list from the last day is reused. A festival question uses the holiday calendar and does not search for a place |
 | Several family members | One caretaker, up to 10 people, each with a desk and a family code |
 | Phone that remembers | Redux holds the care desk and the slower reads. Both are written to versioned localStorage, shared across tabs of this browser, and cleared on log out. A reload opens on the saved copy. Private file links stay in memory only |
 | Accounts and files | Email, password, and Google. Family code joins the phone. Photos and documents in a private bucket, opened with a 30-minute link |
 | Installable phone app | Chrome install sheet. iPhone: Share, then Add to Home Screen. A closed app does not hold the microphone |
+| On-phone word check | A distress word offers 112 with no network (`web/src/lib/edgeGemma.ts`). The badge names a browser model only when that model actually answered |
+| Note read | A saved prescription or report image or PDF is read once by Gemini Flash (`api/src/saathi/files/read_note.py`). The family lines copy what is printed and do not add a dose. The caretaker confirms before a routine is saved. A prepared preview remains for a desk with no page. A live MedGemma endpoint stays billed while it is on, about $2.30 an hour in us-central1, so it is not deployed |
 | Retention and spend stops | Transcripts 7 days, summaries and daily numbers 30 days. 120 Live minutes and 500 extraction calls a day. Three demo voice sessions a visitor a day |
 
 ### Not in this prototype
 
-Weekday recurrence (a reminder is once or daily), voice edit of every reminder field, Sutra as a full mode, Nest and Google Home, pill recognition, gas and glass detection, a Vertex AI Vector Search endpoint, Agent Engine hosting, Terraform, SMS, WhatsApp, a composite health score, a background wake word, and continuous room listening. The deck PDF and the three-minute video are the files that go with the form.
+A live MedGemma endpoint (the care desk keeps a sample layout, because the endpoint stays billed while it is on), weekday recurrence (a reminder is once or daily), voice edit of every reminder field, Sutra as a full mode, Nest and Google Home, pill recognition, gas and glass detection, a Vertex AI Vector Search endpoint, Agent Engine hosting, Terraform, SMS, WhatsApp, a composite health score, a background wake word, and continuous room listening. The deck PDF and the three-minute video are the files that go with the form.
 
 ## What the judges score
 
-The [AI Builder Cup 2026 criteria](https://aibuildercup.com/themes.html) are the same for every theme. Theme on the form: Sustainability and Social Impact. Category, if the form asks: Social Good. Submission materials are in English. The prototype must use Gemini or Gemma, or an agent platform, and must run on Cloud Run or Firebase. This build uses Gemini on Vertex, Cloud Run, and Firebase Hosting.
+The [AI Builder Cup 2026 criteria](https://aibuildercup.com/themes.html) are the same for every theme. Theme on the form: Sustainability and Social Impact. Category, if the form asks: Social Good. Submission materials are in English. The prototype must use Gemini or Gemma, or an agent platform, and must run on Cloud Run or Firebase. This build uses Gemini Live on Vertex, Cloud Run, and Firebase Hosting. MedGemma stays a sample layout because a live endpoint is billed the whole time it is deployed.
 
 Weights and the pieces of this repository that answer them:
 
 | Weight | Criterion | What is in this build |
 | --- | --- | --- |
-| 40% | Technical merit and Gen AI | Gemini Live holds the conversation, with the household already in the prompt and the socket open before Talk. Gemini Flash extracts observations, labels a short impact clip, drafts the family notice, and answers a caretaker's question from stored facts. Optional ADK `LlmAgent` words the notice; the fixed-order tools remain the fallback. Embeddings and Firestore vector search recall family episodes. BigQuery SQL compares this person with their own earlier days. Five Live tools act during the call. The public API and the private worker are one image on Cloud Run. Cloud Tasks, Cloud Scheduler, Firebase Auth, Firestore, Cloud Storage, FCM, and Secret Manager are in the running app. The API tests cover safety, drift, the live bridge, reminders, nearby help, family members, push registration, and quota |
+| 40% | Technical merit and Gen AI | **Gemini Live** holds the voice conversation on Cloud Run, with the household already in the prompt and the socket open before Talk. Gemini Flash extracts observations, labels a short impact clip, drafts the family notice, and answers a caretaker's question from stored facts. Optional ADK `LlmAgent` words the notice; the fixed-order tools remain the fallback. Embeddings and Firestore vector search recall family episodes. BigQuery SQL compares this person with their own earlier days, including pause and speaking pace. A distress word on the phone offers 112 with no network, and names a browser model only when that model answered. A saved prescription or report is read once by Gemini Flash; a MedGemma machine is not left running. After Stop, the phone states how long the talk was and that the microphone is off. The phone names Saathi or Rakshak from the desk. The pace comparison follows the profile language. Six Live tools act during the call, including a holiday calendar and a place lookup that reuses a saved list. The public API and the private worker are one image on Cloud Run. Cloud Tasks, Cloud Scheduler, Firebase Auth, Firestore, Cloud Storage, FCM, and Secret Manager are in the running app. The API tests cover safety, drift, the live bridge, reminders, nearby help, family members, push registration, and quota |
 | 25% | Problem alignment and impact | An older adult living apart can talk without filling a form. The family sees what changed, in the parent's words, and a human next step. Check-ins, distress, unanswered invitations, and a shift in family contact each have a rule. Nearby help offers 112 first, then a place or a trusted person, and never a diagnosis or a dose. Research numbers on the slides are cited as other people's results. This prototype does not claim fewer deaths, hospital days, or insurance claims |
-| 25% | Innovation | The closed phone does not listen: a notification, then speech. The reply itself is a live audio stream with the memories and reminders already loaded, so Saathi does not pause to look the person up. The drift rule uses this person's own baseline and refuses a named fast. The family-episode card needs two quotes and a coded shift. A reminder is saved only after a spoken yes, and a later "I have done it" confirms it. A push is "seen". SafetyGuard replaces a diagnosis, a dose, or an order to enter counselling. Late at night the prompt drops memories and outings |
-| 10% | User experience | One app, two fronts chosen by role. The parent's screen is Talk, Stop, Pause, Contact family, and Nearby help, with optional captions. The care desk is five tabs on a phone and on a computer, and it opens on the copy already saved in the browser. A family code joins the phone. Chrome gets an install sheet; iPhone gets Add to Home Screen steps. Copy stays plain: "Not yet confirmed" until the parent says they have done it |
+| 25% | Innovation | The phone offers 112 from a distress word with no network. The cloud line is a live audio stream with memories and reminders pre-loaded. The closed phone does not listen: a notification, then speech. The drift rule uses this person's own baseline, draws pause and speaking pace on the same days, and does not treat a named fast as a missed meal. After a drift flag or a distress notice, the desk offers 112, Elderline 14567, and the nearby trusted contact, and the parent taps Call. The family-episode card needs two quotes and a coded shift. A reminder is saved only after a spoken yes, and a later "I have done it" confirms it. A push is "seen". SafetyGuard replaces a diagnosis, a dose, or an order to enter counselling. Late at night the prompt drops memories. A park is refused, and a named place is not an invitation to go out |
+| 10% | User experience | One app, two fronts chosen by role. The parent's screen is Talk, Stop, Pause, Contact family, and Nearby help, with optional captions. The badge says "On-phone word check" until a browser model actually answers. The care desk is five tabs on a phone and on a computer, and it opens on the copy already saved in the browser. A family code joins the phone. Chrome gets an install sheet; iPhone gets Add to Home Screen steps. Copy stays plain: "Not yet confirmed" until the parent says they have done it |
 
-Try it at https://saathi-5afcf.web.app. The Kamla Sharma phone and the caretaker demo need no account. Both are labeled synthetic.
+Try it at https://saathi-511717.web.app. The Kamla Sharma phone and the caretaker demo need no account. Both are labeled synthetic.
 
 ## Deploy
 
@@ -139,6 +180,6 @@ powershell -File deployment/scripts/deploy.ps1
 python scripts/smoke_cloud.py --invoke
 ```
 
-`setup_cloud.ps1` runs once: the signing secret, the service-account grants, and the two Scheduler jobs. `deploy.ps1` builds one image for both Cloud Run services and deploys Hosting.
+`setup_cloud.ps1` runs once: the signing secret, the service-account grants, and the two Scheduler jobs. `deploy.ps1` builds one image for both Cloud Run services and deploys Hosting. `deployment/scripts/deploy.sh` does those same deploy steps.
 
-Owners: Vibhuti Singh and Srushti Patil. Theme: Sustainability and Social Impact.
+Owners: Srushti Patil and Vibhuti Singh. Theme: Sustainability and Social Impact.

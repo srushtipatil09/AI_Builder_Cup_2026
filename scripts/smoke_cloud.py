@@ -14,7 +14,7 @@ import subprocess
 import urllib.error
 import urllib.request
 
-SITE = "https://saathi-5afcf.web.app"
+SITE = "https://saathi-511717.web.app"
 API = "https://saathi-api-ikr6m7lina-uc.a.run.app"
 WORKER = "https://saathi-worker-ikr6m7lina-uc.a.run.app"
 INVOKER = "backend-dev@saathi-511717.iam.gserviceaccount.com"

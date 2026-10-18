@@ -1,14 +1,21 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
-import { deleteFile, uploadFile, type FileCategory, type StoredFile } from "../../lib/api";
+import { useCallback, useEffect, useId, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { deleteFile, readSampleNote, readStoredNote, uploadFile, type FileCategory, type StoredFile } from "../../lib/api";
 import { useAppDispatch, useAppSelector } from "../../store";
-import { fileLinksForget, fileUrl, linkUsable, loadCategories, loadFileLink, loadFiles } from "../../store/reads";
+import { fileLinksForget, linkUsable, loadCategories, loadFileLink, loadFiles } from "../../store/reads";
 import { useToast } from "../../toast";
+import { newId, type Desk, type Medicine } from "../../desk";
+import { analyzeDoctorReportWithMedGemma, mapAnalysisToDeskRecords, type MedGemmaReportAnalysis } from "../../lib/medGemma";
+import { suggestReminders, type SuggestedReminder } from "../../lib/remindersFromPage";
+import { languageFor } from "../../lib/languages";
 
 type Props = {
   householdId: string;
   name: string;
   demo: boolean;
   onChanged?: () => void;
+  desk?: Desk;
+  setDesk?: (d: Desk) => void;
+  author?: string;
 };
 
 // Used until the API answers, so the forms are never empty. The API is the source of truth.
@@ -26,6 +33,22 @@ const FALLBACK_CATEGORIES: FileCategory[] = [
 
 const LINK_REFRESH_MS = 25 * 60 * 1000;
 const NO_FILES: StoredFile[] = [];
+
+function GeminiMark() {
+  const id = useId().replace(/:/g, "");
+  return (
+    <svg className="gemini-mark" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+      <defs>
+        <linearGradient id={id} x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0" stopColor="#1a73e8" />
+          <stop offset="0.55" stopColor="#9b72cb" />
+          <stop offset="1" stopColor="#d96570" />
+        </linearGradient>
+      </defs>
+      <path fill={`url(#${id})`} d="M12 1.6 14.2 9 21.6 12 14.2 15 12 22.4 9.8 15 2.4 12 9.8 9 12 1.6z" />
+    </svg>
+  );
+}
 
 function sizeLabel(bytes: number) {
   return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -71,6 +94,40 @@ function Thumb({ householdId, file }: { householdId: string; file: StoredFile })
     );
   }
   return src ? <img className="doc-thumb" src={src} alt="" /> : <span className="doc-thumb" aria-hidden="true" />;
+}
+
+// A real link, so the browser opens the file on the API host. A button that waits, then calls window.open, is blocked.
+function OpenFile({ householdId, fileId }: { householdId: string; fileId: string }) {
+  const dispatch = useAppDispatch();
+  const toast = useToast();
+  const url = useFileLink(householdId, fileId);
+  if (url) {
+    return (
+      <a className="ghost" href={url} target="_blank" rel="noopener noreferrer">
+        Open
+      </a>
+    );
+  }
+  return (
+    <button
+      className="ghost"
+      type="button"
+      onClick={() => {
+        const tab = window.open("about:blank", "_blank");
+        void dispatch(loadFileLink({ householdId, fileId }))
+          .unwrap()
+          .then((link) => {
+            if (tab) tab.location.replace(link.url);
+          })
+          .catch(() => {
+            tab?.close();
+            toast("Could not open that file. Try again.", "bad");
+          });
+      }}
+    >
+      Open
+    </button>
+  );
 }
 
 const IMAGE_TYPES = "image/jpeg,image/png,image/webp";
@@ -249,27 +306,131 @@ type LibraryProps = {
   categories: FileCategory[];
   files: StoredFile[];
   householdId: string;
+  demo: boolean;
   onChanged: () => Promise<void>;
+  desk?: Desk;
+  setDesk?: (d: Desk) => void;
+  author?: string;
 };
 
 // Everything saved so far, in one list. A filter row narrows it to one kind of record.
-function Library({ categories, files, householdId, onChanged }: LibraryProps) {
+function Library({ categories, files, householdId, demo, onChanged, desk, setDesk, author }: LibraryProps) {
   const dispatch = useAppDispatch();
   const toast = useToast();
   const [filter, setFilter] = useState("all");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<MedGemmaReportAnalysis | null>(null);
+  const [suggestions, setSuggestions] = useState<SuggestedReminder[]>([]);
+  const closeRead = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    setSuggestions(analysis ? suggestReminders(analysis.prescribedRoutines) : []);
+  }, [analysis]);
+
+  useEffect(() => {
+    if (!analysis) return;
+    closeRead.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAnalysis(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [analysis]);
+
+  const readable = (file: StoredFile) =>
+    (file.category === "prescriptions" || file.category === "medical_reports") &&
+    (file.contentType.startsWith("image/") || file.contentType === "application/pdf");
+
+  async function readSample() {
+    setAnalyzing(true);
+    try {
+      const res = await readSampleNote();
+      setAnalysis({ ...res, source: res.source ?? "page" });
+      toast(
+        res.source === "unreadable" ? "This page could not be read. Nothing was added." : "Read from the sample page. Confirm if you want it on the desk.",
+        res.source === "unreadable" ? "info" : "ok",
+      );
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "This page could not be read. You can still open the prepared preview.", "bad");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  async function readPage(file: StoredFile) {
+    setAnalyzing(true);
+    try {
+      const res = await readStoredNote(householdId, file.id);
+      setAnalysis(res);
+      toast(
+        res.source === "page" ? "Read from this page. Confirm if you want it on the desk." : "This page could not be read. Nothing was added.",
+        res.source === "page" ? "ok" : "info",
+      );
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "This page could not be read. You can still open the prepared preview.", "bad");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  async function runMedGemma(docName: string) {
+    setAnalyzing(true);
+    try {
+      const res = await analyzeDoctorReportWithMedGemma(docName, "prescriptions", author || "Caretaker");
+      setAnalysis(res);
+      toast("Preview ready. Confirm if you want it on the desk.", "ok");
+    } catch {
+      toast("The preview did not open. Try again.", "bad");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  function applyMedGemmaToDesk() {
+    if (analysis?.source === "unreadable") {
+      toast("Nothing was added.", "info");
+      setAnalysis(null);
+      return;
+    }
+    if (!analysis || !desk || !setDesk) {
+      toast("Preview is ready. Confirm to keep it on the desk.", "info");
+      setAnalysis(null);
+      return;
+    }
+    const { newMemories } = mapAnalysisToDeskRecords(analysis, author || "Caretaker");
+    const have = new Set(desk.medicines.map((m) => `${m.name.toLowerCase()}|${m.time}`));
+    const toAdd: Medicine[] = suggestions
+      .filter((s) => s.on && s.time && !have.has(`${s.name.toLowerCase()}|${s.time}`))
+      .map((s) => ({
+        id: newId(),
+        kind: s.kind,
+        name: s.name,
+        dose: s.dose,
+        schedule: s.schedule,
+        date: s.schedule === "Once" ? s.date : "",
+        time: s.time,
+        note: s.note,
+      }));
+
+    setDesk({
+      ...desk,
+      medicines: [...desk.medicines, ...toAdd],
+      memories: [...desk.memories, ...newMemories],
+    });
+
+    toast(
+      toAdd.length
+        ? `Added ${toAdd.length} reminder${toAdd.length === 1 ? "" : "s"} and ${newMemories.length} note${newMemories.length === 1 ? "" : "s"}.`
+        : "No new reminders. The notes were kept.",
+      "ok",
+    );
+    setAnalysis(null);
+  }
+
   const titles = Object.fromEntries(categories.map((c) => [c.id, c.title]));
   const counts = categories.map((c) => ({ c, n: files.filter((f) => f.category === c.id).length })).filter((x) => x.n > 0);
   const active = filter !== "all" && !counts.some((x) => x.c.id === filter) ? "all" : filter;
   const shown = active === "all" ? files : files.filter((f) => f.category === active);
-
-  async function open(file: StoredFile) {
-    try {
-      const url = await dispatch(fileUrl(householdId, file.id));
-      window.open(url, "_blank", "noopener");
-    } catch {
-      toast("Could not open that file. Try again.", "bad");
-    }
-  }
 
   async function remove(file: StoredFile) {
     if (!window.confirm(`Delete ${file.label || file.name}? This cannot be undone.`)) return;
@@ -289,6 +450,126 @@ function Library({ categories, files, householdId, onChanged }: LibraryProps) {
         <h3>Saved files</h3>
         <span className={files.length === 0 ? "doc-count" : "doc-count doc-count-on"}>{files.length === 0 ? "None yet" : `${files.length} saved`}</span>
       </div>
+
+      <div className="medgemma-preview">
+        <div>
+          <h4 className="doc-step-title">A note, in a few lines</h4>
+          <p>
+            On a saved prescription or report, Read this page copies what is printed, once, with Gemini Flash. Confirm before it is kept. Open preview shows a prepared note when you do not have a page. A MedGemma machine stays billed while it is on, so that machine is not running.
+          </p>
+        </div>
+        <div className="medgemma-actions">
+          {demo ? (
+            <button type="button" className="primary" onClick={() => void readSample()} disabled={analyzing}>
+              <GeminiMark />
+              {analyzing ? "Reading…" : "Read the sample page"}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => void runMedGemma("Dr. Mehta Prescription - Cardiology")}
+            disabled={analyzing}
+          >
+            {analyzing ? "Preparing…" : "Open preview"}
+          </button>
+        </div>
+      </div>
+
+      {analysis ? (
+        <div className="read-sheet" role="presentation" onClick={(event) => event.target === event.currentTarget && setAnalysis(null)}>
+        <article
+          className="medgemma-result"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="read-title"
+        >
+          <header className="read-head">
+            <div className="read-head-text">
+              <p className={`read-kicker read-kicker-${analysis.source ?? "page"}`}>
+                {analysis.source === "page" ? "From this page" : analysis.source === "unreadable" ? "Could not read" : "Prepared note"}
+              </p>
+              <h4 id="read-title">{analysis.reportTitle}</h4>
+              {analysis.doctorName ? <p className="read-doctor">{analysis.doctorName}</p> : null}
+            </div>
+            <button ref={closeRead} className="read-close" type="button" aria-label="Close" onClick={() => setAnalysis(null)}>
+              <span aria-hidden="true">×</span>
+            </button>
+          </header>
+
+          <div className="read-body">
+            <section className="read-summary" aria-labelledby="read-family">
+              <h5 id="read-family">For the family</h5>
+              <p>{analysis.plainSummary}</p>
+              {analysis.localSummary && analysis.localLanguage ? (
+                <div className="read-local">
+                  <span className="read-lang">{languageFor(analysis.localLanguage).native}</span>
+                  <p lang={languageFor(analysis.localLanguage).code}>{analysis.localSummary}</p>
+                </div>
+              ) : null}
+            </section>
+
+            {suggestions.length > 0 ? (
+            <fieldset className="suggested-reminders">
+              <legend>Suggested reminders</legend>
+              <p className="suggested-intro">Tick the ones to add. A clock time that was not printed on the page is only a suggestion.</p>
+              <ul>
+                {suggestions.map((item) => (
+                  <li key={item.id} className={item.on ? "suggested-row suggested-row-on" : "suggested-row"}>
+                    <label className="suggested-pick">
+                      <input
+                        type="checkbox"
+                        checked={item.on}
+                        onChange={(event) =>
+                          setSuggestions((rows) => rows.map((row) => (row.id === item.id ? { ...row, on: event.target.checked } : row)))
+                        }
+                      />
+                      <span className="suggested-text">
+                        <strong>{item.name}</strong>
+                        <span className="suggested-when">{item.schedule === "Daily" ? "Every day" : `Once, ${item.date}`}</span>
+                      </span>
+                    </label>
+                    <label className="suggested-time">
+                      <span className="visually-hidden">Time for {item.name}</span>
+                      <input
+                        type="time"
+                        value={item.time}
+                        disabled={!item.on}
+                        onChange={(event) =>
+                          setSuggestions((rows) => rows.map((row) => (row.id === item.id ? { ...row, time: event.target.value } : row)))
+                        }
+                      />
+                    </label>
+                    <p className="suggested-hint">
+                      {item.hint}
+                      {item.note ? <span className="suggested-note"> Page says: “{item.note}”</span> : null}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </fieldset>
+            ) : null}
+
+            <p className="read-disclaimer">{analysis.disclaimer}</p>
+          </div>
+
+          <footer className="read-foot">
+            <button type="button" className="ghost" onClick={() => setAnalysis(null)}>
+              Dismiss
+            </button>
+            {analysis.source === "unreadable" ? null : (
+            <button type="button" className="primary" onClick={applyMedGemmaToDesk}>
+              {(() => {
+                const n = suggestions.filter((item) => item.on).length;
+                return n ? `Add ${n} reminder${n === 1 ? "" : "s"}` : "Confirm and add to the desk";
+              })()}
+            </button>
+            )}
+          </footer>
+        </article>
+        </div>
+      ) : null}
+
       {files.length === 0 ? (
         <p className="doc-empty">Nothing saved yet. Pick what it is, choose a file, and upload. It will appear here.</p>
       ) : (
@@ -315,9 +596,13 @@ function Library({ categories, files, householdId, onChanged }: LibraryProps) {
                   </span>
                 </div>
                 <div className="doc-actions">
-                  <button className="ghost" type="button" onClick={() => void open(f)}>
-                    Open
-                  </button>
+                  {readable(f) ? (
+                    <button className="ghost" type="button" onClick={() => void readPage(f)} disabled={analyzing}>
+                      <GeminiMark />
+                      {analyzing ? "Reading…" : "Read this page"}
+                    </button>
+                  ) : null}
+                  <OpenFile householdId={householdId} fileId={f.id} />
                   <button className="ghost" type="button" onClick={() => void remove(f)}>
                     Delete
                   </button>
@@ -333,7 +618,7 @@ function Library({ categories, files, householdId, onChanged }: LibraryProps) {
 
 // Photos and documents the family keeps so that a responder, or Saathi's family, can tell who this person is.
 // Files are stored in a locked bucket; a private file opens through a link that stops working after 30 minutes.
-export function DocumentsCard({ householdId, name, demo, onChanged }: Props) {
+export function DocumentsCard({ householdId, name, demo, onChanged, desk, setDesk, author }: Props) {
   const who = name || "your parent";
   const dispatch = useAppDispatch();
   const categories = useAppSelector((state) => state.reads.categories?.value) ?? FALLBACK_CATEGORIES;
@@ -398,7 +683,16 @@ export function DocumentsCard({ householdId, name, demo, onChanged }: Props) {
           hasProfilePhoto={files.some((f) => f.category === "profile_photo")}
           onUploaded={afterChange}
         />
-        <Library categories={categories} files={files} householdId={householdId} onChanged={afterChange} />
+        <Library
+          categories={categories}
+          files={files}
+          householdId={householdId}
+          demo={demo}
+          onChanged={afterChange}
+          desk={desk}
+          setDesk={setDesk}
+          author={author}
+        />
       </div>
     </section>
   );

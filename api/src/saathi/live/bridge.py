@@ -74,14 +74,26 @@ TOOL_DECLARATIONS = [
         parameters=types.Schema(type="OBJECT", properties={}),
     ),
     types.FunctionDeclaration(
+        name="upcoming_occasions",
+        description=(
+            "The next festivals and public holidays, from the holiday calendar with a built-in list as backup. "
+            "Call this when the parent asks what is coming up, or about a festival or holiday. "
+            "It does not search for places. If they also want somewhere to go, call find_nearby as well."
+        ),
+        parameters=types.Schema(type="OBJECT", properties={}),
+    ),
+    types.FunctionDeclaration(
         name="find_nearby",
         description=(
-            "Find help near the parent: a hospital, a medical shop (pharmacy), a park, a restaurant, trusted people "
-            "who can be called, or national helplines. A card with names and call buttons is shown on their screen."
+            "Find a place near the parent with the Places API. Use a fixed kind when it fits: hospital, pharmacy, grocery, park, "
+            "restaurant, people, or helpline. For any other specific place they name, such as a temple, a bank, or a bus stop, "
+            "put that place in a few English words. A saved list from the last day is reused. "
+            "A card with names and call buttons is shown on their screen. Do not use this for a festival question by itself. "
+            "Never invent a place the tool did not return."
         ),
         parameters=types.Schema(
             type="OBJECT",
-            properties={"kind": _prop("STRING", "hospital, pharmacy, park, restaurant, people, or helpline")},
+            properties={"kind": _prop("STRING", "hospital, pharmacy, grocery, park, restaurant, people, helpline, or a specific place such as temple")},
             required=["kind"],
         ),
     ),
@@ -408,6 +420,8 @@ class LiveBridgeSession:
                 return {"status": "saved"}
             if name == "get_family_context":
                 return {"context": self.context.family_thread or "Nothing to ask about right now."}
+            if name == "upcoming_occasions":
+                return self._occasions()
             if name == "find_nearby":
                 return self._find_nearby(str(args.get("kind", "")).strip().lower())
             if name == "offer_call":
@@ -417,28 +431,67 @@ class LiveBridgeSession:
             return {"status": "error", "message": "That did not work. Tell the parent you could not save it and the family can add it."}
         return {"status": "unknown_tool"}
 
+    def _occasions(self) -> dict:
+        """Festivals for a spoken question. The calendar is cached; this does not call Places."""
+        from saathi.nearby.calendar import occasions
+
+        rows = occasions()[:3]
+        if not rows:
+            return {"status": "none", "message": "No festival is listed for the next two months. Say so in one short line."}
+        return {
+            "status": "found",
+            "occasions": [{"name": row["name"], "date": row["date"], "line": row["line"]} for row in rows],
+            "message": "Mention only the nearest one or two, as an invitation. Do not insist, and do not give medical advice.",
+        }
+
     def _find_nearby(self, kind: str) -> dict:
         """Look up help for the parent. The card for the screen travels in "_ui"; the model only sees the short result."""
         from saathi.nearby import service as nearby
 
-        kind = {"helpline": "helplines", "helplines": "helplines", "food": "restaurant", "medical shop": "pharmacy"}.get(kind, kind)
+        kind = {
+            "helpline": "helplines", "helplines": "helplines", "food": "restaurant", "medical shop": "pharmacy",
+            "grocery store": "grocery", "groceries": "grocery", "kirana": "grocery",
+            "festival": "festival", "festivals": "festival", "holiday": "festival", "holidays": "festival",
+        }.get(kind, kind)
+        if kind == "festival":
+            return self._occasions()
         if kind == "park" and nearby.is_late():
             return {"status": "not_now", "message": "It is late at night. Do not suggest going to a park; say it is better in the morning."}
-        data = nearby.overview(self.household_id, self.desk, kind if kind in nearby.KINDS else "all")
+        if kind in nearby.KINDS:
+            items, ok, _source = nearby.ask_places(self.household_id, self.desk, kind)
+            spot = nearby.get_spot(self.household_id)
+            data = {
+                "location": {"set": bool(spot), "updatedAt": spot.updatedAt if spot else "", "city": self.desk.profile.city},
+                "places": {kind: items},
+                "available": ok,
+            }
+        elif kind in ("people", "helplines"):
+            data = nearby.overview(self.household_id, self.desk, kind)
+        else:
+            kind = nearby.place_query(kind) or kind
+            items, ok, _source = nearby.ask_any_place(self.household_id, self.desk, kind)
+            if _source == "none":
+                return {"status": "error", "message": "Ask for a specific place, such as a temple, a bank, or a bus stop."}
+            spot = nearby.get_spot(self.household_id)
+            data = {
+                "location": {"set": bool(spot), "updatedAt": spot.updatedAt if spot else "", "city": self.desk.profile.city},
+                "places": {kind: items},
+                "available": ok,
+            }
         self._found = {}
         if kind == "helplines":
             items = data["helplines"]
         elif kind == "people":
             items = data["people"]
-        elif kind in nearby.KINDS:
+        elif kind in data.get("places", {}):
             items = data["places"].get(kind, [])
         else:
-            return {"status": "error", "message": "Ask for a hospital, pharmacy, park, restaurant, people, or helpline."}
+            return {"status": "error", "message": "Ask for a specific place, such as a temple, a bank, or a bus stop."}
         for item in items:
             if item.get("phone") and item.get("name"):
                 self._found[item["name"].lower()] = item
         ui = {"type": "nearby", "kind": kind, "items": items[:5], "positionShared": data["location"]["set"], "available": data["available"]}
-        if kind in nearby.KINDS and not items:
+        if kind not in ("helplines", "people") and not items:
             return {
                 "status": "none_found",
                 "message": "Nothing could be found right now. Say so kindly, and offer the helplines or a trusted person.",
@@ -449,8 +502,10 @@ class LiveBridgeSession:
             for item in items[:3]
         ]
         result: dict = {"status": "found", "results": brief, "_ui": ui}
-        if not data["location"]["set"] and kind in nearby.KINDS:
+        if not data["location"]["set"] and kind not in ("helplines", "people"):
             result["note"] = "The position is not shared, so these are from the family's city. A button on screen lets them allow location."
+        if kind not in nearby.KINDS and kind not in ("helplines", "people") and nearby.is_late():
+            result["note"] = (result.get("note", "") + " It is late. Say where it is, and do not urge them to go out now.").strip()
         if kind == "hospital":
             result["note"] = (result.get("note", "") + " In an emergency they should call 112 first.").strip()
         if kind == "restaurant" and nearby.is_late():
