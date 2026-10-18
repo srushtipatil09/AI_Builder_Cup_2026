@@ -153,6 +153,6 @@ powershell -File deployment/scripts/deploy.ps1
 python scripts/smoke_cloud.py --invoke
 ```
 
-`setup_cloud.ps1` runs once: the signing secret, the service-account grants, and the two Scheduler jobs. `deploy.ps1` builds one image for both Cloud Run services and deploys Hosting.
+`setup_cloud.ps1` runs once: the signing secret, the service-account grants, and the two Scheduler jobs. `deploy.ps1` builds one image for both Cloud Run services and deploys Hosting. `deployment/scripts/deploy.sh` does those same deploy steps.
 
 Owners: Srushti Patil and Vibhuti Singh. Theme: Sustainability and Social Impact.

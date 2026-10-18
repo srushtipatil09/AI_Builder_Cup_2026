@@ -88,7 +88,7 @@ The Live model has five tools, all executed in the API for the household that op
 
 A caretaker's first household id is their email. `POST /api/v1/me/households` adds further members, up to 10, each with id `hh-...`, its own desk, and its own family code. The list is written only by that route. A profile save cannot attach a household the account does not own.
 
-`deployment/scripts/deploy.sh` prints this shape and does not deploy unless `CONFIRM_DEPLOY=1`. The limits live in `api/src/saathi/cost.py`. API `GET /health` reports `billing`, `min_instances`, `session_cap_seconds`, `stage`, and `live_model`.
+`deployment/scripts/deploy.sh` runs the same Cloud Build, Cloud Run, Hosting, and Firestore steps as `deploy.ps1`. `--dry-run` prints the plan and does not call Cloud Build or Firebase. The limits live in `api/src/saathi/cost.py`. API `GET /health` reports `billing`, `min_instances`, `session_cap_seconds`, `stage`, and `live_model`.
 
 ## A fast reply, with the household already loaded
 
