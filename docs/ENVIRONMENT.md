@@ -6,7 +6,7 @@ Fill this file when a command actually succeeds. Do not invent a project id or a
 | --- | --- |
 | Date checked | 16 Oct 2026 |
 | Google Cloud project | `saathi-511717` |
-| Firebase project | `saathi-5afcf` |
+| Firebase project | `saathi-511717` (Hosting, Auth, and Firestore are this project; not a second Firebase project) |
 | Vertex / Live region | `us-central1` (`CLOUD_REGION` default) |
 | Media bucket location | `asia-south1`, as recorded for `saathi-511717-media` in [PROGRESS.md](PROGRESS.md). The code does not set the bucket region |
 | BigQuery location | `US` |
@@ -20,7 +20,7 @@ Fill this file when a command actually succeeds. Do not invent a project id or a
 | Billing shape | Request-based Cloud Run CPU, min instances 0, session cap 240 seconds, max bytes billed 100 MiB |
 | Household auth | `REQUIRE_HOUSEHOLD_AUTH=true` on Cloud Run. Code default is false for local runs. Demo households stay open |
 | Post-call worker | https://saathi-worker-ikr6m7lina-uc.a.run.app, private. End to end on production at 18:22 UTC: seeded demo session `seed-1461db86` → `handoff: cloud_tasks` → worker `process-session` 200 → `pipeline_status: processed`, observation and summary saved in Firestore, `/updates` shows 1 session processed. The worker also answers at `https://saathi-worker-230166691680.us-central1.run.app`, but it accepts only tokens for the first URL |
-| Firestore access | Fixed 16 Oct 2026 about 18:20 UTC. Revisions 00001 to 00006 could not reach Firestore: `backend-dev@saathi-511717` had no role in `saathi-5afcf`, so data stayed in per-process memory and was lost. That account now has `roles/datastore.user` and `roles/firebasecloudmessaging.admin` on `saathi-5afcf`. A container that hits the 403 stays in memory mode until it restarts, so worker 00007 (which started during propagation) was replaced by 00008 |
+| Firestore access | On 16 Oct 2026, revisions 00001 to 00006 could not reach a separate Firebase project, so data stayed in per-process memory. As of 18 Oct 2026 Cloud Run uses Firestore in `saathi-511717`: `FIREBASE_PROJECT_ID=saathi-511717` on `saathi-api-00015-lhw` and `saathi-worker-00016-xmj`. `backend-dev@saathi-511717` has `roles/datastore.user` on that project. A container that hits a 403 stays in memory mode until it restarts |
 | Runtime service account | `backend-dev@saathi-511717.iam.gserviceaccount.com` for both services, and the Tasks and Scheduler OIDC identity |
 | Signing secret | Secret Manager `saathi-link-signing`, mounted as `LINK_SIGNING_SECRET` on both services from revision 00005 |
 | Scheduler | `saathi-tick` every minute UTC and `saathi-retention` 21:30 UTC, both OIDC as `backend-dev@` with the worker's primary URL as audience. Tick returned 200 on revision 00005 |

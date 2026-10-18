@@ -83,7 +83,7 @@ def test_notification_link_is_https(monkeypatch) -> None:
     assert notification_link("/care") == "https://saathi-511717.web.app/care"
     # A local dev origin is not a link a phone can open. Hosting is used instead.
     monkeypatch.setenv("WEB_ORIGIN", "http://localhost:5173")
-    monkeypatch.setenv("FIREBASE_PROJECT_ID", "saathi-5afcf")
+    monkeypatch.setenv("FIREBASE_PROJECT_ID", "saathi-511717")
     assert notification_link("/app") == "https://saathi-511717.web.app/app"
 
 
