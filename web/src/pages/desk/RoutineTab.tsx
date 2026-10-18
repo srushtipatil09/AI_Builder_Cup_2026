@@ -6,6 +6,7 @@ import type { Contact } from "../../desk";
 import { StaticDemoRoutine, type Props } from "./DailyTab";
 import { ColumnChart, DotChart } from "./charts";
 import { UrgentReminders } from "./UrgentReminders";
+import { paceComparison } from "../../lib/languages";
 import { telHref } from "../NearbyList";
 import { useToast } from "../../toast";
 
@@ -14,6 +15,7 @@ type LiveProps = Props & {
   state: UpdatesState;
   conversationMemories: string[];
   contacts: Contact[];
+  language?: string;
 };
 
 function dayNumber(date: string) {
@@ -39,17 +41,20 @@ function evidenceLine(id: string, rows: DailyRow[], card: FamilyCard | null): st
   return id;
 }
 
-function comparisonSentence(rows: DailyRow[]): string | null {
+function comparisonSentence(rows: DailyRow[], language: string | undefined): { en: string; local: { text: string; code: string } | null } | null {
   const paced = rows.filter((day) => day.response_gap_ms != null && day.speaking_rate_wpm != null);
   if (paced.length < 8) return null;
   const earlier = paced.slice(0, -3);
   const recentDays = paced.slice(-3);
   const mean = (group: DailyRow[], pick: (day: DailyRow) => number) => group.reduce((sum, day) => sum + pick(day), 0) / group.length;
-  const earlierPause = mean(earlier, (day) => (day.response_gap_ms ?? 0) / 1000);
-  const recentPause = mean(recentDays, (day) => (day.response_gap_ms ?? 0) / 1000);
-  const earlierPace = mean(earlier, (day) => day.speaking_rate_wpm ?? 0);
-  const recentPace = mean(recentDays, (day) => day.speaking_rate_wpm ?? 0);
-  return `Earlier days: about ${earlierPause.toFixed(1)} seconds before a reply, and about ${Math.round(earlierPace)} words a minute. These three days: about ${recentPause.toFixed(1)} seconds, and about ${Math.round(recentPace)} words a minute.`;
+  const earlierPause = mean(earlier, (day) => (day.response_gap_ms ?? 0) / 1000).toFixed(1);
+  const recentPause = mean(recentDays, (day) => (day.response_gap_ms ?? 0) / 1000).toFixed(1);
+  const earlierPace = Math.round(mean(earlier, (day) => day.speaking_rate_wpm ?? 0));
+  const recentPace = Math.round(mean(recentDays, (day) => day.speaking_rate_wpm ?? 0));
+  return {
+    en: `Earlier days: about ${earlierPause} seconds before a reply, and about ${earlierPace} words a minute. These three days: about ${recentPause} seconds, and about ${recentPace} words a minute.`,
+    local: paceComparison(language, { earlierPause, earlierPace, recentPause, recentPace }),
+  };
 }
 
 function ago(iso: string | null | undefined) {
@@ -65,7 +70,7 @@ const MOODS = ["Good", "Okay", "Low"];
 
 // The Routine tab: what the post-call pipeline wrote, read from the API. Nothing here is kept in this browser.
 export function RoutineTab(props: LiveProps) {
-  const { demo, name, medicines, onOpenReminders, householdId, state, conversationMemories, contacts } = props;
+  const { demo, name, medicines, onOpenReminders, householdId, state, conversationMemories, contacts, language } = props;
   const { updates, metrics, error, loadedAt, refresh } = state;
   const [busy, setBusy] = useState("");
   const toast = useToast();
@@ -114,7 +119,7 @@ export function RoutineTab(props: LiveProps) {
   const fastingNoted = recent.some((d) => d.is_fasting) && drift?.meal_followup !== true;
   const nearby = contacts.find((c) => c.local) ?? null;
   const showTonight = Boolean(drift?.is_candidate) || (updates?.alerts ?? []).some((a) => a.tier >= 3);
-  const comparison = comparisonSentence(rows);
+  const comparison = comparisonSentence(rows, language);
 
   return (
     <div className="tab-grid">
@@ -323,7 +328,8 @@ export function RoutineTab(props: LiveProps) {
           {comparison ? (
             <section className="panel panel-wide">
               <h3>Compared with their own earlier days</h3>
-              <p>{comparison}</p>
+              <p>{comparison.en}</p>
+              {comparison.local ? <p lang={comparison.local.code}>{comparison.local.text}</p> : null}
             </section>
           ) : null}
           <section className="panel">

@@ -408,6 +408,38 @@ export const LANGUAGES: Language[] = [
   },
 ];
 
+type PaceNumbers = { earlierPause: string; earlierPace: number; recentPause: string; recentPace: number };
+
+// The care desk keeps the English sentence. This is the same comparison in the profile language.
+// English is omitted so the line is not repeated. Hindi is the demo. The other eight follow the same list as the phone.
+const PACE: Record<string, (n: PaceNumbers) => string> = {
+  Hindi: (n) =>
+    `पहले के दिन: जवाब से पहले लगभग ${n.earlierPause} सेकंड, और लगभग ${n.earlierPace} शब्द प्रति मिनट। ये तीन दिन: लगभग ${n.recentPause} सेकंड, और लगभग ${n.recentPace} शब्द प्रति मिनट।`,
+  Bengali: (n) =>
+    `আগের দিনগুলো: উত্তরের আগে প্রায় ${n.earlierPause} সেকেন্ড, এবং প্রায় ${n.earlierPace} শব্দ প্রতি মিনিটে। এই তিন দিন: প্রায় ${n.recentPause} সেকেন্ড, এবং প্রায় ${n.recentPace} শব্দ প্রতি মিনিটে।`,
+  Marathi: (n) =>
+    `आधीचे दिवस: उत्तर देण्यापूर्वी सुमारे ${n.earlierPause} सेकंद, आणि सुमारे ${n.earlierPace} शब्द प्रति मिनिट. हे तीन दिवस: सुमारे ${n.recentPause} सेकंद, आणि सुमारे ${n.recentPace} शब्द प्रति मिनिट.`,
+  Gujarati: (n) =>
+    `અગાઉના દિવસો: જવાબ પહેલાં લગભગ ${n.earlierPause} સેકંડ, અને લગભગ ${n.earlierPace} શબ્દ પ્રતિ મિનિટ. આ ત્રણ દિવસ: લગભગ ${n.recentPause} સેકંડ, અને લગભગ ${n.recentPace} શબ્દ પ્રતિ મિનિટ.`,
+  Punjabi: (n) =>
+    `ਪਹਿਲੇ ਦਿਨ: ਜਵਾਬ ਤੋਂ ਪਹਿਲਾਂ ਲਗਭਗ ${n.earlierPause} ਸਕਿੰਟ, ਅਤੇ ਲਗਭਗ ${n.earlierPace} ਸ਼ਬਦ ਪ੍ਰਤੀ ਮਿੰਟ। ਇਹ ਤਿੰਨ ਦਿਨ: ਲਗਭਗ ${n.recentPause} ਸਕਿੰਟ, ਅਤੇ ਲਗਭਗ ${n.recentPace} ਸ਼ਬਦ ਪ੍ਰਤੀ ਮਿੰਟ।`,
+  Tamil: (n) =>
+    `முந்தைய நாட்கள்: பதிலுக்கு முன் சுமார் ${n.earlierPause} வினாடி, நிமிடத்திற்கு சுமார் ${n.earlierPace} சொற்கள். இந்த மூன்று நாட்கள்: சுமார் ${n.recentPause} வினாடி, நிமிடத்திற்கு சுமார் ${n.recentPace} சொற்கள்.`,
+  Telugu: (n) =>
+    `మునుపటి రోజులు: సమాధానానికి ముందు దాదాపు ${n.earlierPause} సెకన్లు, నిమిషానికి దాదాపు ${n.earlierPace} పదాలు. ఈ మూడు రోజులు: దాదాపు ${n.recentPause} సెకన్లు, నిమిషానికి దాదాపు ${n.recentPace} పదాలు.`,
+  Kannada: (n) =>
+    `ಹಿಂದಿನ ದಿನಗಳು: ಉತ್ತರದ ಮೊದಲು ಸುಮಾರು ${n.earlierPause} ಸೆಕೆಂಡು, ನಿಮಿಷಕ್ಕೆ ಸುಮಾರು ${n.earlierPace} ಪದಗಳು. ಈ ಮೂರು ದಿನ: ಸುಮಾರು ${n.recentPause} ಸೆಕೆಂಡು, ನಿಮಿಷಕ್ಕೆ ಸುಮಾರು ${n.recentPace} ಪದಗಳು.`,
+  Malayalam: (n) =>
+    `മുൻ ദിവസങ്ങൾ: മറുപടിക്ക് മുമ്പ് ഏകദേശം ${n.earlierPause} സെക്കൻഡ്, മിനിറ്റിൽ ഏകദേശം ${n.earlierPace} വാക്കുകൾ. ഈ മൂന്ന് ദിവസം: ഏകദേശം ${n.recentPause} സെക്കൻഡ്, മിനിറ്റിൽ ഏകദേശം ${n.recentPace} വാക്കുകൾ.`,
+};
+
+export function paceComparison(name: string | undefined, numbers: PaceNumbers): { text: string; code: string } | null {
+  const language = languageFor(name);
+  const line = PACE[language.name];
+  if (!line) return null;
+  return { text: line(numbers), code: language.code };
+}
+
 export function languageFor(name: string | undefined): Language {
   const wanted = (name ?? "").trim().toLowerCase();
   return LANGUAGES.find((l) => l.name.toLowerCase() === wanted) ?? LANGUAGES[0];

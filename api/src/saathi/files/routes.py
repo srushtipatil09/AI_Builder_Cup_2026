@@ -34,7 +34,9 @@ from pydantic import BaseModel
 from saathi.auth.firebase import ensure_household_access, get_current_actor, is_demo_household
 from saathi.config import load_settings
 from saathi.contracts.identity import ActorContext
+from saathi.files.read_note import PageRead, can_read_note, read_page
 from saathi.providers.firestore import get_repository
+from saathi.usage import extraction_allowed, record_extraction
 
 logger = logging.getLogger(__name__)
 
@@ -329,6 +331,38 @@ def _remove(household_id: str, file_id: str) -> None:
     except Exception as exc:
         logger.warning("Could not delete stored file %s (%s)", file_id, exc)
     get_repository().doc_delete(f"households/{household_id}/files/{file_id}")
+
+
+@router.post("/{file_id}/read", response_model=PageRead)
+async def read_stored_note(
+    household_id: str,
+    file_id: str,
+    actor: ActorContext = Depends(get_current_actor),
+) -> PageRead:
+    """One Flash call on a prescription or report. The caretaker still confirms before a save."""
+    _guard(actor, household_id)
+    if not extraction_allowed():
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "The daily reading limit is reached. Try again tomorrow.")
+    meta = get_repository().doc_get(f"households/{household_id}/files/{file_id}")
+    if not meta or not meta.get("path"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found.")
+    content_type = (meta.get("contentType") or "").lower()
+    if not can_read_note(meta.get("category") or "", content_type):
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Only a prescription or medical report image or PDF can be read.")
+
+    def _download() -> Optional[bytes]:
+        blob = _bucket().blob(meta["path"])
+        return blob.download_as_bytes() if blob.exists() else None
+
+    data = await asyncio.get_running_loop().run_in_executor(None, _download)
+    if not data:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found.")
+    record_extraction()
+    try:
+        return await asyncio.get_running_loop().run_in_executor(None, read_page, data, content_type)
+    except Exception as exc:
+        logger.warning("Page read failed for %s (%s)", file_id, exc)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "This page could not be read.") from exc
 
 
 @router.delete("/{file_id}")

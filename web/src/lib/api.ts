@@ -1,5 +1,6 @@
 import { currentIdToken } from "./firebase";
 import type { Desk } from "../desk";
+import type { MedGemmaReportAnalysis } from "./medGemma";
 import type { FamilyLink } from "../family";
 import { readSession } from "../session";
 
@@ -476,6 +477,27 @@ export async function uploadFile(
 
 // A link that opens the file. A private file's link carries a key that stops working after 30 minutes.
 export type FileLink = { url: string; expiresAt?: string | null; expiresInSeconds?: number | null };
+
+export async function readSampleNote(): Promise<MedGemmaReportAnalysis> {
+  const res = await apiFetch(`${BASE_URL}/demo/read-sample`, { method: "POST" });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(detail.detail || "This page could not be read.");
+  }
+  return res.json();
+}
+
+export async function readStoredNote(householdId: string, fileId: string): Promise<MedGemmaReportAnalysis> {
+  const res = await apiFetch(`${BASE_URL}/households/${encodeURIComponent(householdId)}/files/${fileId}/read`, {
+    method: "POST",
+    headers: await getAuthHeaders(householdId),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(detail.detail || "This page could not be read.");
+  }
+  return res.json();
+}
 
 export async function fileLink(householdId: string, fileId: string): Promise<FileLink> {
   const res = await apiFetch(`${BASE_URL}/households/${encodeURIComponent(householdId)}/files/${fileId}/link`, {

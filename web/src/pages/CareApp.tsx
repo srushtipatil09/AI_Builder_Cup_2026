@@ -451,6 +451,7 @@ function CareDesk({ demo, onLeave, session, householdId, seedName, seedLanguage,
             name={name}
             medicines={desk.medicines}
             contacts={desk.contacts}
+            language={desk.profile.language}
             onOpenReminders={() => choose("reminders")}
           /> : null}
         {active === "ask" ? <TellSaathiTab desk={desk} setDesk={setDesk} author={author} name={name} guideSlot={guideSlot} householdId={householdId} /> : null}

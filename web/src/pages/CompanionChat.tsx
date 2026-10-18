@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { LiveAudio, toBase64 } from "../lib/liveAudio";
 import { currentIdToken } from "../lib/firebase";
 import { nextDelay } from "../lib/activity";
-import { completeSession, contactFamily, invitationEvent, nextInvitation, pausedForMs, sendHeartbeat, simulateInactivity, textTurn } from "../lib/api";
+import { completeSession, contactFamily, fetchDesk, invitationEvent, nextInvitation, pausedForMs, sendHeartbeat, simulateInactivity, textTurn } from "../lib/api";
 import { enableParentPush, pushMessage } from "../lib/push";
 import { readSession } from "../session";
 import { LanguageOptions, languageFor } from "../lib/languages";
@@ -18,6 +18,14 @@ import { useToast } from "../toast";
 type Props = { demo: boolean; name?: string; householdId?: string };
 
 type Message = { id: string; role: "parent" | "assistant"; text: string };
+
+function talkClosedLabel(seconds: number) {
+  const total = Math.max(1, Math.round(seconds));
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  const clock = minutes > 0 ? `${minutes} min ${rest} sec` : `${rest} sec`;
+  return `This talk was ${clock}, inside the 4 minute cap. The microphone is off. Nothing keeps listening.`;
+}
 
 export function CompanionChat({ demo, name, householdId }: Props) {
   const dispatch = useAppDispatch();
@@ -38,6 +46,8 @@ export function CompanionChat({ demo, name, householdId }: Props) {
   const sessionIdRef = useRef<string>(`sess-${Math.random().toString(36).slice(2, 10)}`);
   const parentWordsRef = useRef(0);
   const [shield, setShield] = useState<"words" | "browser">("words");
+  const [persona, setPersona] = useState<"Saathi" | "Rakshak" | null>(null);
+  const [closedTalk, setClosedTalk] = useState<number | null>(null);
   // The check-in Saathi started: shown as a banner, and answered by speaking, Later, or a blocked microphone.
   const [invite, setInvite] = useState<{ id: string; reason: string } | null>(null);
   const inviteRef = useRef<{ id: string; reason: string } | null>(null);
@@ -54,6 +64,14 @@ export function CompanionChat({ demo, name, householdId }: Props) {
   const [language, setLanguage] = useState(() => languageFor(demo ? "Hindi" : readSession()?.language));
   const langRef = useRef(language);
   langRef.current = language;
+
+  useEffect(() => {
+    const id = demo ? "demo-kamla-sharma" : householdId || "";
+    if (!id) return;
+    fetchDesk(id, demo)
+      .then((desk) => setPersona(desk.profile.persona === "Rakshak" ? "Rakshak" : "Saathi"))
+      .catch(() => setPersona("Saathi"));
+  }, [demo, householdId]);
 
   useEffect(() => {
     // Open the line while the page loads, so the greeting starts right after Talk is tapped.
@@ -334,8 +352,10 @@ export function CompanionChat({ demo, name, householdId }: Props) {
       const spoken = audioRef.current.spokenMs();
       const words = parentWordsRef.current;
       const speakingRate = spoken >= 3000 && words >= 3 ? Math.round(words / (spoken / 60000)) : undefined;
+      const seconds = (Date.now() - startedAtRef.current) / 1000;
+      setClosedTalk(seconds);
       completeSession(sessionIdRef.current, hhRef.current, {
-        duration_seconds: (Date.now() - startedAtRef.current) / 1000,
+        duration_seconds: seconds,
         response_gap_ms: gap,
         speaking_rate_wpm: speakingRate,
         quality_flags: gap === undefined && speakingRate === undefined ? ["no_turns_measured"] : [],
@@ -553,6 +573,12 @@ export function CompanionChat({ demo, name, householdId }: Props) {
           <span className="shield-dot" aria-hidden="true" />
           {shield === "browser" ? "Browser model answered on this phone" : "On-phone word check"}
         </p>
+        {persona ? (
+          <p className="shield-note">
+            {persona === "Rakshak" ? "Speaking as Rakshak. Check-ins stay short." : "Speaking as Saathi."}
+          </p>
+        ) : null}
+        {closedTalk != null ? <p className="talk-closed">{talkClosedLabel(closedTalk)}</p> : null}
         {invite ? (
           <p className="invite-chip">
             <span>Saathi wants to talk.</span>

@@ -43,7 +43,7 @@ flowchart TD
 ### Models in this prototype
 
 1. **On-phone check** (`web/src/lib/edgeGemma.ts`): a distress word offers 112 with no network. The phone names a browser model only when Chrome's built-in language model actually returns an answer. WebGPU being present is not that model.
-2. **MedGemma, prototype only** (`web/src/lib/medGemma.ts`): the planned reader for one uploaded prescription. On Model Garden that endpoint is billed the whole time it is deployed, about $2.30 an hour in us-central1 for the 4B quickstart, including idle time. It is not deployed. The care desk shows a sample layout and does not read the file. A caretaker still confirms any routine before it is saved.
+2. **Gemini Flash, one page** (`api/src/saathi/files/read_note.py`): a saved prescription or report image or PDF is read once. The family summary does not add a dose. The caretaker confirms before a routine is saved. A MedGemma endpoint is not deployed, because on Model Garden it is billed the whole time it is on, about $2.30 an hour in us-central1 for the 4B quickstart, including idle time. With no page open, the desk can still show a prepared layout (`web/src/lib/medGemma.ts`).
 3. **Gemini Live 2.5 Flash**: bidirectional spoken audio in Hindi and nine Indian languages. This is the live model.
 4. **Gemini 2.5 Flash and Vertex**: post-call extraction, embeddings (`text-multilingual-embedding-002`), BigQuery drift against this person's own earlier days, and SafetyGuard.
 

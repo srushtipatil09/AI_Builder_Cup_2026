@@ -1582,6 +1582,14 @@ input[aria-invalid="true"] {
   background: var(--teal);
 }
 
+.talk-closed {
+  max-width: 36rem;
+  margin: 8px auto 0;
+  color: var(--ink);
+  font-size: 1.05rem;
+  line-height: 1.4;
+}
+
 /* Install sheet: Chrome's beforeinstallprompt, or iPhone instructions */
 
 .install-sheet {

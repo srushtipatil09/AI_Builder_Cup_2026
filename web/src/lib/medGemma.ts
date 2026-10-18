@@ -18,6 +18,7 @@ export interface MedGemmaReportAnalysis {
   prescribedRoutines: Omit<Medicine, "id">[];
   clinicalObservations: string[];
   disclaimer: string;
+  source?: "preview" | "page" | "unreadable";
 }
 
 /**
@@ -63,6 +64,7 @@ export async function analyzeDoctorReportWithMedGemma(
         "Next fasting blood glucose review scheduled in 6 weeks.",
       ],
       disclaimer: "Prepared preview for the family. Confirm before adding it to the desk.",
+      source: "preview",
     };
   }
 
@@ -105,6 +107,7 @@ export async function analyzeDoctorReportWithMedGemma(
       "Advice: Avoid pickles, papad, and high-sodium snacks.",
     ],
     disclaimer: "Prepared preview for the family. Confirm before adding it to the desk.",
+    source: "preview",
   };
 }
 
@@ -124,7 +127,7 @@ export function mapAnalysisToDeskRecords(
 
   const newMemories: Memory[] = analysis.clinicalObservations.map((obs, i) => ({
     id: `mem-medgemma-${Date.now()}-${i}`,
-    text: `[Sample layout] ${obs}`,
+    text: `${analysis.source === "page" ? "[From the page]" : "[Sample layout]"} ${obs}`,
     author,
     addedAt: timestamp,
   }));

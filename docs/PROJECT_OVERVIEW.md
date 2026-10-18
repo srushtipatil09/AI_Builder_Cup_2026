@@ -85,7 +85,7 @@ Saathi pairs specialized Google AI models tailored to latency, safety, and domai
 2. **MedGemma (`web/src/lib/medGemma.ts`) — prototype, not deployed**:
    - The planned reader for one uploaded prescription.
    - On Model Garden that endpoint is billed the whole time it is deployed, about $2.30 an hour in us-central1 for the 4B quickstart, including idle time. It is not deployed.
-   - The care desk shows a sample layout and does not read the file. A caretaker still confirms any routine before it is saved.
+   - A saved prescription or report is read once by Gemini Flash. The family summary does not add a dose, and a caretaker confirms before a routine is saved. With no page open, the desk can show a prepared layout.
 
 3. **Gemini Live (`gemini-live-2.5-flash-native-audio`)**:
    - **Real-Time Voice Streaming**: Connects directly via bidirectional WebSockets. Audio captured at 16 kHz PCM is streamed to Gemini Live, which returns natural 24 kHz spoken audio streamed gapless to the browser.

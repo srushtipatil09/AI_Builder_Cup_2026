@@ -1,6 +1,8 @@
 """Demo routes for logical clock advance and synthetic isolation."""
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import logging
 import uuid
 
 from fastapi import APIRouter, HTTPException
@@ -8,9 +10,14 @@ from pydantic import BaseModel
 
 from saathi.contracts.desk import Desk, create_demo_desk
 from saathi.demo.seed import SCENARIOS, SEEDED_TRANSCRIPT, seed_household
+from saathi.files.read_note import PageRead, read_page
 from saathi.pipeline import local_date_of
 from saathi.providers.firestore import get_repository
 from saathi.taskqueue import enqueue_post_call
+from saathi.usage import extraction_allowed, record_extraction
+
+logger = logging.getLogger(__name__)
+_SAMPLE_NOTE = Path(__file__).with_name("sample_note.png")
 
 router = APIRouter(prefix="/api/v1/demo", tags=["demo"])
 
@@ -174,3 +181,18 @@ def simulate_checkin(body: SimulateCheckin):
     repo.doc_set(f"households/{body.household}/invitations/{key}", {"id": key, "reason": "check_in", "household_id": body.household, **doc}, merge=False)
     events = evaluate_invitations(body.household, now)
     return {"label": "Demo clock for this synthetic household only.", "invitation": key, "events": events}
+
+
+@router.post("/read-sample", response_model=PageRead)
+def read_sample_note() -> PageRead:
+    """One Flash read of the synthetic sample page. The same guard as a saved file."""
+    if not extraction_allowed():
+        raise HTTPException(status_code=429, detail="The daily reading limit is reached. Try again tomorrow.")
+    if not _SAMPLE_NOTE.is_file():
+        raise HTTPException(status_code=404, detail="The sample page is not in this build.")
+    record_extraction()
+    try:
+        return read_page(_SAMPLE_NOTE.read_bytes(), "image/png")
+    except Exception as exc:
+        logger.warning("Sample page read failed (%s)", exc)
+        raise HTTPException(status_code=502, detail="This page could not be read.") from exc

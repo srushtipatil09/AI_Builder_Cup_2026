@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
-import { deleteFile, uploadFile, type FileCategory, type StoredFile } from "../../lib/api";
+import { deleteFile, readSampleNote, readStoredNote, uploadFile, type FileCategory, type StoredFile } from "../../lib/api";
 import { useAppDispatch, useAppSelector } from "../../store";
 import { fileLinksForget, fileUrl, linkUsable, loadCategories, loadFileLink, loadFiles } from "../../store/reads";
 import { useToast } from "../../toast";
@@ -254,6 +254,7 @@ type LibraryProps = {
   categories: FileCategory[];
   files: StoredFile[];
   householdId: string;
+  demo: boolean;
   onChanged: () => Promise<void>;
   desk?: Desk;
   setDesk?: (d: Desk) => void;
@@ -261,12 +262,48 @@ type LibraryProps = {
 };
 
 // Everything saved so far, in one list. A filter row narrows it to one kind of record.
-function Library({ categories, files, householdId, onChanged, desk, setDesk, author }: LibraryProps) {
+function Library({ categories, files, householdId, demo, onChanged, desk, setDesk, author }: LibraryProps) {
   const dispatch = useAppDispatch();
   const toast = useToast();
   const [filter, setFilter] = useState("all");
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<MedGemmaReportAnalysis | null>(null);
+
+  const readable = (file: StoredFile) =>
+    (file.category === "prescriptions" || file.category === "medical_reports") &&
+    (file.contentType.startsWith("image/") || file.contentType === "application/pdf");
+
+  async function readSample() {
+    setAnalyzing(true);
+    try {
+      const res = await readSampleNote();
+      setAnalysis({ ...res, source: res.source ?? "page" });
+      toast(
+        res.source === "unreadable" ? "This page could not be read. Nothing was added." : "Read from the sample page. Confirm if you want it on the desk.",
+        res.source === "unreadable" ? "info" : "ok",
+      );
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "This page could not be read. You can still open the prepared preview.", "bad");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  async function readPage(file: StoredFile) {
+    setAnalyzing(true);
+    try {
+      const res = await readStoredNote(householdId, file.id);
+      setAnalysis(res);
+      toast(
+        res.source === "page" ? "Read from this page. Confirm if you want it on the desk." : "This page could not be read. Nothing was added.",
+        res.source === "page" ? "ok" : "info",
+      );
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "This page could not be read. You can still open the prepared preview.", "bad");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
 
   async function runMedGemma(docName: string) {
     setAnalyzing(true);
@@ -282,6 +319,11 @@ function Library({ categories, files, householdId, onChanged, desk, setDesk, aut
   }
 
   function applyMedGemmaToDesk() {
+    if (analysis?.source === "unreadable") {
+      toast("Nothing was added.", "info");
+      setAnalysis(null);
+      return;
+    }
     if (!analysis || !desk || !setDesk) {
       toast("Preview is ready. Confirm to keep it on the desk.", "info");
       setAnalysis(null);
@@ -336,26 +378,33 @@ function Library({ categories, files, householdId, onChanged, desk, setDesk, aut
 
       <div className="medgemma-preview">
         <div>
-          <h4 className="doc-step-title">MedGemma preview</h4>
+          <h4 className="doc-step-title">A note, in a few lines</h4>
           <p>
-            A doctor&rsquo;s note, in a few lines the family can read, and a routine you can keep. Open a prepared note to see how that looks. A live reader stays billed the whole time it is on, so this preview keeps the layout ready. Confirm before anything is saved.
+            On a saved prescription or report, Read this page copies what is printed, once, with Gemini Flash. Confirm before it is kept. Open preview shows a prepared note when you do not have a page. A MedGemma machine stays billed while it is on, so that machine is not running.
           </p>
         </div>
-        <button
-          type="button"
-          className="primary"
-          onClick={() => void runMedGemma("Dr. Mehta Prescription - Cardiology")}
-          disabled={analyzing}
-        >
-          {analyzing ? "Preparing…" : "Open preview"}
-        </button>
+        <div className="medgemma-actions">
+          {demo ? (
+            <button type="button" className="primary" onClick={() => void readSample()} disabled={analyzing}>
+              {analyzing ? "Reading…" : "Read the sample page"}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => void runMedGemma("Dr. Mehta Prescription - Cardiology")}
+            disabled={analyzing}
+          >
+            {analyzing ? "Preparing…" : "Open preview"}
+          </button>
+        </div>
       </div>
 
       {analysis ? (
-        <article className="medgemma-result" aria-label="MedGemma preview">
+        <article className="medgemma-result" aria-label={analysis.source === "page" ? "Read from this page" : "Prepared note"}>
           <div className="medgemma-result-head">
             <div>
-              <p className="medgemma-kicker">Prepared note</p>
+              <p className="medgemma-kicker">{analysis.source === "page" ? "From this page" : analysis.source === "unreadable" ? "Could not read" : "Prepared note"}</p>
               <h4>{analysis.reportTitle}</h4>
               {analysis.doctorName ? <p className="medgemma-doctor">{analysis.doctorName}</p> : null}
             </div>
@@ -367,11 +416,12 @@ function Library({ categories, files, householdId, onChanged, desk, setDesk, aut
           <div className="medgemma-summary">
             <strong>For the family</strong>
             <p>{analysis.plainSummary}</p>
-            <p lang="hi">{analysis.hindiSummary}</p>
+            {analysis.hindiSummary ? <p lang="hi">{analysis.hindiSummary}</p> : null}
           </div>
 
+          {analysis.prescribedRoutines.length > 0 ? (
           <div>
-            <strong>Routines you can add</strong>
+            <strong>{analysis.source === "page" ? "As written on the page" : "Routines you can add"}</strong>
             <ul className="rows">
               {analysis.prescribedRoutines.map((r, i) => (
                 <li key={`${r.name}-${i}`}>
@@ -383,13 +433,16 @@ function Library({ categories, files, householdId, onChanged, desk, setDesk, aut
               ))}
             </ul>
           </div>
+          ) : null}
 
           <p className="alert-meta">{analysis.disclaimer}</p>
 
           <div className="medgemma-actions">
+            {analysis.source === "unreadable" ? null : (
             <button type="button" className="primary" onClick={applyMedGemmaToDesk}>
               Confirm and add to the desk
             </button>
+            )}
             <button type="button" className="ghost" onClick={() => setAnalysis(null)}>
               Dismiss
             </button>
@@ -423,9 +476,11 @@ function Library({ categories, files, householdId, onChanged, desk, setDesk, aut
                   </span>
                 </div>
                 <div className="doc-actions">
-                  <button className="ghost" type="button" onClick={() => void runMedGemma(f.label || f.name)}>
-                    Preview
-                  </button>
+                  {readable(f) ? (
+                    <button className="ghost" type="button" onClick={() => void readPage(f)} disabled={analyzing}>
+                      {analyzing ? "Reading…" : "Read this page"}
+                    </button>
+                  ) : null}
                   <button className="ghost" type="button" onClick={() => void open(f)}>
                     Open
                   </button>
@@ -513,6 +568,7 @@ export function DocumentsCard({ householdId, name, demo, onChanged, desk, setDes
           categories={categories}
           files={files}
           householdId={householdId}
+          demo={demo}
           onChanged={afterChange}
           desk={desk}
           setDesk={setDesk}
