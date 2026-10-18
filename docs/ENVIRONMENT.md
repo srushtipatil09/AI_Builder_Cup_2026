@@ -25,6 +25,7 @@ Fill this file when a command actually succeeds. Do not invent a project id or a
 | Signing secret | Secret Manager `saathi-link-signing`, mounted as `LINK_SIGNING_SECRET` on both services from revision 00005 |
 | Scheduler | `saathi-tick` every minute UTC and `saathi-retention` 21:30 UTC, both OIDC as `backend-dev@` with the worker's primary URL as audience. Tick returned 200 on revision 00005 |
 | Extraction eval | 30/30 labeled cases on `gemini-2.5-flash`, 16 Oct 2026 (`eval/report.json`) |
-| Code after that cloud check | Nearby help, ten language prompts, reminder seen versus confirmed, Ask Saathi answers, and up to 10 family members are in the repository as of 17 Oct 2026. They are specified in [SPEC.md](SPEC.md). This file does not record a new Cloud Run revision for them |
+| Code after that cloud check | Nearby help, ten language prompts, reminder seen versus confirmed, Ask Saathi answers, and up to 10 family members are in the repository as of 17 Oct 2026. They are specified in [SPEC.md](SPEC.md) |
+| Deploy on 18 Oct 2026 | `saathi-api-00018-zqb` and `saathi-worker-00019-88v`, each serving 100% of traffic on `saathi-511717`. `/health` returned 200. `GET /api/v1/households/demo-kamla-sharma/outing` returned 200 and named Karwa Chauth on 2026-10-29 from the built-in list. That route does not call the Calendar API. A spoken place that is not a fixed kind, and `upcoming_occasions`, are in this revision |
 
 Names for `.env` are listed in `.env.example`. Do not copy secret values into this file. `LINK_SIGNING_SECRET` in a local `.env` is for local runs only; production reads Secret Manager.

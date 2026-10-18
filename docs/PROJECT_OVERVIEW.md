@@ -93,8 +93,9 @@ Saathi pairs specialized Google AI models tailored to latency, safety, and domai
    - **Conversational Function Calling (Tools)**: Gemini Live executes tools on the fly:
      - `propose_reminder`: Suggests reminders dictated verbally by the parent.
      - `confirm_reminder`: Confirms when the parent says they completed a task ("Haan, maine le li").
-     - `find_nearby`: Leverages Google Places API for nearby essentials.
-     - `offer_call`: Generates one-tap calling buttons for trusted family or emergency helplines.
+     - `upcoming_occasions`: Reads the India holiday calendar when they ask what is coming up, and keeps a built-in festival list if that call fails.
+     - `find_nearby`: Looks up a hospital, a medical shop, a grocery store, a park, food, a trusted person, a helpline, or any other place they name. A saved list from the last day is reused.
+     - `offer_call`: Shows a Call button. The parent taps it. Saathi does not dial.
    - **Natural Barge-In**: Instant response cutoff when the user speaks over the companion.
 
 4. **Gemini Flash (`gemini-2.5-flash`)**:
@@ -150,7 +151,8 @@ Firebase delivers the complete edge and client-facing infrastructure:
 
 ### E. Additional Google Cloud Integrations
 - **BigQuery**: On-demand SQL queries analyze the parent's daily metrics (meals mentioned, talk duration, pause duration) comparing a 3-day recent window against an 11-day baseline to detect behavioral drift without pre-trained black-box models.
-- **Google Places API (New)**: Dynamically locates nearby hospitals, pharmacies, emergency clinics, and community parks within 5 km during live voice inquiries.
+- **Google Places API (New)**: Locates a hospital, a medical shop, a grocery store, a park, food, or another place they name, within 5 km. A list from the last day is reused. A festival question does not search.
+- **Calendar API**: A spoken question about a coming festival reads the India holiday calendar at most once a day. The phone and the care desk use a built-in list.
 - **Cloud Storage**: Secure storage bucket for prescriptions, medical reports, and family photos using 30-minute time-limited signed URLs.
 - **Secret Manager**: Securely stores API keys, service account credentials, and HMAC signing keys.
 
@@ -165,7 +167,7 @@ Firebase delivers the complete edge and client-facing infrastructure:
 | **Spoken Reminders** | Reminders announced verbally; confirmed only when parent explicitly states completion ("Haan, kar liya"). | Gemini Live, Cloud Tasks |
 | **Longitudinal Drift** | Identifies subtle shifts in daily activity, conversation length, and meal patterns over time. | BigQuery, Cloud Tasks |
 | **Family Memory Episodes** | Recalls past family stories and conversations to maintain continuous warmth across sessions. | Vertex Embeddings, Firestore Vector Search |
-| **Nearby Emergency Assistance** | Instantly presents verified local emergency numbers (112, 108, Elderline 14567) and nearby services. | Places API (New), Cloud Run |
+| **Nearby help** | Shows 112, 108, and Elderline 14567, a trusted person, and a place they asked for. The parent taps Call. | Places API (New), Calendar API, Cloud Run |
 | **SafetyGuard Guardrails** | Deterministic Python filter preventing medical hallucination, dosage advice, or unwarranted diagnoses. | Cloud Run (Worker) |
 
 ---

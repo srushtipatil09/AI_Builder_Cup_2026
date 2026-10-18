@@ -388,3 +388,15 @@ Created `docs/PROJECT_OVERVIEW.md` as the unified project submission overview de
 
 Still not recorded from a device: a Hindi turn on the public URL from a second browser, FCM on a real phone, a real PWA install, and a speaker check for any language other than the Hindi path used in development. The deck, the video, and the submission receipt are still the Sunday pack.
 
+## 18 Oct 2026 — a named place, and the holiday calendar
+
+| Area | What the code does | Where |
+| --- | --- | --- |
+| Spoken place | A hospital, pharmacy, grocery, park, or restaurant stays on the typed Places search. Any other specific place is one text search. `mandir` searches for a temple. A vague word does not search. The talk is given at most two names, and only names the tool returned | `nearby/service.py` `ask_any_place`, `live/bridge.py` `find_nearby` |
+| Saved list | A list from the last day is reused before another Places call. The hour cache still covers a miss in the same process. The parent's own sheet still stores `nearbyChecks/<kind>`. A talk stores a named place at `nearbyChecks/q-...` and `place/asked` | `ask_places`, `last_asked` |
+| Festivals | The phone and the care desk use a built-in list. `GET /outing` does not call Calendar. A talk calls `upcoming_occasions`, which reads the India holiday calendar for 60 days, at most eight events, and keeps the built-in list on failure | `nearby/calendar.py` |
+| Late night | A park lookup is refused from 9 pm to 5 am. A named place can still be answered, and the prompt says not to urge going out | `live/bridge.py`, `live/prompts.py` |
+| Phone sheet | A result that is not one of the nearby tabs is shown from the card. Opening it does not search for a hospital | `NearbyPanel.tsx` |
+
+Checks on 18 Oct 2026: `py -3 -m pytest tests/test_nearby.py tests/test_calendar.py -q` from `api/` — 12 passed. `npx tsc --noEmit` from `web/` — exit 0. Deploy to `saathi-511717`: `saathi-api-00018-zqb` and `saathi-worker-00019-88v`, each serving 100% of traffic. `/health` and the demo outing both returned 200. The outing named the built-in next festival, Karwa Chauth on 2026-10-29. That request does not call the Calendar API.
+

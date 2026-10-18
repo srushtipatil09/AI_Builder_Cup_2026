@@ -68,7 +68,7 @@ Saathi is architected natively around the Google Cloud and Firebase ecosystem, c
 | **Edge Delivery** | Firebase Hosting | Globally distributed CDN hosting the Vite/React Progressive Web App (PWA). |
 | **Authentication** | Firebase Auth | Role-based authentication (Caretaker vs. Parent) with token verification and Google Sign-In. |
 | **Push Notifications** | Firebase Cloud Messaging (FCM) | Proactive voice check-in invitations ("Saathi wants to talk") and discrete caregiver notices. |
-| **Local Services** | Google Places API (New) | Field-masked, 1-hour cached geosearch locating nearby hospitals, pharmacies, and clinics within 5 km. |
+| **Local Services** | Google Places API (New) and Calendar API | Field-masked place search within 5 km, reused from a saved list for a day. A named place is one text search. A spoken festival question reads the India holiday calendar at most once a day. |
 | **Document Storage** | Google Cloud Storage | Private storage for medical prescriptions, lab reports, and identity proofs with 30-minute HMAC signed URLs. |
 | **Key Management** | Google Secret Manager | Secure storage for link-signing HMAC secrets and deployment credentials. |
 | **Client Audio Engine**| Web Audio API (`AudioWorkletNode`) | Zero-latency 16 kHz PCM microphone capture and client-side turn pause measurement. |
@@ -115,8 +115,9 @@ api/src/saathi/
 │   ├── service.py          # Check-in lifecycle state machine (30s / 5min / 15min), 60s lease claiming
 │   └── notice.py           # Lockscreen dose concealment, two-phase audit (seen vs. verbally confirmed)
 ├── nearby/
-│   ├── service.py          # Google Places API field masking, 1-hr geocache, 3-decimal lat/lng truncation
-│   └── routes.py           # REST endpoints for nearby healthcare, parks, and national helplines
+│   ├── service.py          # Places field mask, 1-hour cache, 24-hour saved list, named-place text search
+│   ├── calendar.py         # Built-in festivals, and the India holiday calendar for a spoken question
+│   └── routes.py           # Nearby lists, the saved position, and the outing invitation
 ├── auth/
 │   └── firebase.py         # Scoped Family Code sandbox, Firebase Auth verification, 60s access cache
 ├── accounts/
@@ -352,11 +353,13 @@ Enforces 50+ enterprise React 19 performance patterns:
 ### Feature 10: Nearby Emergency & Places Assistance
 **Code**: `api/src/saathi/nearby/service.py`, `web/src/pages/desk/NearbyCard.tsx`
 
-* **Field-Masked Google Places API (New)**: Requests only `displayName,formattedAddress,location,nationalPhoneNumber`. Strips expensive photo/review SKUs to stay on the lowest pricing tier.
-* **1-Hour In-Memory Geocache (`CACHE_SECONDS = 3600`)**: Caches nearby clinics and pharmacies by rounded coordinates and category, eliminating duplicate API costs.
+* **Field-Masked Google Places API (New)**: Requests `displayName`, `formattedAddress`, `location`, both phone fields, and `currentOpeningHours.openNow`. Photos and reviews are not requested.
+* **Two caches**: One hour in the API process (`CACHE_SECONDS = 3600`). A list saved on the household is reused for a day before another Places call.
+* **A named place**: A temple, a bank, or a bus stop is one text search. A fixed kind stays on the typed search. The talk receives at most two names.
+* **Holiday calendar**: `upcoming_occasions` reads the India holiday calendar for 60 days. The desk outing uses the built-in festival list and does not call Calendar.
 * **Privacy Truncation**: GPS coordinates rounded to 3 decimal places (~100 meter blur). Exact home coordinates are never stored.
-* **Late-Night Park Filter**: Park inquiries after 21:00 are suppressed for elder safety.
-* **Zero-Dependency Emergency Helplines**: Indian national emergency numbers (112, 108, Elderline 14567) and family contacts are hardcoded locally, functioning even during complete Places API outages.
+* **Late-Night Park Filter**: Park inquiries after 21:00 are refused. A named place can still be answered, without urging them to go out.
+* **Zero-Dependency Emergency Helplines**: Indian national emergency numbers (112, 108, Elderline 14567) and family contacts are stored data, and still return when Places fails.
 
 ---
 
@@ -423,7 +426,7 @@ Saathi operates with a minimal cloud footprint:
 3. **Explicit Context Caching Floor (`EXPLICIT_CACHE_MIN_TOKENS = 4096`)**: Keeps prompts uncached below 4,096 tokens, avoiding recurring hourly storage charges.
 4. **Serverless Firestore Vector Search**: Uses Firestore native vector index (`find_nearest`, cosine distance, $k=5$) instead of an expensive dedicated Vertex AI Vector Search replica ($0 vs ~$300/mo).
 5. **BigQuery Query Byte Cap (`BIGQUERY_MAX_BYTES_BILLED = 100 MiB`)**: Prevents accidental full-table scans.
-6. **Places API Field Masking**: Strips reviews and photos to maintain the lowest Places SKU pricing.
+6. **Places and Calendar reuse**: The field mask omits photos and reviews. A saved place list lasts a day, and a successful holiday read lasts a day. A festival question does not call Places.
 
 ---
 

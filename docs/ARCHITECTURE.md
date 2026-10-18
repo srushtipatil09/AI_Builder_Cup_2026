@@ -1,6 +1,6 @@
 # How Saathi is built
 
-One React app on Firebase Hosting. One Python image on Cloud Run, started twice: a public API and a private worker. Gemini Live holds the conversation. Gemini Flash reads the transcript afterward, labels a short impact clip, and drafts family-facing sentences. Firestore holds the household and the account profile. Cloud Storage holds photos and documents. BigQuery holds the daily numbers. The Places API answers "what is near me." The URLs that were checked are in [ENVIRONMENT.md](ENVIRONMENT.md).
+One React app on Firebase Hosting. One Python image on Cloud Run, started twice: a public API and a private worker. Gemini Live holds the conversation. Gemini Flash reads the transcript afterward, labels a short impact clip, and drafts family-facing sentences. Firestore holds the household and the account profile. Cloud Storage holds photos and documents. BigQuery holds the daily numbers. The Places API answers "what is near me." The Calendar API answers a spoken question about a coming festival. The URLs that were checked are in [ENVIRONMENT.md](ENVIRONMENT.md).
 
 The running tree includes the landing page, role-based care desk and companion chat, Live voice, post-call extraction, household sync, accounts, file uploads, nearby help, and several family members on one caretaker account. `GET /health` on the API reports `stage: "connected"` and the configured `live_model`. Cloud Tasks and Cloud Scheduler are in the code and, as of the check in [ENVIRONMENT.md](ENVIRONMENT.md), created in the project. When `WORKER_URL` is empty, the post-call work runs in the API process. [SPEC.md](SPEC.md) says what the product does. [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) says the order.
 
@@ -26,6 +26,7 @@ flowchart TD
   api --> store[(Firestore)]
   api --> media[(Cloud Storage)]
   api --> places[Places API]
+  api --> cal[Calendar API]
   api --> tasks[Cloud Tasks]
   clock[Cloud Scheduler] --> worker[saathi-worker]
   tasks --> worker
@@ -76,7 +77,8 @@ The bill is dominated by open Gemini Live minutes. Everything else is chosen so 
 | Cloud Tasks named by session id | A retry does not run Gemini twice for the same call |
 | Firebase Hosting and Cloud Messaging | The site is static. A push replaces SMS |
 | Optional ADK inside the worker process, with a fixed-order fallback | No Agent Engine replica |
-| Places API (New), 5 km, at most 5 results, cached one hour in the API process | A lookup only when someone asks what is nearby. Helplines and trusted people do not call Places |
+| Places API (New), 5 km, at most 5 results, cached one hour in the API process. A list saved for the household is reused for a day. A named place that is not a fixed kind is one text search | A lookup only when someone asks. A festival question does not search. Helplines and trusted people do not call Places |
+| Calendar API, India holiday calendar, next 60 days, at most 8 events, field `items(summary,start/date)` | Only when a talk asks what is coming up. A success is reused for a day. A failure is remembered for ten minutes and the built-in festival list is used. The desk outing does not call it |
 
 Features that are current and that this prototype leaves off, because they raise the bill without helping the demo: Cloud Run GPUs, a Vector Search index with replicas, Agent Engine, Gemini provisioned throughput, BigQuery editions, and a Live socket that stays open between visits.
 
@@ -84,7 +86,7 @@ Application counters stop the project at 120 Live minutes a day and 500 Flash ex
 
 Firestore's free plan is 50,000 reads and 20,000 writes a day. The API keeps short-lived copies of desk reads (`cache.py`: alerts 20 seconds, slower updates 60 seconds, daily numbers 2 minutes). An open tab that nobody touches polls more slowly (`web/src/lib/activity.ts`). A quota error becomes HTTP 503 with `Retry-After` (`quota_paused` on the API, 300 seconds on the worker) so the browser keeps the person's edits on the device and Cloud Tasks retries later. Places results are cached in the API process for one hour.
 
-The Live model has six tools, all executed in the API for the household that opened the socket: `propose_reminder`, `confirm_reminder`, `upcoming_occasions`, `get_family_context`, `find_nearby`, and `offer_call`. `find_nearby` calls the Places API (New) for hospitals, pharmacies, grocery stores, parks, and restaurants within 5 km, at most 5 results, and also returns trusted contacts and the helplines 112, 108, and 14567. A lookup from the parent's phone is stored at `households/<id>/nearbyChecks/<kind>`, and the care desk shows that list. `GET /outing` names the next festival and, before 9 pm, one stored park, restaurant, or grocery store. In a conversation, `upcoming_occasions` reads the India holiday calendar at most once a day and keeps the built-in festival list when that call fails. `find_nearby` reuses a list saved in the last day before it makes another Places call. A place that is not one of those kinds, such as a temple, is one text search, saved the same way, and the spoken names come only from that result. If Places is disabled or the call fails, places come back empty with `available: false`; helplines and trusted people still return. `offer_call` puts a Call button on the phone. The number is resolved from stored data. The model does not dial. After 9 pm a park lookup is refused. The parent's position is one point rounded to three decimals (about 100 m) at `households/<id>/place/current`. The shared demo never stores a position. Without one, search uses the city on the desk.
+The Live model has six tools, all executed in the API for the household that opened the socket: `propose_reminder`, `confirm_reminder`, `upcoming_occasions`, `get_family_context`, `find_nearby`, and `offer_call`. `find_nearby` calls the Places API (New) for hospitals, pharmacies, grocery stores, parks, and restaurants within 5 km, at most 5 results, and also returns trusted contacts and the helplines 112, 108, and 14567. A lookup from the parent's phone is stored at `households/<id>/nearbyChecks/<kind>`, and the care desk shows that list. `GET /outing` names the next built-in festival and, before 9 pm, one stored park, restaurant, or grocery store. It does not call the Calendar API. In a conversation, `upcoming_occasions` reads the India holiday calendar at most once a day and keeps the built-in festival list when that call fails. `find_nearby` reuses a list saved in the last day before it makes another Places call, and a talk is given at most two names. A place that is not one of those kinds, such as a temple, is one text search, saved under `nearbyChecks/q-...` and at `place/asked`, and the spoken names come only from that result. The care desk shows the last place asked for. If Places is disabled or the call fails, places come back empty with `available: false`; helplines and trusted people still return. `offer_call` puts a Call button on the phone. The number is resolved from stored data. The model does not dial. After 9 pm a park lookup is refused. The parent's position is one point rounded to three decimals (about 100 m) at `households/<id>/place/current`. The shared demo never stores a position. Without one, search uses the city on the desk.
 
 A caretaker's first household id is their email. `POST /api/v1/me/households` adds further members, up to 10, each with id `hh-...`, its own desk, and its own family code. The list is written only by that route. A profile save cannot attach a household the account does not own.
 
@@ -198,8 +200,8 @@ api/src/saathi/          Python API and worker
   accounts/              Profile, and extra households for one caretaker
   files/                 Cloud Storage uploads and 30-minute links
   households/            Desk, pairing, updates, Ask Saathi
-  live/                  Live bridge, prompts, distress, five tools
-  nearby/                Places API, helplines, rounded position
+  live/                  Live bridge, prompts, distress, six tools
+  nearby/                Places API, holiday calendar, helplines, rounded position
   insights/ providers/   SafetyGuard, optional ADK, and Google clients
   languages.py           Ten languages: prompt line and server phrases
   cache.py usage.py      Short-lived reads, and the daily spend counters

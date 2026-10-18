@@ -41,7 +41,7 @@ flowchart LR
 | Nest | Milestone M16, after submission |
 | Alerts | Firebase Cloud Messaging. Check-in text and caretaker text stay generic |
 | Language | Hindi in the Kamla demo. The profile can also be English, Bengali, Marathi, Gujarati, Punjabi, Tamil, Telugu, Kannada, or Malayalam. The Live prompt and the server's own phrases follow that choice. Submission text is English |
-| Nearby help | Places API (New) for hospitals, pharmacies, grocery stores, parks, and restaurants. A lookup from the parent's phone is stored for the care desk. Helplines 112, 108, and 14567, and trusted contacts, do not depend on Places. The parent taps Call. Position is one rounded point, or the city on the desk |
+| Nearby help | Places API (New) for hospitals, pharmacies, grocery stores, parks, and restaurants, and one text search when they name another place. A list from the last day is reused. The India holiday calendar answers a spoken festival question; the desk uses a built-in list and does not call Calendar. Helplines 112, 108, and 14567, and trusted contacts, do not depend on Places. The parent taps Call. Position is one rounded point, or the city on the desk |
 | Family members | One caretaker account, up to 10 households, each with its own desk and family code |
 | Research numbers | Holt-Lunstad 2015, WHO 2025, and LASI, each labeled as someone else's research |
 
@@ -67,7 +67,7 @@ These are finished. A reviewer can do them on https://saathi-511717.web.app.
 | 14 | The Kamla Sharma demo needs no account. A seeded session still runs if the mic is denied |
 | 15 | Chrome install sheet or iPhone Add to Home Screen instructions. A closed app does not take the microphone |
 | 16 | Push on the parent's phone and the caretaker's desk. The phone keeps the desk in Redux and localStorage |
-| 17 | Nearby help, ten languages, up to 10 family members, and Ask Saathi answers from stored facts |
+| 17 | Nearby help, including a named place and the next festival, ten languages, up to 10 family members, and Ask Saathi answers from stored facts |
 
 The English deck and the public video are the files that go with the form. They are not a missing product feature. Nest, pill recognition, gas, glass, and WhatsApp are not in this app.
 
