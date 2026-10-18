@@ -12,7 +12,7 @@
 **Saathi** is an intelligent, proactive companion designed for elderly parents living independently while their adult children work in distant cities. 
 
 In traditional digital healthcare and communication tools, older adults are forced to navigate complicated menus, type text, or fill out structured forms—barriers that lead to abandonment and isolation. Saathi fundamentally re-engineers this dynamic:
-- **For the Parent**: Zero typing and zero forms. Saathi engages in warm, natural, low-latency spoken conversations in their native language (Hindi default, plus 9 other Indic languages). Saathi speaks first via scheduled check-ins, actively listens, remembers family members, confirms routines, and detects signs of distress.
+- **For the Parent**: Zero typing and zero forms. Saathi engages in warm, natural, low-latency spoken conversations in their native language (Hindi default, with English and eight other Indian languages selectable; Hindi and Marathi are checked by voice, see [LANGUAGES.md](LANGUAGES.md)). Saathi speaks first via scheduled check-ins, actively listens, remembers family members, confirms routines, and detects signs of distress.
 - **For the Caretaker**: A dedicated **Care Desk** web application (`/care`) that provides visibility into daily routine adherence, subtle health/lifestyle drift across weeks, verified family episode memories, and urgent notifications—without invasive surveillance.
 
 ### Privacy & Safety First
@@ -54,7 +54,7 @@ flowchart TD
         Worker["saathi-worker"]
     end
 
-    EdgeGemma -.->|Zero-latency local screening & offline fallback| Chat
+    EdgeGemma -.->|Local distress-word check, works with no network| Chat
     Chat -->|16 kHz PCM Audio via WebSocket| API
     Desk -->|HTTPS REST| API
     API <-->|Bidirectional Voice Stream| Live
@@ -96,10 +96,11 @@ Saathi pairs specialized Google AI models tailored to latency, safety, and domai
      - `upcoming_occasions`: Reads the India holiday calendar when they ask what is coming up, and keeps a built-in festival list if that call fails.
      - `find_nearby`: Looks up a hospital, a medical shop, a grocery store, a park, food, a trusted person, a helpline, or any other place they name. A saved list from the last day is reused.
      - `offer_call`: Shows a Call button. The parent taps it. Saathi does not dial.
+     - `get_family_context`: Recalls what the parent earlier said about a family member they ask about. It is data for the reply, not an instruction.
    - **Natural Barge-In**: Instant response cutoff when the user speaks over the companion.
 
 4. **Gemini Flash (`gemini-2.5-flash`)**:
-   - **Post-Call Fact Extraction**: Once the voice socket closes, Gemini Flash asynchronously parses the conversation to extract structured observations (meals, sleep, pain mentions), reminder statuses, and emotional sentiment. Evaluated at 100% (30/30) accuracy across conversational edge cases.
+   - **Post-Call Fact Extraction**: Once the voice socket closes, Gemini Flash asynchronously parses the conversation to extract structured observations (meals, sleep, pain mentions), reminder statuses, and emotional sentiment. Checked on 30 labeled cases in 12 groups, 30 of 30 correct (`eval/report.json`).
    - **Sound & Distress Classification**: When sudden loud audio spikes occur, Flash evaluates the audio snippet to distinguish benign sounds (door slamming) from potential distress events, triggering caregiver checks.
    - **"Ask Saathi" Grounded Q&A**: Caregivers can ask plain-text questions on the Care Desk; Gemini Flash drafts answers strictly grounded in stored Firestore logs, passed through clinical SafetyGuard checks.
 
@@ -162,7 +163,7 @@ Firebase delivers the complete edge and client-facing infrastructure:
 
 | Feature | Description | Google Tech Used |
 | :--- | :--- | :--- |
-| **Conversational Companion** | Natural spoken Hindi & Indic dialogue; understands interruptions, remembers context, and follows user pace. | Gemini Live, Cloud Run |
+| **Conversational Companion** | Natural spoken Hindi and Marathi (checked by voice), with eight more languages set through the prompt; understands interruptions, remembers context, and follows user pace. | Gemini Live, Cloud Run |
 | **Care Desk Dashboard** | 5-tab interface: Profile, Daily Routine, Ask Saathi, Reminders, and Trusted Contacts. | Firebase Hosting, Firestore |
 | **Spoken Reminders** | Reminders announced verbally; confirmed only when parent explicitly states completion ("Haan, kar liya"). | Gemini Live, Cloud Tasks |
 | **Longitudinal Drift** | Identifies subtle shifts in daily activity, conversation length, and meal patterns over time. | BigQuery, Cloud Tasks |

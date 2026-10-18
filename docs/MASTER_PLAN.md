@@ -77,7 +77,7 @@ The English deck and the public video are the files that go with the form. They 
 | --- | --- | --- |
 | P0 | Voice, landing and both fronts, extraction, family episodes, pause measurement, drift, SafetyGuard, ADK insight, demo button, submission pack | If one of these is missing, do not start the next tier |
 | P1 | Proactive invitation, distress clips, once and daily reminders, voice confirm, install sheet, notification tap | A keyword distress check still counts if the impact model is late |
-| P2 | Weekday edge cases, speaker checks for languages other than Hindi, Terraform, ARIMA as a second query, M16 Nest | After the URL already tells the story |
+| P2 | Weekday edge cases, speaker checks for languages other than Hindi and Marathi, Terraform, ARIMA as a second query, M16 Nest | After the URL already tells the story |
 
 ## Claims that stay out of the pitch
 
