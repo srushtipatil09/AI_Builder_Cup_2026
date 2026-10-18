@@ -369,7 +369,7 @@ Compared `docs/` and `README.md` with the source. The product docs now also desc
 | Google sign-up | `/details` asks for the name, language, and city once | `DetailsPage.tsx` |
 | Demo cap | Three demo voice sessions a visitor a day, counted when Talk starts | `usage.py`, `live/routes.py` |
 
-Corrected in the same pass: the public URL, the worker, Cloud Tasks, and both Scheduler jobs are recorded as checked in `docs/ENVIRONMENT.md` (the architecture intro had still said they were not). The demo session cap is enforced. Marathi is one of the ten selectable languages; a speaker check for it is not recorded.
+Corrected in the same pass: the public URL, the worker, Cloud Tasks, and both Scheduler jobs are recorded as checked in `docs/ENVIRONMENT.md` (the architecture intro had still said they were not). The demo session cap is enforced. Marathi is one of the ten selectable languages. On 18 Oct 2026 the team reported a voice check in Marathi.
 
 ```text
 .venv/bin/python -m pytest api/tests -q
@@ -386,7 +386,7 @@ Result: exit code 0, 0 errors.
 
 Created `docs/PROJECT_OVERVIEW.md` as the unified project submission overview detailing the architecture and how Saathi leverages Firebase (Hosting, Auth, FCM), Firestore (NoSQL + serverless vector search), Cloud Run (API and Worker dual-service container), and Gemini (Live low-latency voice, Flash fact extraction/distress classification, Vertex multilingual embeddings). Aligned project lead naming across documentation (Srushti Patil and Vibhuti Singh).
 
-Still not recorded from a device: a Hindi turn on the public URL from a second browser, FCM on a real phone, a real PWA install, and a speaker check for any language other than the Hindi path used in development. The deck, the video, and the submission receipt are still the Sunday pack.
+Still not recorded from a device: a Hindi turn on the public URL from a second browser, FCM on a real phone, a real PWA install, and a speaker check for any language other than the Hindi path used in development and the Marathi check reported on 18 Oct 2026. The deck, the video, and the submission receipt are still the Sunday pack.
 
 ## 18 Oct 2026 — a named place, and the holiday calendar
 
